@@ -145,6 +145,7 @@ fn maybe_send_test_surface(sender: &Sender<Command>) {
         };
         let url = match value.as_str() {
             "fps" => format!("html:{FPS_PAGE}"),
+            "probe" => format!("html:{PROBE_PAGE}"),
             _ => value,
         };
         // A centered panel (no anchors) — visible enough to judge animation
@@ -182,4 +183,34 @@ function loop(t){
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+</script></body></html>"#;
+
+/// CSS-compat probe. Reports which modern CSS features Ultralight supports via
+/// CSS.supports() and getComputedStyle, logged through the console callback.
+/// Run with `--test-url probe` and grep the log for `PROBE`.
+const PROBE_PAGE: &str = r#"<!doctype html><html><head><style>
+@layer base { #layered { background-color: rgb(1, 2, 3); } }
+</style></head><body>
+<div id="layered"></div>
+<script>
+function supports(prop, val){ return (window.CSS && CSS.supports) ? CSS.supports(prop, val) : 'no-CSS.supports'; }
+function selSupports(sel){ try { return CSS.supports('selector(' + sel + ')'); } catch(e){ return 'err'; } }
+window.addEventListener('load', function(){
+  var layered = getComputedStyle(document.getElementById('layered')).backgroundColor;
+  console.log('PROBE oklch=' + supports('color', 'oklch(0.7 0.15 200)'));
+  console.log('PROBE oklab=' + supports('color', 'oklab(0.7 0.1 0.1)'));
+  console.log('PROBE color-mix=' + supports('color', 'color-mix(in srgb, red, blue)'));
+  console.log('PROBE has-selector=' + selSupports(':has(*)'));
+  console.log('PROBE container-query=' + supports('container-type', 'inline-size'));
+  console.log('PROBE at-property=' + (typeof CSS !== 'undefined' && typeof CSS.registerProperty === 'function'));
+  console.log('PROBE backdrop-filter=' + supports('backdrop-filter', 'blur(4px)'));
+  console.log('PROBE filter-blur=' + supports('filter', 'blur(4px)'));
+  console.log('PROBE appearance=' + supports('appearance', 'none'));
+  console.log('PROBE webkit-appearance=' + supports('-webkit-appearance', 'none'));
+  console.log('PROBE accent-color=' + supports('accent-color', 'red'));
+  console.log('PROBE transition=' + supports('transition', 'all 0.2s'));
+  console.log('PROBE mask=' + supports('mask-image', 'linear-gradient(#000, #fff)'));
+  console.log('PROBE layer-applied=' + layered + ' (expect rgb(1, 2, 3) if @layer works, else rgba(0, 0, 0, 0))');
+  console.log('PROBE ua=' + navigator.userAgent);
+});
 </script></body></html>"#;
