@@ -42,6 +42,10 @@ pub struct State {
 
     renderer: Renderer,
     surfaces: HashMap<String, ManagedSurface>,
+
+    // Objective present-rate sampling (displayed frames/sec).
+    frames: u32,
+    fps_since: std::time::Instant,
 }
 
 impl State {
@@ -67,7 +71,20 @@ impl State {
             qh,
             renderer,
             surfaces: HashMap::new(),
+            frames: 0,
+            fps_since: std::time::Instant::now(),
         })
+    }
+
+    fn sample_fps(&mut self) {
+        self.frames += 1;
+        let elapsed = self.fps_since.elapsed();
+        if elapsed.as_secs() >= 1 {
+            let fps = self.frames as f64 / elapsed.as_secs_f64();
+            log::info!("present rate: {fps:.0} fps");
+            self.frames = 0;
+            self.fps_since = std::time::Instant::now();
+        }
     }
 
     pub fn handle_command(&mut self, command: Command) {
@@ -78,6 +95,8 @@ impl State {
                 monitor,
                 layer,
                 anchors,
+                width,
+                height,
                 keyboard,
                 exclusive_edge,
                 exclusive_size,
@@ -88,6 +107,8 @@ impl State {
                     monitor,
                     layer,
                     anchors,
+                    width,
+                    height,
                     keyboard,
                     exclusive_edge,
                     exclusive_size,
@@ -135,6 +156,7 @@ impl State {
 
         layer.set_anchor(to_sctk_anchor(&spec.anchors));
         layer.set_keyboard_interactivity(to_sctk_keyboard(spec.keyboard));
+
         if let Some(edge) = spec.exclusive_edge {
             layer.set_exclusive_zone(spec.exclusive_size);
             // A bar stretches along its anchored edges and needs an explicit
@@ -143,6 +165,9 @@ impl State {
                 Edge::Top | Edge::Bottom => layer.set_size(0, spec.exclusive_size as u32),
                 Edge::Left | Edge::Right => layer.set_size(spec.exclusive_size as u32, 0),
             }
+        } else if spec.width > 0 || spec.height > 0 {
+            // An explicitly sized surface (e.g. a centered panel).
+            layer.set_size(spec.width.max(0) as u32, spec.height.max(0) as u32);
         }
 
         // Provisional view size; resized on the first configure when the
@@ -183,7 +208,10 @@ impl State {
     }
 
     fn present(&mut self, wl_surface: &wl_surface::WlSurface) {
-        // Advance Ultralight once, then present the matching surface.
+        self.sample_fps();
+        // Drive animations (RAF/CSS) off the display refresh, then advance and
+        // paint, then present the matching surface.
+        self.renderer.refresh_display(0);
         self.renderer.update();
         self.renderer.render();
         let Self {

@@ -59,6 +59,12 @@ pub enum Command {
         layer: Layer,
         /// Edges the surface anchors to.
         anchors: Vec<Edge>,
+        /// Explicit size. 0 on an axis = let anchors/compositor decide (a surface
+        /// anchored to opposite edges stretches; an unanchored axis needs a size).
+        #[serde(default)]
+        width: i32,
+        #[serde(default)]
+        height: i32,
         keyboard: Keyboard,
         /// Exclusive zone: reserve `exclusive_size` px along `exclusive_edge`.
         /// Size 0 reserves nothing.

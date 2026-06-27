@@ -21,6 +21,8 @@ pub struct SurfaceSpec {
     pub monitor: String,
     pub layer: Layer,
     pub anchors: Vec<Edge>,
+    pub width: i32,
+    pub height: i32,
     pub keyboard: Keyboard,
     pub exclusive_edge: Option<Edge>,
     pub exclusive_size: i32,

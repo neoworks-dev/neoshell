@@ -23,7 +23,7 @@ use calloop_wayland_source::WaylandSource;
 use wayland_client::globals::registry_queue_init;
 use wayland_client::Connection;
 
-use protocol::{Command, Edge, Keyboard, Layer};
+use protocol::{Command, Keyboard, Layer};
 use ultralight::Renderer;
 use wayland::State;
 
@@ -130,31 +130,56 @@ fn spawn_control_listener(sender: Sender<Command>) {
     });
 }
 
-/// `--test-url <URL>` creates a fullscreen overlay surface loading URL, so the
-/// host can be run standalone (no Go core) to eyeball rendering and fps.
+/// `--test-url <URL>` creates a centered overlay panel loading URL, so the host
+/// can be run standalone (no Go core) to eyeball rendering and fps. The special
+/// value `fps` loads a built-in animated fps page (see FPS_PAGE).
 fn maybe_send_test_surface(sender: &Sender<Command>) {
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         if arg != "--test-url" {
             continue;
         }
-        let Some(url) = args.next() else {
-            log::error!("--test-url needs a URL");
+        let Some(value) = args.next() else {
+            log::error!("--test-url needs a URL (or `fps`)");
             return;
         };
-        // A 48px top bar (not fullscreen) so the test is non-disruptive while
-        // still exercising the full present pipeline.
+        let url = match value.as_str() {
+            "fps" => format!("html:{FPS_PAGE}"),
+            _ => value,
+        };
+        // A centered panel (no anchors) — visible enough to judge animation
+        // smoothness without locking the whole screen.
         let command = Command::Create {
             role: "test".to_string(),
             url,
             monitor: String::new(),
-            layer: Layer::Top,
-            anchors: vec![Edge::Top, Edge::Left, Edge::Right],
+            layer: Layer::Overlay,
+            anchors: vec![],
+            width: 1000,
+            height: 560,
             keyboard: Keyboard::None,
-            exclusive_edge: Some(Edge::Top),
-            exclusive_size: 48,
+            exclusive_edge: None,
+            exclusive_size: 0,
         };
         let _ = sender.send(command);
         return;
     }
 }
+
+/// Built-in fps test page: an on-screen RAF counter plus a smoothly animated
+/// box, so on-screen fps and animation smoothness can be eyeballed alongside the
+/// host's objective present-rate logging.
+const FPS_PAGE: &str = r#"<!doctype html><html><body style="margin:0;height:100vh;background:#0b0f17;color:#5ef38c;font:bold 40px ui-monospace,monospace;overflow:hidden">
+<div id="fps" style="position:fixed;top:16px;left:20px">-- fps</div>
+<div id="box" style="position:absolute;top:240px;width:120px;height:120px;border-radius:24px;background:linear-gradient(135deg,#5ef38c,#3aa0ff)"></div>
+<script>
+let last=performance.now(),frames=0;
+const fpsEl=document.getElementById('fps'),box=document.getElementById('box');
+function loop(t){
+  frames++;
+  if(t-last>=500){fpsEl.textContent=Math.round(frames*1000/(t-last))+' fps';frames=0;last=t;}
+  box.style.left=(Math.sin(t/600)*0.5+0.5)*820+'px';
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script></body></html>"#;
