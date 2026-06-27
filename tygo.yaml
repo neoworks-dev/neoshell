@@ -1,0 +1,3 @@
+packages:
+  - path: "github.com/neoworks/neobar/internal/hyprland"
+    output_path: "../neobar-ui/src/lib/sdk/types.ts"
