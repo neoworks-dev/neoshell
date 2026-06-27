@@ -159,8 +159,13 @@ func (c *Client) SetExclusive(role string, edge Edge, size int) error {
 	})
 }
 
-// SetInputRegion restricts input to the given rectangles (empty = whole surface).
+// SetInputRegion restricts input to the given rectangles; outside is
+// click-through. Empty rects = whole surface click-through.
 func (c *Client) SetInputRegion(role string, rects []ipc.Rect) error {
+	// Marshal nil as [] rather than null so the host's Vec<Rect> deserializes.
+	if rects == nil {
+		rects = []ipc.Rect{}
+	}
 	return c.send(map[string]any{
 		"cmd":   "surface.region",
 		"role":  role,

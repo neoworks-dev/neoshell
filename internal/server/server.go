@@ -147,11 +147,70 @@ func (s *Server) Listen(addr string) {
 	// Serve the built frontend directly when configured. Registered last and at
 	// the root so the more specific /ws and /icon/ routes take precedence.
 	if s.frontend != "" {
-		http.Handle("/", http.FileServer(http.Dir(s.frontend)))
+		s.serveFrontend()
 		log.Printf("serving frontend from %s", s.frontend)
 	}
 	log.Printf("server listening on %s", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
+}
+
+// ulCompatShim stubs web-platform globals Ultralight's JS engine omits but
+// modern frameworks reference (e.g. Svelte 5 does `node instanceof
+// HTMLMediaElement`). Served at /ul-compat.js and injected into index.html.
+// Harmless under WebKitGTK: the stubs only fill globals that are undefined.
+const ulCompatShim = `(function () {
+  var missing = ["HTMLMediaElement", "HTMLVideoElement", "HTMLAudioElement", "MediaStream"];
+  for (var i = 0; i < missing.length; i++) {
+    if (typeof window[missing[i]] === "undefined") {
+      window[missing[i]] = function () {};
+    }
+  }
+})();
+`
+
+// serveFrontend serves the built frontend, injecting the Ultralight compat shim
+// into index.html and serving the shim script itself.
+func (s *Server) serveFrontend() {
+	fileServer := http.FileServer(http.Dir(s.frontend))
+
+	http.HandleFunc("/ul-compat.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript")
+		fmt.Fprint(w, ulCompatShim)
+	})
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
+			s.serveIndexWithShim(w, r)
+			return
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) serveIndexWithShim(w http.ResponseWriter, r *http.Request) {
+	data, err := os.ReadFile(filepath.Join(s.frontend, "index.html"))
+	if err != nil {
+		http.Error(w, "index.html not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, injectShim(string(data)))
+}
+
+// injectShim inserts the compat-shim script tag before the first <script so it
+// runs before the (deferred) app module.
+func injectShim(html string) string {
+	if strings.Contains(html, "ul-compat.js") {
+		return html
+	}
+	tag := `<script src="/ul-compat.js"></script>`
+	if i := strings.Index(html, "<script"); i >= 0 {
+		return html[:i] + tag + "\n\t\t" + html[i:]
+	}
+	if i := strings.Index(html, "</head>"); i >= 0 {
+		return html[:i] + tag + html[i:]
+	}
+	return tag + html
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {

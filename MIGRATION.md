@@ -95,10 +95,17 @@ Errors are logged, not fatal — a dead surface must not take the shell down.
       already smooth.
 - [ ] **4. Input** — wl_pointer/keyboard/touch → Ultralight `fire*Event`. Click-through via
       input regions where needed. IME last.
-- [ ] **5. Go controller** — `internal/renderhost` drives the host; map existing hub window
-      commands onto the protocol. WebKitGTK still default behind a flag.
-- [ ] **6. Cutover** — flip `cmd/neobar/main.go` to launch the host instead of `internal/bar`.
-      Delete `internal/bar` + the gotk4-webkitgtk dependency.
+- [x] **5. Go controller** — DONE. `internal/renderhost` spawns the host (`host.go`) and drives
+      it (`controller.go`): creates the fullscreen overlay bar surface, forwards hub
+      window:exclusive/region commands, makes the overlay click-through until the frontend
+      defines regions. The Go server injects the compat shim into served index.html. Selected
+      with `--renderer ultralight` (default still `webkit`). Verified on hardware: notch renders
+      with real backend data, click-through works, notch is interactive. ~110 fps on a
+      fullscreen overlay (vs 144 on a small surface — see stage 3.5; full-surface bitmap copy
+      every frame is the cost).
+- [ ] **6. Cutover** — flip the default to `ultralight`. Delete `internal/bar` + the
+      gotk4-webkitgtk dependency. Recommended to land stage 3.5 (dirty-bounds, restore 144 on
+      fullscreen) first.
 - [ ] **7. Grow the shell** — split roles into separate surfaces (dock, notch, launcher, OSD),
       then notifications daemon (dbus), settings as a toplevel.
 
