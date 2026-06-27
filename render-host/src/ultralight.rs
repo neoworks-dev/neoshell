@@ -33,7 +33,13 @@ impl Renderer {
         platform::enable_platform_filesystem(resources_dir)
             .map_err(|err| format!("ultralight filesystem: {err:?}"))?;
 
+        // Default animation/scroll timer delay is 1/60, which caps CSS
+        // animations and requestAnimationFrame at 60Hz. Lower it so the actual
+        // display refresh (driven via refresh_display) sets the rate, up to
+        // high-refresh panels.
         let config = Config::start()
+            .animation_timer_delay(1.0 / 240.0)
+            .scroll_timer_delay(1.0 / 240.0)
             .build()
             .ok_or("failed to build ultralight config")?;
         let inner = UlRenderer::create(config).map_err(|err| format!("ul renderer: {err:?}"))?;
@@ -55,12 +61,22 @@ impl Renderer {
             .create_view(width, height, &view_config, None)
             .ok_or("failed to create view")?;
 
+        // Bind to display 0 so refresh_display(0) drives this view's animations.
+        inner.set_display_id(0);
+
         Ok(View { inner })
     }
 
     /// Advance timers/network/JS. Call once per frame before `render`.
     pub fn update(&self) {
         self.inner.update();
+    }
+
+    /// Notify Ultralight that the display refreshed. Drives requestAnimationFrame
+    /// and CSS animations for views on `display_id` — without this they never
+    /// tick. Call once per frame.
+    pub fn refresh_display(&self, display_id: u32) {
+        self.inner.refresh_display(display_id);
     }
 
     /// Paint all dirty views into their CPU surfaces.
