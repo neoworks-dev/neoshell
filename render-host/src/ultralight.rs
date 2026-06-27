@@ -64,6 +64,13 @@ impl Renderer {
         // Bind to display 0 so refresh_display(0) drives this view's animations.
         inner.set_display_id(0);
 
+        // Surface page console messages and JS errors to our log.
+        inner.set_add_console_message_callback(
+            |_view, _source, level, message, line, _column, source_id| {
+                log::info!("[console {level:?}] {message} ({source_id}:{line})");
+            },
+        );
+
         Ok(View { inner })
     }
 

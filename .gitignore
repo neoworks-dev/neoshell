@@ -13,6 +13,9 @@
 /render-host/lib/
 /ultralight-free-sdk-*.7z
 
+# Ultralight runtime cache (cookies, etc.)
+/render-host/default/
+
 # Editor / OS
 .DS_Store
 *.swp
