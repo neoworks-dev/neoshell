@@ -91,12 +91,19 @@ impl View {
             .map_err(|err| format!("load_url {url}: {err:?}"))
     }
 
+    pub fn load_html(&self, html: &str) -> Result<(), String> {
+        self.inner
+            .load_html(html)
+            .map_err(|err| format!("load_html: {err:?}"))
+    }
+
     pub fn resize(&self, width: u32, height: u32) {
         self.inner.resize(width, height);
     }
 
-    /// True if the view repainted since the last present, so we only reupload
-    /// the wl_shm buffer when pixels actually changed.
+    /// True if the view needs rendering. Used by the stage-3 dirty-bounds
+    /// optimization to skip reuploading unchanged frames.
+    #[allow(dead_code)]
     pub fn needs_paint(&self) -> bool {
         self.inner.needs_paint()
     }

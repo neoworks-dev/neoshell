@@ -81,12 +81,12 @@ impl ManagedSurface {
         if !self.configured || self.width == 0 || self.height == 0 {
             return false;
         }
-        if !self.view.needs_paint() && self.pool.is_some() {
-            // Nothing changed; still re-request a frame so we keep ticking.
-            self.request_frame(qh);
-            return true;
-        }
 
+        // Always copy the view's current surface and present. render() (called by
+        // the caller before this) clears the view's paint flag, so gating the
+        // copy on needs_paint() would miss content that loaded asynchronously.
+        // TODO(stage 3): only reupload when the Ultralight surface's dirty bounds
+        // are non-empty, to avoid copying unchanged frames.
         let width = self.width;
         let height = self.height;
         let stride = width * 4;
@@ -133,11 +133,6 @@ impl ManagedSurface {
         wl_surface.frame(qh, wl_surface.clone());
         layer.commit();
         true
-    }
-
-    fn request_frame(&self, qh: &QueueHandle<State>) {
-        let wl_surface = self.layer.wl_surface();
-        wl_surface.frame(qh, wl_surface.clone());
     }
 }
 
