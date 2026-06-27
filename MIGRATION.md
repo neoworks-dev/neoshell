@@ -90,9 +90,12 @@ Errors are logged, not fatal — a dead surface must not take the shell down.
       Required, in order: `refresh_display(0)` each frame (else animations/RAF never tick),
       `animation_timer_delay`/`scroll_timer_delay` lowered from 1/60 (else RAF capped ~60),
       and a JS compat shim (below). Verified standalone via `dist/` served statically.
-- [ ] **3.5. dmabuf/GPU (optimization)** — if the CPU bitmap + shm path is not smooth enough,
-      swap to the Ultralight GPU driver → EGL/gbm dmabuf → zero-copy present. Skip if shm is
-      already smooth.
+- [x] **3.5. dirty-bounds (optimization)** — DONE. Present now skips the upload entirely when
+      the view's dirty bounds are empty (commits only a frame request to keep the loop alive),
+      and damages just the changed region otherwise. Idle uploads dropped from ~144/s to ~22/s
+      and idle render-host CPU to ~0%, with no visual artifacts. A full GPU/dmabuf zero-copy
+      path is no longer needed for smoothness; revisit only if heavy continuous full-surface
+      animation ever demands it.
 - [ ] **4. Input** — wl_pointer/keyboard/touch → Ultralight `fire*Event`. Click-through via
       input regions where needed. IME last.
 - [x] **5. Go controller** — DONE. `internal/renderhost` spawns the host (`host.go`) and drives

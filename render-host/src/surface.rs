@@ -37,6 +37,7 @@ pub struct ManagedSurface {
     width: u32,
     height: u32,
     configured: bool,
+    mapped: bool,
 }
 
 impl ManagedSurface {
@@ -49,6 +50,7 @@ impl ManagedSurface {
             width: 0,
             height: 0,
             configured: false,
+            mapped: false,
         }
     }
 
@@ -84,14 +86,28 @@ impl ManagedSurface {
             return false;
         }
 
-        // Always copy the view's current surface and present. render() (called by
-        // the caller before this) clears the view's paint flag, so gating the
-        // copy on needs_paint() would miss content that loaded asynchronously.
-        // TODO(stage 3): only reupload when the Ultralight surface's dirty bounds
-        // are non-empty, to avoid copying unchanged frames.
+        // Skip the upload entirely when nothing changed. The frame loop is driven
+        // by frame callbacks, which are only delivered on commit, so we still
+        // commit a bare frame request to keep ticking (the compositor keeps
+        // showing the last buffer). This makes a static shell cost ~nothing.
+        // Always present once first: an unmapped surface (no buffer) may not
+        // receive frame callbacks, so the initial buffer must be attached.
+        // Returns true only when a new buffer was uploaded (a dirty frame), so the
+        // caller can measure real upload rate vs idle frame-request commits.
+        let dirty = self.view.dirty_bounds();
+        if dirty.is_none() && self.mapped {
+            let wl_surface = self.layer.wl_surface();
+            wl_surface.frame(qh, wl_surface.clone());
+            self.layer.commit();
+            return false;
+        }
+
         let width = self.width;
         let height = self.height;
         let stride = width * 4;
+        // Damage the changed region; on the first map there is no dirty rect yet,
+        // so damage the whole surface.
+        let (left, top, right, bottom) = dirty.unwrap_or((0, 0, width as i32, height as i32));
 
         if self.pool.is_none() {
             match SlotPool::new((stride * height) as usize, shm) {
@@ -124,16 +140,25 @@ impl ManagedSurface {
             }
         };
 
+        // A fresh slot has no prior content, so the full surface is copied; only
+        // the changed region is reported as damage so the compositor recomposites
+        // just that area.
         copy_bitmap_into(view, canvas, width, height, stride);
+        view.clear_dirty();
 
         let wl_surface = layer.wl_surface();
         if let Err(err) = buffer.attach_to(wl_surface) {
             log::error!("attach: {err}");
             return false;
         }
-        wl_surface.damage_buffer(0, 0, width as i32, height as i32);
+        let damage_x = left.clamp(0, width as i32);
+        let damage_y = top.clamp(0, height as i32);
+        let damage_w = (right - left).clamp(0, width as i32 - damage_x);
+        let damage_h = (bottom - top).clamp(0, height as i32 - damage_y);
+        wl_surface.damage_buffer(damage_x, damage_y, damage_w, damage_h);
         wl_surface.frame(qh, wl_surface.clone());
         layer.commit();
+        self.mapped = true;
         true
     }
 }

@@ -59,8 +59,10 @@ pub struct State {
     keyboard_focus: Option<wl_surface::WlSurface>,
     modifiers: Modifiers,
 
-    // Objective present-rate sampling (displayed frames/sec).
+    // Objective sampling: total frame callbacks vs frames that actually
+    // uploaded a new buffer (the rest are idle frame-request commits).
     frames: u32,
+    uploads: u32,
     fps_since: std::time::Instant,
 }
 
@@ -96,6 +98,7 @@ impl State {
             keyboard_focus: None,
             modifiers: Modifiers::default(),
             frames: 0,
+            uploads: 0,
             fps_since: std::time::Instant::now(),
         })
     }
@@ -174,9 +177,12 @@ impl State {
         self.frames += 1;
         let elapsed = self.fps_since.elapsed();
         if elapsed.as_secs() >= 1 {
-            let fps = self.frames as f64 / elapsed.as_secs_f64();
-            log::info!("present rate: {fps:.0} fps");
+            let seconds = elapsed.as_secs_f64();
+            let fps = self.frames as f64 / seconds;
+            let uploads = self.uploads as f64 / seconds;
+            log::info!("present rate: {fps:.0} fps ({uploads:.0} uploads/s)");
             self.frames = 0;
+            self.uploads = 0;
             self.fps_since = std::time::Instant::now();
         }
     }
@@ -328,17 +334,23 @@ impl State {
         self.renderer.refresh_display(0);
         self.renderer.update();
         self.renderer.render();
-        let Self {
-            shm,
-            surfaces,
-            qh,
-            ..
-        } = self;
-        let found = surfaces
-            .values_mut()
-            .find(|surface| surface.layer.wl_surface() == wl_surface);
-        if let Some(surface) = found {
-            surface.present(shm, qh);
+        let uploaded = {
+            let Self {
+                shm,
+                surfaces,
+                qh,
+                ..
+            } = self;
+            let found = surfaces
+                .values_mut()
+                .find(|surface| surface.layer.wl_surface() == wl_surface);
+            match found {
+                Some(surface) => surface.present(shm, qh),
+                None => false,
+            }
+        };
+        if uploaded {
+            self.uploads += 1;
         }
     }
 }

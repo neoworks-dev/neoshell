@@ -146,11 +146,25 @@ impl View {
         }
     }
 
-    /// True if the view needs rendering. Used by the stage-3 dirty-bounds
-    /// optimization to skip reuploading unchanged frames.
-    #[allow(dead_code)]
-    pub fn needs_paint(&self) -> bool {
-        self.inner.needs_paint()
+    /// The surface's dirty rectangle (left, top, right, bottom) since the last
+    /// clear, or None if nothing changed. Used to skip idle frames and to damage
+    /// only what changed.
+    pub fn dirty_bounds(&self) -> Option<(i32, i32, i32, i32)> {
+        let surface = self.inner.surface()?;
+        let bounds = surface.dirty_bounds();
+        if bounds.is_empty() {
+            None
+        } else {
+            Some((bounds.left, bounds.top, bounds.right, bounds.bottom))
+        }
+    }
+
+    /// Clear the surface's dirty bounds after presenting, so the next frame only
+    /// reports newly changed regions (and reports empty when idle).
+    pub fn clear_dirty(&self) {
+        if let Some(surface) = self.inner.surface() {
+            surface.clear_dirty_bounds();
+        }
     }
 
     /// Run `f` with the view's current CPU bitmap. Returns None if the view has
