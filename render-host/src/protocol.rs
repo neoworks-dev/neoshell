@@ -84,7 +84,9 @@ pub enum Command {
     #[serde(rename = "surface.region")]
     Region {
         role: String,
-        /// Empty = whole surface accepts input.
+        /// Input-accepting rects in surface-local coords; outside is click-through.
+        /// Empty/absent = whole surface click-through (release a fullscreen overlay).
+        #[serde(default)]
         rects: Vec<Rect>,
     },
 

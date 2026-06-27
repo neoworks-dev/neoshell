@@ -283,18 +283,15 @@ impl State {
         self.surfaces.insert(spec.role, managed);
     }
 
-    /// Restrict a surface's input to `rects` (rest is click-through). Empty
-    /// rects clears the region so the whole surface accepts input.
+    /// Restrict a surface's input to `rects`; everything outside is click-through.
+    /// Empty rects = an empty region = the whole surface is click-through. This
+    /// fits a mostly-transparent overlay where the frontend carves out the few
+    /// interactive areas (the default, before any region command, is the whole
+    /// surface — so send an empty region to release a fullscreen overlay).
     fn set_input_region(&mut self, role: &str, rects: &[Rect]) {
         let Some(managed) = self.surfaces.get(role) else {
             return;
         };
-
-        if rects.is_empty() {
-            managed.layer.set_input_region(None);
-            managed.layer.commit();
-            return;
-        }
 
         let region = match Region::new(&self.compositor_state) {
             Ok(region) => region,
