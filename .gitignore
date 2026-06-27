@@ -6,6 +6,12 @@
 *.test
 *.out
 
+# Rust build artifacts
+/render-host/target/
+
+# Ultralight SDK (proprietary binary, fetched per machine)
+/render-host/lib/
+
 # Editor / OS
 .DS_Store
 *.swp

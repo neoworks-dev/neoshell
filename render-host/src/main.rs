@@ -1,8 +1,11 @@
 //! neobar render host.
 //!
-//! Owns wlr-layer-shell surfaces and paints Ultralight OSR views into them via
-//! dmabuf. Driven over a unix-socket control protocol by the Go core. Carries no
-//! shell logic — it is a pixel pump. See MIGRATION.md for the full design.
+//! Owns wlr-layer-shell surfaces and paints Ultralight OSR views into them.
+//! Driven over a unix-socket control protocol by the Go core. Carries no shell
+//! logic — it is a pixel pump. See ../MIGRATION.md for the full design.
+//!
+//! Stage 2: brings up Wayland + one or more layer surfaces and presents
+//! Ultralight's CPU bitmap via wl_shm, frame-callback driven.
 
 mod input;
 mod protocol;
@@ -10,96 +13,148 @@ mod surface;
 mod ultralight;
 mod wayland;
 
-use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::{UnixListener, UnixStream};
+use std::io::{BufRead, BufReader};
+use std::os::unix::net::UnixListener;
+use std::thread;
 
-use protocol::{Command, Event};
+use calloop::channel::{channel, Event as ChannelEvent, Sender};
+use calloop::EventLoop;
+use calloop_wayland_source::WaylandSource;
+use wayland_client::globals::registry_queue_init;
+use wayland_client::Connection;
+
+use protocol::{Command, Edge, Keyboard, Layer};
+use ultralight::Renderer;
+use wayland::State;
 
 fn socket_path() -> String {
-    let runtime = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
-        format!("/run/user/{}", unsafe { libc_getuid() })
-    });
+    let runtime = std::env::var("XDG_RUNTIME_DIR")
+        .unwrap_or_else(|_| format!("/run/user/{}", unsafe { getuid() }));
     format!("{runtime}/neobar-render.sock")
 }
 
-// Avoid a libc dependency just for getuid in this skeleton.
 extern "C" {
-    #[link_name = "getuid"]
-    fn libc_getuid() -> u32;
+    fn getuid() -> u32;
+}
+
+/// SDK resources dir (icudt*.dat, cacert.pem). `ULTRALIGHT_SDK_ROOT/resources`
+/// or `./lib/resources` as a fallback.
+fn resources_dir() -> String {
+    match std::env::var("ULTRALIGHT_SDK_ROOT") {
+        Ok(root) => format!("{root}/resources"),
+        Err(_) => "./lib/resources".to_string(),
+    }
 }
 
 fn main() {
     env_logger::init();
 
+    let conn = Connection::connect_to_env().expect("connect to wayland");
+    let (globals, event_queue) = registry_queue_init(&conn).expect("registry init");
+    let qh = event_queue.handle();
+
+    let renderer = Renderer::new(&resources_dir()).expect("ultralight renderer");
+    let mut state = State::new(&globals, qh.clone(), renderer).expect("wayland state");
+
+    let mut event_loop: EventLoop<State> = EventLoop::try_new().expect("event loop");
+    let loop_handle = event_loop.handle();
+
+    WaylandSource::new(conn, event_queue)
+        .insert(loop_handle.clone())
+        .expect("insert wayland source");
+
+    // Control commands arrive on a background thread and cross into the loop via
+    // a calloop channel so they're applied on the same thread as rendering.
+    let (sender, channel) = channel::<Command>();
+    loop_handle
+        .insert_source(channel, |event, _, state: &mut State| {
+            if let ChannelEvent::Msg(command) = event {
+                state.handle_command(command);
+            }
+        })
+        .expect("insert command channel");
+
+    spawn_control_listener(sender.clone());
+    maybe_send_test_surface(&sender);
+
+    log::info!("render host running");
+    loop {
+        if let Err(err) = event_loop.dispatch(None, &mut state) {
+            log::error!("dispatch: {err}");
+            break;
+        }
+    }
+}
+
+/// Accept core connections on the control socket and forward parsed commands.
+/// Stage 2 is command-only; event emission back to the core is stage 5.
+fn spawn_control_listener(sender: Sender<Command>) {
     let path = socket_path();
     let _ = std::fs::remove_file(&path);
-    let listener = UnixListener::bind(&path).expect("bind control socket");
-    log::info!("render host listening on {path}");
 
-    // STAGE 1: accept a single core connection and run the control loop.
-    // STAGE 2+: the Wayland event loop and the control loop must be driven
-    // together (calloop), so the layer-shell surfaces pump frames while commands
-    // arrive. For now the control loop is standalone to prove protocol parsing.
-    let (stream, _) = listener.accept().expect("accept core connection");
-    if let Err(err) = run_control_loop(stream) {
-        log::error!("control loop ended: {err}");
-    }
+    let listener = match UnixListener::bind(&path) {
+        Ok(listener) => listener,
+        Err(err) => {
+            log::error!("bind {path}: {err}");
+            return;
+        }
+    };
+    log::info!("control socket: {path}");
+
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            let stream = match stream {
+                Ok(stream) => stream,
+                Err(err) => {
+                    log::warn!("accept: {err}");
+                    continue;
+                }
+            };
+            let reader = BufReader::new(stream);
+            for line in reader.lines() {
+                let line = match line {
+                    Ok(line) => line,
+                    Err(_) => break,
+                };
+                if line.trim().is_empty() {
+                    continue;
+                }
+                match serde_json::from_str::<Command>(&line) {
+                    Ok(command) => {
+                        if sender.send(command).is_err() {
+                            return; // loop gone
+                        }
+                    }
+                    Err(err) => log::warn!("bad command {line:?}: {err}"),
+                }
+            }
+        }
+    });
 }
 
-fn run_control_loop(stream: UnixStream) -> std::io::Result<()> {
-    let mut writer = stream.try_clone()?;
-    let reader = BufReader::new(stream);
-
-    // TODO(stage 2): construct the Wayland connection + Ultralight renderer here
-    // and hand them to a surface registry the command handlers mutate.
-    // let mut wayland = wayland::Connection::new()?;
-    // let mut renderer = ultralight::Renderer::new()?;
-    // let mut surfaces = surface::Registry::new();
-
-    for line in reader.lines() {
-        let line = line?;
-        if line.trim().is_empty() {
+/// `--test-url <URL>` creates a fullscreen overlay surface loading URL, so the
+/// host can be run standalone (no Go core) to eyeball rendering and fps.
+fn maybe_send_test_surface(sender: &Sender<Command>) {
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg != "--test-url" {
             continue;
         }
-
-        let command: Command = match serde_json::from_str(&line) {
-            Ok(command) => command,
-            Err(err) => {
-                log::warn!("bad command {line:?}: {err}");
-                continue;
-            }
+        let Some(url) = args.next() else {
+            log::error!("--test-url needs a URL");
+            return;
         };
-
-        handle_command(command, &mut writer);
-    }
-
-    Ok(())
-}
-
-fn handle_command(command: Command, writer: &mut UnixStream) {
-    match command {
-        Command::Create { role, url, .. } => {
-            // TODO(stage 2): surfaces.create(&mut wayland, &mut renderer, spec)
-            log::info!("create surface {role} -> {url}");
-            emit(writer, Event::Ready { role });
-        }
-        Command::Exclusive { role, edge, size } => {
-            log::info!("exclusive {role} {edge:?} {size}");
-            // TODO(stage 5): surfaces.get(&role).set_exclusive(edge, size)
-        }
-        Command::Region { role, rects } => {
-            log::info!("region {role} {} rects", rects.len());
-            // TODO(stage 4): surfaces.get(&role).set_input_region(rects)
-        }
-        Command::Show { role } => log::info!("show {role}"),
-        Command::Hide { role } => log::info!("hide {role}"),
-        Command::Destroy { role } => log::info!("destroy {role}"),
-    }
-}
-
-fn emit(writer: &mut UnixStream, event: Event) {
-    if let Ok(mut json) = serde_json::to_string(&event) {
-        json.push('\n');
-        let _ = writer.write_all(json.as_bytes());
+        let command = Command::Create {
+            role: "test".to_string(),
+            url,
+            monitor: String::new(),
+            layer: Layer::Overlay,
+            anchors: vec![Edge::Top, Edge::Bottom, Edge::Left, Edge::Right],
+            keyboard: Keyboard::None,
+            exclusive_edge: None,
+            exclusive_size: 0,
+        };
+        let _ = sender.send(command);
+        return;
     }
 }
