@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -154,10 +155,14 @@ func (s *Server) Listen(addr string) {
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
 
-// ulCompatShim stubs web-platform globals Ultralight's JS engine omits but
-// modern frameworks reference (e.g. Svelte 5 does `node instanceof
-// HTMLMediaElement`). Served at /ul-compat.js and injected into index.html.
-// Harmless under WebKitGTK: the stubs only fill globals that are undefined.
+// ulCompatShim adapts pages to Ultralight's WebCore. It (1) stubs web-platform
+// globals Ultralight omits but frameworks reference unconditionally (e.g. Svelte
+// 5 does `node instanceof HTMLMediaElement`), and (2) forces hover/pointer
+// interaction media queries to match, since Ultralight reports as a touch device
+// and frameworks gate hover styles behind `@media (hover: hover)`. Served at
+// /ul-compat.js and injected into index.html. Harmless under other engines: the
+// stubs only fill undefined globals and the media override only widens hover.
+// Mirror of render-host/ul-compat.js.
 const ulCompatShim = `(function () {
   var missing = ["HTMLMediaElement", "HTMLVideoElement", "HTMLAudioElement", "MediaStream"];
   for (var i = 0; i < missing.length; i++) {
@@ -165,6 +170,42 @@ const ulCompatShim = `(function () {
       window[missing[i]] = function () {};
     }
   }
+
+  var interactionQuery = /(any-)?hover\s*:\s*hover|(any-)?pointer\s*:\s*fine/;
+  if (window.matchMedia) {
+    var originalMatchMedia = window.matchMedia.bind(window);
+    window.matchMedia = function (query) {
+      if (interactionQuery.test(query)) {
+        return {
+          matches: true, media: query, onchange: null,
+          addEventListener: function () {}, removeEventListener: function () {},
+          addListener: function () {}, removeListener: function () {},
+          dispatchEvent: function () { return false; },
+        };
+      }
+      return originalMatchMedia(query);
+    };
+  }
+
+  function ungateHoverMedia() {
+    var sheets = document.styleSheets;
+    for (var s = 0; s < sheets.length; s++) {
+      var rules;
+      try { rules = sheets[s].cssRules; } catch (e) { continue; }
+      if (!rules) continue;
+      for (var r = 0; r < rules.length; r++) {
+        var rule = rules[r];
+        if (rule.media && interactionQuery.test(rule.media.mediaText)) {
+          try { rule.media.mediaText = "all"; } catch (e) {}
+        }
+      }
+    }
+  }
+  function schedule() { try { ungateHoverMedia(); } catch (e) {} }
+  document.addEventListener("DOMContentLoaded", schedule);
+  window.addEventListener("load", schedule);
+  setTimeout(schedule, 300);
+  setTimeout(schedule, 1500);
 })();
 `
 
@@ -183,8 +224,34 @@ func (s *Server) serveFrontend() {
 			s.serveIndexWithShim(w, r)
 			return
 		}
+		if strings.HasSuffix(r.URL.Path, ".css") {
+			s.serveCSSWithHoverFix(w, r)
+			return
+		}
 		fileServer.ServeHTTP(w, r)
 	})
+}
+
+// hoverGateRe matches the interaction conditions Ultralight evaluates false
+// (it reports as a touch device), which gate hover styling (Tailwind's `hover:`
+// compiles to `@media (hover:hover){...}`). `(pointer:coarse)` is intentionally
+// left alone.
+var hoverGateRe = regexp.MustCompile(`\((any-)?(hover\s*:\s*hover|pointer\s*:\s*fine)\)`)
+
+// serveCSSWithHoverFix serves a stylesheet with hover/pointer media gates
+// neutralized to an always-true condition, so hover rules are active in
+// Ultralight from parse time (a runtime CSSOM rewrite proved unreliable: rules
+// excluded at parse time were not re-applied to later-created elements).
+func (s *Server) serveCSSWithHoverFix(w http.ResponseWriter, r *http.Request) {
+	cleaned := filepath.Clean("/" + r.URL.Path)
+	data, err := os.ReadFile(filepath.Join(s.frontend, cleaned))
+	if err != nil {
+		http.Error(w, "stylesheet not found", http.StatusNotFound)
+		return
+	}
+	fixed := hoverGateRe.ReplaceAll(data, []byte("(min-width:0)"))
+	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	w.Write(fixed)
 }
 
 func (s *Server) serveIndexWithShim(w http.ResponseWriter, r *http.Request) {

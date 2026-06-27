@@ -139,12 +139,24 @@ broadly supported, so Tailwind v4 output renders correctly. Confirmed working:
 `oklch`, `oklab`, `color-mix`, `:has()`, container queries, `@property`, `@layer`,
 CSS `filter`/`blur()`, `appearance`/`-webkit-appearance`, `transition`, `mask`.
 
-Only two gaps, both minor:
+Gaps and their handling:
+- **Touch-device interaction (`hover: hover` and `pointer: fine` both false).**
+  Ultralight reports as a touch device, so frameworks that gate hover styles
+  behind `@media (hover: hover)` (Tailwind's `hover:` variant) silently drop all
+  hover styling. Fixed in two places: the compat shim overrides `matchMedia` for
+  interaction queries, and — reliably — the Go server rewrites those media
+  conditions to always-true as it serves the CSS (`serveCSSWithHoverFix`). A
+  runtime CSSOM rewrite alone was unreliable: rules excluded at parse time were
+  not re-applied to elements created later (e.g. the notch's expand-on-hover
+  buttons), so the served-CSS rewrite is the primary fix.
 - **`accent-color` — unsupported.** Native form controls (range sliders,
   checkboxes, radios) render in default colors. Fix per control with
   `appearance: none` + custom CSS (the webkit pseudo-elements work), or accept it.
 - **`backdrop-filter` — unsupported.** Glass blur is done compositor-side
   (`layerrule = blur, neobar.*`), so this does not matter.
+
+`ResizeObserver`, `MutationObserver`, and `matchMedia` all work. The
+`--test-url probe` page reports all of the above.
 
 Other observed differences vs WebKitGTK (e.g. font rendering, default form
 controls) are minor. Font hinting/gamma are tunable via Ultralight `Config`
