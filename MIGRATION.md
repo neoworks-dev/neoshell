@@ -106,9 +106,9 @@ Errors are logged, not fatal — a dead surface must not take the shell down.
       with real backend data, click-through works, notch is interactive. ~110 fps on a
       fullscreen overlay (vs 144 on a small surface — see stage 3.5; full-surface bitmap copy
       every frame is the cost).
-- [ ] **6. Cutover** — flip the default to `ultralight`. Delete `internal/bar` + the
-      gotk4-webkitgtk dependency. Recommended to land stage 3.5 (dirty-bounds, restore 144 on
-      fullscreen) first.
+- [x] **6. Cutover** — DONE. Ultralight is the only render path; `internal/bar`, the
+      `--renderer` flag, and the gotk4 / gotk4-webkitgtk / gotk4-layer-shell dependencies are
+      removed. The Go binary dropped from ~26.8M to ~9.9M and no longer needs cgo/GTK.
 - [ ] **7. Grow the shell** — split roles into separate surfaces (dock, notch, launcher, OSD),
       then notifications daemon (dbus), settings as a toplevel.
 
