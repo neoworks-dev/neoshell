@@ -212,5 +212,21 @@ window.addEventListener('load', function(){
   console.log('PROBE mask=' + supports('mask-image', 'linear-gradient(#000, #fff)'));
   console.log('PROBE layer-applied=' + layered + ' (expect rgb(1, 2, 3) if @layer works, else rgba(0, 0, 0, 0))');
   console.log('PROBE ua=' + navigator.userAgent);
+  function mm(q){ return (window.matchMedia ? window.matchMedia(q).matches : 'no-matchMedia'); }
+  console.log('PROBE reduced-motion-reduce=' + mm('(prefers-reduced-motion: reduce)'));
+  console.log('PROBE reduced-motion-no-preference=' + mm('(prefers-reduced-motion: no-preference)'));
+  console.log('PROBE prefers-color-scheme-dark=' + mm('(prefers-color-scheme: dark)'));
+  console.log('PROBE hover-hover=' + mm('(hover: hover)'));
+  console.log('PROBE pointer-fine=' + mm('(pointer: fine)'));
+  console.log('PROBE ResizeObserver-exists=' + (typeof ResizeObserver !== 'undefined'));
+  if (typeof ResizeObserver !== 'undefined') {
+    var probe = document.createElement('div');
+    probe.style.cssText = 'width:10px;height:10px';
+    document.body.appendChild(probe);
+    var fired = 0;
+    new ResizeObserver(function(){ fired++; }).observe(probe);
+    setTimeout(function(){ probe.style.height = '60px'; }, 150);
+    setTimeout(function(){ console.log('PROBE ResizeObserver-fired-count=' + fired); }, 1200);
+  }
 });
 </script></body></html>"#;
