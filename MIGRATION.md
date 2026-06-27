@@ -84,8 +84,12 @@ Errors are logged, not fatal — a dead surface must not take the shell down.
 - [ ] **2. One surface (wl_shm)** — host creates a single wlr-layer-shell surface and presents
       Ultralight's CPU bitmap through a `wl_shm` buffer, frame-callback driven. Proves the
       Wayland + layer-shell + Ultralight + present loop with the simplest pixel path. (Started.)
-- [ ] **3. Load the frontend + fps gate** — view loads `localhost:<port>/bar`, renders the real
-      Svelte UI. Verify full refresh with an RAF fps counter. **This is the go/no-go gate.**
+- [x] **3. Load the frontend + fps gate** — PASSED. The real neobar-ui (Svelte 5) renders
+      correctly in Ultralight at a steady **144 fps** (host present-rate and on-page RAF both
+      ~144 on the 144Hz panel). The migration premise holds; WebKitGTK's 30fps cap is gone.
+      Required, in order: `refresh_display(0)` each frame (else animations/RAF never tick),
+      `animation_timer_delay`/`scroll_timer_delay` lowered from 1/60 (else RAF capped ~60),
+      and a JS compat shim (below). Verified standalone via `dist/` served statically.
 - [ ] **3.5. dmabuf/GPU (optimization)** — if the CPU bitmap + shm path is not smooth enough,
       swap to the Ultralight GPU driver → EGL/gbm dmabuf → zero-copy present. Skip if shm is
       already smooth.
@@ -100,6 +104,22 @@ Errors are logged, not fatal — a dead surface must not take the shell down.
 
 WebKitGTK stays the default until stage 6, so `main` is always shippable and the branch never
 has a broken shell.
+
+## Web-compat shim (required)
+
+Ultralight's JS engine omits some web-platform globals that modern frameworks
+reference unconditionally. Svelte 5's event delegation does
+`node instanceof HTMLMediaElement`; with `HTMLMediaElement` undefined this throws
+a ReferenceError during module evaluation and aborts the entire app mount (symptom:
+only the body background paints — a black panel, no UI). `render-host/ul-compat.js`
+defines harmless stubs (`HTMLMediaElement`, `HTMLVideoElement`, `HTMLAudioElement`,
+`MediaStream`) so the `instanceof` checks return false instead of throwing.
+
+It must load as a classic script BEFORE the app bundle. For the stage-3 test it was
+injected into the statically served `dist/index.html`. **Production home: the Go
+server injects it into `index.html` when serving the frontend** (stage 5/6) — wire
+this in `internal/server` so every Ultralight-loaded page gets it. Expect to extend
+the stub list as more frameworks/components surface other missing globals.
 
 ## Verify before stage 6
 
