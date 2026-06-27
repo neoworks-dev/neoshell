@@ -26,7 +26,7 @@ use wayland_client::globals::GlobalList;
 use wayland_client::protocol::{wl_output, wl_surface};
 use wayland_client::{Connection, QueueHandle};
 
-use crate::protocol::Command;
+use crate::protocol::{Command, Edge};
 use crate::surface::{
     to_sctk_anchor, to_sctk_keyboard, to_sctk_layer, ManagedSurface, SurfaceSpec,
 };
@@ -135,8 +135,14 @@ impl State {
 
         layer.set_anchor(to_sctk_anchor(&spec.anchors));
         layer.set_keyboard_interactivity(to_sctk_keyboard(spec.keyboard));
-        if spec.exclusive_edge.is_some() {
+        if let Some(edge) = spec.exclusive_edge {
             layer.set_exclusive_zone(spec.exclusive_size);
+            // A bar stretches along its anchored edges and needs an explicit
+            // thickness on the perpendicular axis (0 = stretch on that axis).
+            match edge {
+                Edge::Top | Edge::Bottom => layer.set_size(0, spec.exclusive_size as u32),
+                Edge::Left | Edge::Right => layer.set_size(spec.exclusive_size as u32, 0),
+            }
         }
 
         // Provisional view size; resized on the first configure when the
@@ -148,7 +154,12 @@ impl State {
                 return;
             }
         };
-        if let Err(err) = view.load_url(&spec.url) {
+        // `html:` prefix loads inline HTML (test affordance); otherwise a URL.
+        let load_result = match spec.url.strip_prefix("html:") {
+            Some(html) => view.load_html(html),
+            None => view.load_url(&spec.url),
+        };
+        if let Err(err) = load_result {
             log::error!("{err}");
         }
 

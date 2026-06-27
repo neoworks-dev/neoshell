@@ -11,6 +11,7 @@
 
 # Ultralight SDK (proprietary binary, fetched per machine)
 /render-host/lib/
+/ultralight-free-sdk-*.7z
 
 # Editor / OS
 .DS_Store

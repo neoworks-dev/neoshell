@@ -37,13 +37,11 @@ extern "C" {
     fn getuid() -> u32;
 }
 
-/// SDK resources dir (icudt*.dat, cacert.pem). `ULTRALIGHT_SDK_ROOT/resources`
-/// or `./lib/resources` as a fallback.
-fn resources_dir() -> String {
-    match std::env::var("ULTRALIGHT_SDK_ROOT") {
-        Ok(root) => format!("{root}/resources"),
-        Err(_) => "./lib/resources".to_string(),
-    }
+/// Ultralight filesystem base dir. Ultralight loads assets from
+/// `<base>/resources/` (default resource prefix), so this is the SDK *root*,
+/// not its `resources/` subdir. `ULTRALIGHT_SDK_ROOT` or `./lib` as a fallback.
+fn filesystem_base_dir() -> String {
+    std::env::var("ULTRALIGHT_SDK_ROOT").unwrap_or_else(|_| "./lib".to_string())
 }
 
 fn main() {
@@ -53,7 +51,7 @@ fn main() {
     let (globals, event_queue) = registry_queue_init(&conn).expect("registry init");
     let qh = event_queue.handle();
 
-    let renderer = Renderer::new(&resources_dir()).expect("ultralight renderer");
+    let renderer = Renderer::new(&filesystem_base_dir()).expect("ultralight renderer");
     let mut state = State::new(&globals, qh.clone(), renderer).expect("wayland state");
 
     let mut event_loop: EventLoop<State> = EventLoop::try_new().expect("event loop");
@@ -144,15 +142,17 @@ fn maybe_send_test_surface(sender: &Sender<Command>) {
             log::error!("--test-url needs a URL");
             return;
         };
+        // A 48px top bar (not fullscreen) so the test is non-disruptive while
+        // still exercising the full present pipeline.
         let command = Command::Create {
             role: "test".to_string(),
             url,
             monitor: String::new(),
-            layer: Layer::Overlay,
-            anchors: vec![Edge::Top, Edge::Bottom, Edge::Left, Edge::Right],
+            layer: Layer::Top,
+            anchors: vec![Edge::Top, Edge::Left, Edge::Right],
             keyboard: Keyboard::None,
-            exclusive_edge: None,
-            exclusive_size: 0,
+            exclusive_edge: Some(Edge::Top),
+            exclusive_size: 48,
         };
         let _ = sender.send(command);
         return;

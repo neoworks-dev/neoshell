@@ -10,44 +10,34 @@ Skeleton (stage 1). Control protocol parses; rendering pipeline is stubbed. The
 modules carry stage-tagged TODOs (`wayland.rs`, `ultralight.rs`, `surface.rs`,
 `input.rs`).
 
-## Ultralight SDK setup
+## Ultralight SDK
 
-Ultralight is a proprietary binary SDK — not on crates.io as the actual libraries.
-The `ul-next` crate is bindings only; the `.so` files come from the SDK.
+Ultralight is a proprietary binary SDK. The `.so` files are not on crates.io.
 
-1. Download the SDK for Linux x64 from <https://ultralig.ht> (or the
-   `ultralight-ux/Ultralight` GitHub releases). Accept the free license.
-2. Place the runtime libraries where the linker and loader find them, e.g.:
+**Build (needs network):** `ul-next-sys`'s build script auto-downloads the SDK
+revision it pins (currently `158d65c`) from Ultralight's CDN into the crate's
+`OUT_DIR` and links against it. There is no `ULTRALIGHT_SDK_ROOT` override — the
+revision is fixed by the crate so the bindings match the ABI.
 
-   ```
-   render-host/lib/
-     libUltralight.so
-     libUltralightCore.so
-     libWebCore.so
-     libAppCore.so          # only if using the App API
-     resources/             # cacert.pem, icudt67l.dat, etc.
-   ```
+**Runtime:** the loader needs the `.so` files and Ultralight needs its
+`resources/` (icudt67l.dat, cacert.pem). Use the *same* SDK the build linked
+against (ABI match), not an arbitrary download. `run.fish` resolves the
+build's downloaded SDK and sets `LD_LIBRARY_PATH` + the resources path for you.
 
-3. Point the build/run at them (dynamic linking is required by the license —
-   never static-link):
-
-   ```fish
-   set -x ULTRALIGHT_SDK_ROOT (pwd)/lib
-   set -x LD_LIBRARY_PATH $ULTRALIGHT_SDK_ROOT $LD_LIBRARY_PATH
-   ```
-
-   `ul-next`'s build script reads `ULTRALIGHT_SDK_ROOT`; confirm against its docs
-   for the exact env var name and version it targets.
+A manually downloaded free SDK is extracted to `render-host/lib/` (git-ignored)
+as an offline fallback for `resources/`, but prefer the build-matched libraries.
 
 ## Build & run
 
 ```fish
-cargo build --release
-RUST_LOG=info ./target/release/neobar-render
+cargo build
+./run.fish --test-url https://example.com     # standalone, no Go core
 ```
 
-The host expects the Go core to connect and drive it. To exercise the protocol
-standalone, pipe newline-delimited JSON into the socket (see `../MIGRATION.md`).
+`run.fish` builds, locates the SDK, exports the runtime env, and launches the
+host. The `--test-url` form creates a fullscreen overlay so rendering and fps can
+be eyeballed without the Go core. To drive it for real, the Go core connects to
+the control socket (see `../MIGRATION.md`).
 
 ## License / attribution
 
