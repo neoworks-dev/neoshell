@@ -121,6 +121,27 @@ server injects it into `index.html` when serving the frontend** (stage 5/6) — 
 this in `internal/server` so every Ultralight-loaded page gets it. Expect to extend
 the stub list as more frameworks/components surface other missing globals.
 
+## CSS compatibility (Ultralight 1.4 = Safari 16.4 WebCore)
+
+Probed with `--test-url probe` (uses `CSS.supports`/`getComputedStyle`; UA is
+`AppleWebKit/615.1.18 ... Ultralight/1.4.0 Version/16.4.1 Safari`). Modern CSS is
+broadly supported, so Tailwind v4 output renders correctly. Confirmed working:
+`oklch`, `oklab`, `color-mix`, `:has()`, container queries, `@property`, `@layer`,
+CSS `filter`/`blur()`, `appearance`/`-webkit-appearance`, `transition`, `mask`.
+
+Only two gaps, both minor:
+- **`accent-color` — unsupported.** Native form controls (range sliders,
+  checkboxes, radios) render in default colors. Fix per control with
+  `appearance: none` + custom CSS (the webkit pseudo-elements work), or accept it.
+- **`backdrop-filter` — unsupported.** Glass blur is done compositor-side
+  (`layerrule = blur, neobar.*`), so this does not matter.
+
+Other observed differences vs WebKitGTK (e.g. font rendering, default form
+controls) are minor. Font hinting/gamma are tunable via Ultralight `Config`
+(`font_hinting`, `font_gamma`) if needed. "Hover transitions not animating" is
+still open to confirm — `transition` is supported, so this is likely a specific
+repaint case, not a blanket gap.
+
 ## Verify before stage 6
 
 Stage 3's fps counter is the gate. If Ultralight does not hit full refresh with the real
