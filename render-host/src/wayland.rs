@@ -10,27 +10,35 @@
 
 use std::collections::HashMap;
 
-use smithay_client_toolkit::compositor::{CompositorHandler, CompositorState};
+use smithay_client_toolkit::compositor::{CompositorHandler, CompositorState, Region};
 use smithay_client_toolkit::output::{OutputHandler, OutputState};
 use smithay_client_toolkit::registry::{ProvidesRegistryState, RegistryState};
+use smithay_client_toolkit::seat::keyboard::{
+    KeyEvent as SctkKeyEvent, KeyboardHandler, Keysym, Modifiers,
+};
+use smithay_client_toolkit::seat::pointer::{PointerEvent, PointerEventKind, PointerHandler};
+use smithay_client_toolkit::seat::{Capability, SeatHandler, SeatState};
 use smithay_client_toolkit::shell::wlr_layer::{
     LayerShell, LayerShellHandler, LayerSurface, LayerSurfaceConfigure,
 };
 use smithay_client_toolkit::shell::WaylandSurface;
 use smithay_client_toolkit::shm::{Shm, ShmHandler};
 use smithay_client_toolkit::{
-    delegate_compositor, delegate_layer, delegate_output, delegate_registry, delegate_shm,
-    registry_handlers,
+    delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer,
+    delegate_registry, delegate_seat, delegate_shm, registry_handlers,
 };
+use ul_next::event::{KeyEventCreationInfo, KeyEventType, MouseButton, MouseEventType};
+use ul_next::key_code::VirtualKeyCode;
 use wayland_client::globals::GlobalList;
-use wayland_client::protocol::{wl_output, wl_surface};
+use wayland_client::protocol::{wl_keyboard, wl_output, wl_pointer, wl_seat, wl_surface};
 use wayland_client::{Connection, QueueHandle};
 
-use crate::protocol::{Command, Edge};
+use crate::input;
+use crate::protocol::{Command, Edge, Rect};
 use crate::surface::{
     to_sctk_anchor, to_sctk_keyboard, to_sctk_layer, ManagedSurface, SurfaceSpec,
 };
-use crate::ultralight::Renderer;
+use crate::ultralight::{Renderer, View};
 
 pub struct State {
     registry_state: RegistryState,
@@ -42,6 +50,14 @@ pub struct State {
 
     renderer: Renderer,
     surfaces: HashMap<String, ManagedSurface>,
+
+    seat_state: SeatState,
+    pointer: Option<wl_pointer::WlPointer>,
+    keyboard: Option<wl_keyboard::WlKeyboard>,
+    pointer_focus: Option<wl_surface::WlSurface>,
+    pointer_pos: (i32, i32),
+    keyboard_focus: Option<wl_surface::WlSurface>,
+    modifiers: Modifiers,
 
     // Objective present-rate sampling (displayed frames/sec).
     frames: u32,
@@ -61,6 +77,7 @@ impl State {
         let layer_shell =
             LayerShell::bind(globals, &qh).map_err(|err| format!("wlr-layer-shell: {err}"))?;
         let shm = Shm::bind(globals, &qh).map_err(|err| format!("wl_shm: {err}"))?;
+        let seat_state = SeatState::new(globals, &qh);
 
         Ok(Self {
             registry_state,
@@ -71,9 +88,86 @@ impl State {
             qh,
             renderer,
             surfaces: HashMap::new(),
+            seat_state,
+            pointer: None,
+            keyboard: None,
+            pointer_focus: None,
+            pointer_pos: (0, 0),
+            keyboard_focus: None,
+            modifiers: Modifiers::default(),
             frames: 0,
             fps_since: std::time::Instant::now(),
         })
+    }
+
+    /// The Ultralight view backing a given wl_surface, if any.
+    fn view_for(&self, surface: &wl_surface::WlSurface) -> Option<&View> {
+        self.surfaces
+            .values()
+            .find(|managed| managed.layer.wl_surface() == surface)
+            .map(|managed| &managed.view)
+    }
+
+    fn fire_mouse_move(&self, surface: &wl_surface::WlSurface, position: (i32, i32)) {
+        if let Some(view) = self.view_for(surface) {
+            view.fire_mouse(MouseEventType::MouseMoved, position.0, position.1, MouseButton::None);
+        }
+    }
+
+    fn fire_mouse_button(
+        &self,
+        surface: &wl_surface::WlSurface,
+        position: (i32, i32),
+        button: u32,
+        ty: MouseEventType,
+    ) {
+        if let Some(view) = self.view_for(surface) {
+            view.fire_mouse(ty, position.0, position.1, input::map_button(button));
+        }
+    }
+
+    /// Fire a keyboard event to the focused view: a RawKeyDown/KeyUp with the
+    /// mapped virtual key, plus a Char event carrying the utf8 text on key down.
+    fn fire_key(&self, event: SctkKeyEvent, ty: KeyEventType) {
+        let Some(surface) = self.keyboard_focus.as_ref() else {
+            return;
+        };
+        let Some(view) = self.view_for(surface) else {
+            return;
+        };
+
+        view.fire_key(KeyEventCreationInfo {
+            ty,
+            modifiers: input::to_ul_modifiers(self.modifiers),
+            virtual_key_code: input::map_keysym(event.keysym),
+            native_key_code: event.raw_code as i32,
+            text: "",
+            unmodified_text: "",
+            is_keypad: false,
+            is_auto_repeat: false,
+            is_system_key: false,
+        });
+
+        if !matches!(ty, KeyEventType::RawKeyDown) {
+            return;
+        }
+        let Some(utf8) = event.utf8.as_deref() else {
+            return;
+        };
+        if !input::is_text(utf8) {
+            return;
+        }
+        view.fire_key(KeyEventCreationInfo {
+            ty: KeyEventType::Char,
+            modifiers: input::to_ul_modifiers(self.modifiers),
+            virtual_key_code: VirtualKeyCode::Unknown,
+            native_key_code: 0,
+            text: utf8,
+            unmodified_text: utf8,
+            is_keypad: false,
+            is_auto_repeat: false,
+            is_system_key: false,
+        });
     }
 
     fn sample_fps(&mut self) {
@@ -121,11 +215,7 @@ impl State {
                     surface.layer.commit();
                 }
             }
-            Command::Region { role, rects } => {
-                // TODO(stage 4): build a wl_region from rects and
-                // wl_surface.set_input_region. Empty rects = whole surface.
-                log::info!("region {role}: {} rects (stage 4)", rects.len());
-            }
+            Command::Region { role, rects } => self.set_input_region(&role, &rects),
             Command::Show { role } => {
                 log::info!("show {role} (stage 4 — map/unmap)");
             }
@@ -191,6 +281,33 @@ impl State {
         layer.commit();
         let managed = ManagedSurface::new(spec.role.clone(), layer, view);
         self.surfaces.insert(spec.role, managed);
+    }
+
+    /// Restrict a surface's input to `rects` (rest is click-through). Empty
+    /// rects clears the region so the whole surface accepts input.
+    fn set_input_region(&mut self, role: &str, rects: &[Rect]) {
+        let Some(managed) = self.surfaces.get(role) else {
+            return;
+        };
+
+        if rects.is_empty() {
+            managed.layer.set_input_region(None);
+            managed.layer.commit();
+            return;
+        }
+
+        let region = match Region::new(&self.compositor_state) {
+            Ok(region) => region,
+            Err(err) => {
+                log::error!("create region {role}: {err}");
+                return;
+            }
+        };
+        for rect in rects {
+            region.add(rect.x, rect.y, rect.w, rect.h);
+        }
+        managed.layer.set_input_region(Some(region.wl_region()));
+        managed.layer.commit();
     }
 
     fn find_output(&self, connector: &str) -> Option<wl_output::WlOutput> {
@@ -354,7 +471,167 @@ impl ProvidesRegistryState for State {
     fn registry(&mut self) -> &mut RegistryState {
         &mut self.registry_state
     }
-    registry_handlers![OutputState];
+    registry_handlers![OutputState, SeatState];
+}
+
+impl SeatHandler for State {
+    fn seat_state(&mut self) -> &mut SeatState {
+        &mut self.seat_state
+    }
+
+    fn new_seat(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, _seat: wl_seat::WlSeat) {}
+
+    fn new_capability(
+        &mut self,
+        _conn: &Connection,
+        qh: &QueueHandle<Self>,
+        seat: wl_seat::WlSeat,
+        capability: Capability,
+    ) {
+        if capability == Capability::Pointer && self.pointer.is_none() {
+            match self.seat_state.get_pointer(qh, &seat) {
+                Ok(pointer) => self.pointer = Some(pointer),
+                Err(err) => log::warn!("get_pointer: {err}"),
+            }
+        }
+        if capability == Capability::Keyboard && self.keyboard.is_none() {
+            match self.seat_state.get_keyboard::<State, State>(qh, &seat, None) {
+                Ok(keyboard) => self.keyboard = Some(keyboard),
+                Err(err) => log::warn!("get_keyboard: {err}"),
+            }
+        }
+    }
+
+    fn remove_capability(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _seat: wl_seat::WlSeat,
+        capability: Capability,
+    ) {
+        match capability {
+            Capability::Pointer => self.pointer = None,
+            Capability::Keyboard => {
+                self.keyboard = None;
+                self.keyboard_focus = None;
+            }
+            _ => {}
+        }
+    }
+
+    fn remove_seat(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, _seat: wl_seat::WlSeat) {}
+}
+
+impl PointerHandler for State {
+    fn pointer_frame(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _pointer: &wl_pointer::WlPointer,
+        events: &[PointerEvent],
+    ) {
+        for event in events {
+            let position = (event.position.0 as i32, event.position.1 as i32);
+            match event.kind {
+                PointerEventKind::Enter { .. } => {
+                    self.pointer_focus = Some(event.surface.clone());
+                    self.pointer_pos = position;
+                    self.fire_mouse_move(&event.surface, position);
+                }
+                PointerEventKind::Leave { .. } => {
+                    if self.pointer_focus.as_ref() == Some(&event.surface) {
+                        self.pointer_focus = None;
+                    }
+                }
+                PointerEventKind::Motion { .. } => {
+                    self.pointer_pos = position;
+                    self.fire_mouse_move(&event.surface, position);
+                }
+                PointerEventKind::Press { button, .. } => {
+                    self.pointer_pos = position;
+                    self.fire_mouse_button(&event.surface, position, button, MouseEventType::MouseDown);
+                }
+                PointerEventKind::Release { button, .. } => {
+                    self.fire_mouse_button(&event.surface, position, button, MouseEventType::MouseUp);
+                }
+                PointerEventKind::Axis {
+                    horizontal,
+                    vertical,
+                    ..
+                } => {
+                    // Wayland axis is positive down/right; Ultralight scroll
+                    // delta is the content offset, so invert.
+                    let delta_x = -horizontal.absolute as i32;
+                    let delta_y = -vertical.absolute as i32;
+                    if let Some(view) = self.view_for(&event.surface) {
+                        view.fire_scroll(delta_x, delta_y);
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl KeyboardHandler for State {
+    fn enter(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _keyboard: &wl_keyboard::WlKeyboard,
+        surface: &wl_surface::WlSurface,
+        _serial: u32,
+        _raw: &[u32],
+        _keysyms: &[Keysym],
+    ) {
+        self.keyboard_focus = Some(surface.clone());
+    }
+
+    fn leave(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _keyboard: &wl_keyboard::WlKeyboard,
+        surface: &wl_surface::WlSurface,
+        _serial: u32,
+    ) {
+        if self.keyboard_focus.as_ref() == Some(surface) {
+            self.keyboard_focus = None;
+        }
+    }
+
+    fn press_key(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _keyboard: &wl_keyboard::WlKeyboard,
+        _serial: u32,
+        event: SctkKeyEvent,
+    ) {
+        self.fire_key(event, KeyEventType::RawKeyDown);
+    }
+
+    fn release_key(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _keyboard: &wl_keyboard::WlKeyboard,
+        _serial: u32,
+        event: SctkKeyEvent,
+    ) {
+        self.fire_key(event, KeyEventType::KeyUp);
+    }
+
+    fn update_modifiers(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _keyboard: &wl_keyboard::WlKeyboard,
+        _serial: u32,
+        modifiers: Modifiers,
+        _layout: u32,
+    ) {
+        self.modifiers = modifiers;
+    }
 }
 
 delegate_compositor!(State);
@@ -362,3 +639,6 @@ delegate_output!(State);
 delegate_shm!(State);
 delegate_layer!(State);
 delegate_registry!(State);
+delegate_seat!(State);
+delegate_pointer!(State);
+delegate_keyboard!(State);

@@ -14,6 +14,10 @@
 
 use ul_next::{
     config::Config,
+    event::{
+        KeyEvent, KeyEventCreationInfo, MouseButton, MouseEvent, MouseEventType, ScrollEvent,
+        ScrollEventType,
+    },
     platform,
     renderer::Renderer as UlRenderer,
     view::{View as UlView, ViewConfig},
@@ -122,6 +126,24 @@ impl View {
 
     pub fn resize(&self, width: u32, height: u32) {
         self.inner.resize(width, height);
+    }
+
+    pub fn fire_mouse(&self, ty: MouseEventType, x: i32, y: i32, button: MouseButton) {
+        if let Ok(event) = MouseEvent::new(ty, x, y, button) {
+            self.inner.fire_mouse_event(event);
+        }
+    }
+
+    pub fn fire_scroll(&self, delta_x: i32, delta_y: i32) {
+        if let Ok(event) = ScrollEvent::new(ScrollEventType::ScrollByPixel, delta_x, delta_y) {
+            self.inner.fire_scroll_event(event);
+        }
+    }
+
+    pub fn fire_key(&self, info: KeyEventCreationInfo) {
+        if let Ok(event) = KeyEvent::new(info) {
+            self.inner.fire_key_event(event);
+        }
     }
 
     /// True if the view needs rendering. Used by the stage-3 dirty-bounds
