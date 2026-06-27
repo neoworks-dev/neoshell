@@ -92,7 +92,8 @@ pub enum Command {
     Destroy { role: String },
 }
 
-/// Events sent render host -> Go core.
+/// Events sent render host -> Go core. Wired up in stage 5.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event")]
 pub enum Event {

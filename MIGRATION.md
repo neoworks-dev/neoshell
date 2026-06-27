@@ -81,11 +81,14 @@ Errors are logged, not fatal — a dead surface must not take the shell down.
 - [x] **0. Baseline** — committed on `main` (WebKitGTK working).
 - [ ] **1. SDK + skeleton** — Ultralight SDK in place, Rust host compiles, opens a connection,
       parses the control protocol. (`render-host/` — this branch.)
-- [ ] **2. One surface** — host creates a single wlr-layer-shell surface, Ultralight OSR paints
-      a solid color into it via dmabuf. Proves the EGL/dmabuf/layer-shell pipeline.
-- [ ] **3. Load the frontend** — view loads `localhost:<port>/bar`, renders the real Svelte UI,
-      frame-callback driven (`external_begin_frame` from the Wayland frame callback). Verify
-      full refresh with an RAF fps counter.
+- [ ] **2. One surface (wl_shm)** — host creates a single wlr-layer-shell surface and presents
+      Ultralight's CPU bitmap through a `wl_shm` buffer, frame-callback driven. Proves the
+      Wayland + layer-shell + Ultralight + present loop with the simplest pixel path. (Started.)
+- [ ] **3. Load the frontend + fps gate** — view loads `localhost:<port>/bar`, renders the real
+      Svelte UI. Verify full refresh with an RAF fps counter. **This is the go/no-go gate.**
+- [ ] **3.5. dmabuf/GPU (optimization)** — if the CPU bitmap + shm path is not smooth enough,
+      swap to the Ultralight GPU driver → EGL/gbm dmabuf → zero-copy present. Skip if shm is
+      already smooth.
 - [ ] **4. Input** — wl_pointer/keyboard/touch → Ultralight `fire*Event`. Click-through via
       input regions where needed. IME last.
 - [ ] **5. Go controller** — `internal/renderhost` drives the host; map existing hub window

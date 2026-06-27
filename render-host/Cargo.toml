@@ -10,21 +10,21 @@ path = "src/main.rs"
 
 [dependencies]
 # Ultralight bindings. ul-next is the most actively maintained Rust wrapper.
-# NOTE: confirm it exposes the OSR GPUDriver / surface bitmap path needed for
-# dmabuf export. If it does not, drop to the raw `ultralight-sys` C API.
+# Stage 2 uses its CPU surface (bitmap) path. The GPU/dmabuf path (stage 3.5)
+# would additionally need a custom GPUDriver; confirm ul-next exposes it then.
+# The actual .so libraries come from the proprietary SDK (see README.md).
 ul-next = "0.4"
 
-# Wayland + wlr-layer-shell + seat/input. smithay-client-toolkit bundles the
-# layer-shell and linux-dmabuf protocol glue.
+# Wayland: connection + protocol types.
 wayland-client = "0.31"
+# smithay-client-toolkit bundles wlr-layer-shell, wl_shm slot pools, seat/input,
+# and the registry/handler boilerplate.
 smithay-client-toolkit = "0.19"
-wayland-protocols = { version = "0.32", features = ["client", "unstable"] }
-wayland-protocols-wlr = { version = "0.3", features = ["client"] }
 
-# EGL + GL for importing Ultralight's GPU texture and exporting it as a dmabuf.
-khronos-egl = { version = "6", features = ["dynamic"] }
-gbm = "0.15"          # dmabuf allocation against the DRM render node
-drm = "0.14"
+# Event loop. WaylandSource + a calloop channel let the control socket and the
+# Wayland frame callbacks be serviced in one loop.
+calloop = "0.14"
+calloop-wayland-source = "0.4"
 
 # Control protocol with the Go core.
 serde = { version = "1", features = ["derive"] }
@@ -33,6 +33,11 @@ serde_json = "1"
 # Logging.
 log = "0.4"
 env_logger = "0.11"
+
+# dmabuf/GPU path (stage 3.5) — uncomment when swapping shm for zero-copy:
+# khronos-egl = { version = "6", features = ["dynamic"] }
+# gbm = "0.15"
+# drm = "0.14"
 
 [profile.release]
 opt-level = 3
