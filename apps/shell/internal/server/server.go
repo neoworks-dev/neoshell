@@ -235,14 +235,24 @@ func (s *Server) route(c *Client, msg InMessage) {
 
 	case "window:exclusive":
 		// Frontend reserves `size` px along `edge` (or clears it with size 0).
+		// Name selects the surface (empty = the bar).
+		name := msg.Name
+		if name == "" {
+			name = "bar"
+		}
 		edge := msg.Edge
 		if edge == "" {
 			edge = "top"
 		}
-		s.hub.SendExclusiveZone(edge, msg.Size)
+		s.hub.SendExclusiveZone(name, edge, msg.Size)
 
 	case "window:region":
-		s.hub.SendRegionUpdate(msg.Rects)
+		// Name selects the surface whose input region to set (empty = the bar).
+		name := msg.Name
+		if name == "" {
+			name = "bar"
+		}
+		s.hub.SendRegionUpdate(name, msg.Rects)
 
 	case "config:get":
 		data, _ := json.Marshal(OutMessage{Type: "config", Data: s.cfg.Snapshot()})

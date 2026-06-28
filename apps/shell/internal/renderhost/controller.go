@@ -19,10 +19,23 @@ import (
 // reserves space via window:exclusive, exactly as in the WebKitGTK build.
 const barRole = "bar"
 
+// desktopRole is the fullscreen desktop surface (icons and, later, widgets). It
+// sits on the bottom layer — above the wallpaper, below application windows.
+const desktopRole = "desktop"
+
 // settingsRole names the standalone settings application. It is not a shell
 // surface — window:open/close spawn and kill the separate neoshell-settings
 // process, which hosts the settings UI in its own window over the WS bus.
 const settingsRole = "settings"
+
+// surfaceRole maps a frontend-supplied window name to a shell surface role,
+// defaulting to the bar when the name is empty.
+func surfaceRole(name string) string {
+	if name == "" {
+		return barRole
+	}
+	return name
+}
 
 // Controller spawns the render host and bridges hub window/region/exclusive
 // commands to it. It replaces internal/bar in the Ultralight render path.
@@ -61,6 +74,9 @@ func Run(hub *server.Hub, url, monitor, binPath string) error {
 	defer controller.shutdown()
 
 	if err := controller.createBar(); err != nil {
+		return err
+	}
+	if err := controller.createDesktop(); err != nil {
 		return err
 	}
 	go controller.drainEvents()
@@ -109,6 +125,32 @@ func (c *Controller) createBar() error {
 	return c.client.SetInputRegion(barRole, nil)
 }
 
+// createDesktop creates the fullscreen desktop surface that hosts draggable
+// icons (and later widgets). It is anchored to all four edges on the bottom
+// layer, so it spans the output above the wallpaper and below windows. It starts
+// click-through; the frontend sends a full-screen interactive region once loaded
+// (the whole desktop must receive input so a drag is not lost over empty areas).
+func (c *Controller) createDesktop() error {
+	spec := SurfaceSpec{
+		Role:     desktopRole,
+		URL:      desktopURL(c.url),
+		Monitor:  c.monitor,
+		Layer:    LayerBottom,
+		Anchors:  []Edge{EdgeTop, EdgeBottom, EdgeLeft, EdgeRight},
+		Keyboard: KeyboardNone,
+	}
+	if err := c.client.CreateSurface(spec); err != nil {
+		return fmt.Errorf("create desktop surface: %w", err)
+	}
+	return c.client.SetInputRegion(desktopRole, nil)
+}
+
+// desktopURL appends the desktop view selector to the shared frontend URL, which
+// already carries the WS port query (…?port=N).
+func desktopURL(base string) string {
+	return base + "&view=desktop"
+}
+
 // listen forwards hub window/region commands to the render host.
 func (c *Controller) listen() {
 	chWindow := c.hub.Subscribe("window")
@@ -129,15 +171,17 @@ func (c *Controller) listen() {
 func (c *Controller) handle(msg ipc.WindowCommand) {
 	switch msg.Action {
 	case "exclusive":
+		role := surfaceRole(msg.Name)
 		edge := Edge(msg.Edge)
 		if edge == "" {
 			edge = EdgeTop
 		}
-		if err := c.client.SetExclusive(barRole, edge, msg.Size); err != nil {
+		if err := c.client.SetExclusive(role, edge, msg.Size); err != nil {
 			log.Printf("render host exclusive: %v", err)
 		}
 	case "region":
-		if err := c.client.SetInputRegion(barRole, msg.Rects); err != nil {
+		role := surfaceRole(msg.Name)
+		if err := c.client.SetInputRegion(role, msg.Rects); err != nil {
 			log.Printf("render host region: %v", err)
 		}
 	case "open":

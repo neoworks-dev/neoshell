@@ -52,6 +52,16 @@ func Defaults() map[string]any {
 				"launcher":    true,
 			},
 		},
+		// Desktop icons. Positions are top-left px on the desktop surface, snapped
+		// to `grid`. The frontend persists the whole `icons` array on drop.
+		"desktop": map[string]any{
+			"grid": 100,
+			"icons": []any{
+				map[string]any{"id": "terminal", "label": "Terminal", "exec": "kitty", "icon": "terminal", "x": 40, "y": 40},
+				map[string]any{"id": "files", "label": "Files", "exec": "nautilus", "icon": "folder", "x": 40, "y": 160},
+				map[string]any{"id": "browser", "label": "Browser", "exec": "firefox", "icon": "globe", "x": 40, "y": 280},
+			},
+		},
 	}
 }
 
