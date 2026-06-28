@@ -76,8 +76,10 @@ fn main() {
     // Pump CEF on a timer so it renders and delivers on_paint independent of
     // Wayland frame callbacks (which only drive presentation).
     loop_handle
-        .insert_source(Timer::from_duration(PUMP_INTERVAL), |_deadline, _meta, _state| {
+        .insert_source(Timer::from_duration(PUMP_INTERVAL), |_deadline, _meta, state: &mut State| {
             cef_engine::pump();
+            // Resume any surface whose frame-callback loop stopped while idle.
+            state.drive_idle_surfaces();
             TimeoutAction::ToDuration(PUMP_INTERVAL)
         })
         .expect("insert cef pump timer");

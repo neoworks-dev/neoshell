@@ -307,6 +307,20 @@ impl State {
             .map(|mode| mode.dimensions)
     }
 
+    /// Drive surfaces whose frame-callback loop has stopped (idle). Called from
+    /// the pump timer so a new CEF paint resumes presenting even though the
+    /// compositor is no longer sending frame callbacks for that surface.
+    pub fn drive_idle_surfaces(&mut self) {
+        let Self {
+            shm, surfaces, qh, ..
+        } = self;
+        for surface in surfaces.values_mut() {
+            if surface.needs_idle_drive() {
+                surface.idle_probe(shm, qh);
+            }
+        }
+    }
+
     fn present(&mut self, wl_surface: &wl_surface::WlSurface) {
         self.sample_fps();
         let uploaded = {
