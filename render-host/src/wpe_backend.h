@@ -30,3 +30,8 @@ void neobar_display_set_render_callback(WPEDisplay* display, RenderCallback cb);
 // Returns true if the observer was active (WebKit wanted frames). One shared
 // observer drives all views; idle views produce no frames, so this is cheap.
 bool neobar_display_tick_vblank(WPEDisplay* display);
+
+// True while WebKit wants to render (it started the sync observer). Used to keep
+// ticking — so input-driven repaints (e.g. CSS :hover) render promptly — without
+// ticking when the page is fully idle.
+bool neobar_display_observer_active(WPEDisplay* display);

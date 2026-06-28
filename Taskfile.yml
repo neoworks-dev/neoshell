@@ -9,9 +9,8 @@ version: "3"
 
 vars:
   UI_DIR: ../neobar-ui
-  # Release build: the render host's per-frame pixel copy is the hot path, and a
-  # debug build janks at 144Hz. It rarely changes, so the extra compile is cheap.
-  RENDER_BIN: render-host/target/release/neobar-render
+  # C++/WPE render host (built by `make` in render-host/).
+  RENDER_BIN: render-host/neobar-render
   # Monitor connector to run on, e.g. `task dev MONITOR=DP-1`. Empty = default.
   # Run `task monitors` to list connectors.
   MONITOR: '{{.MONITOR | default ""}}'
@@ -46,10 +45,10 @@ tasks:
       - bun install
 
   render:build:
-    desc: Build the Rust render host in release (CEF, downloads ~200MB on first build)
+    desc: Build the C++/WPE render host (make)
     dir: render-host
     cmds:
-      - cargo build --release
+      - make
 
   core:build:
     desc: Build the Go core binary (./neobar)
@@ -127,6 +126,6 @@ tasks:
     desc: Remove build artifacts
     cmds:
       - rm -f neobar
-      - cd render-host && cargo clean
+      - cd render-host && make clean
       - cd neobar-bg && cargo clean
       - cd neobar-settings && cargo clean
