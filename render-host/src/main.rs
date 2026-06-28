@@ -47,8 +47,14 @@ fn main() {
     let _ = cef::api_hash(cef::sys::CEF_API_VERSION_LAST, 0);
 
     // Subprocess handoff: >= 0 in a child (which exits), -1 in the browser process.
+    // The app handler carries our command-line switches into every subprocess.
     let args = Args::new();
-    let exit_code = cef::execute_process(Some(args.as_main_args()), None, std::ptr::null_mut());
+    let mut app = cef_engine::new_app();
+    let exit_code = cef::execute_process(
+        Some(args.as_main_args()),
+        Some(&mut app),
+        std::ptr::null_mut(),
+    );
     if exit_code >= 0 {
         std::process::exit(exit_code);
     }

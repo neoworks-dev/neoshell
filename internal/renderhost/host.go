@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"syscall"
 )
 
 // Host is a spawned render-host process.
@@ -36,6 +37,12 @@ func SpawnHost(binPath string) (*Host, error) {
 	}
 
 	cmd := exec.Command(binPath)
+	// Put the render host (and CEF's gpu/renderer/utility subprocesses, which it
+	// forks) in its own process group. Two reasons: a terminal Ctrl-C does not
+	// reach CEF directly (Chromium installs its own SIGINT handler that would
+	// otherwise swallow it), and Stop can signal the whole group so no CEF
+	// subprocess orphans and keeps the layer surface mapped.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Env = append(os.Environ(),
 		"LD_LIBRARY_PATH="+cefDir+":"+os.Getenv("LD_LIBRARY_PATH"),
 	)
@@ -51,12 +58,20 @@ func SpawnHost(binPath string) (*Host, error) {
 	return &Host{cmd: cmd}, nil
 }
 
-// Stop terminates the render-host process.
+// Stop terminates the render host and every CEF subprocess by signalling the
+// whole process group (negative pid). Falls back to killing the lone process if
+// the group could not be resolved.
 func (h *Host) Stop() {
-	if h.cmd.Process != nil {
-		_ = h.cmd.Process.Kill()
-		_ = h.cmd.Wait()
+	if h.cmd.Process == nil {
+		return
 	}
+	pid := h.cmd.Process.Pid
+	if pgid, err := syscall.Getpgid(pid); err == nil {
+		_ = syscall.Kill(-pgid, syscall.SIGKILL)
+	} else {
+		_ = h.cmd.Process.Kill()
+	}
+	_ = h.cmd.Wait()
 }
 
 // resolveCEFDir locates the CEF runtime directory (libcef.so + resources). Uses

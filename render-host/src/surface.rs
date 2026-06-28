@@ -84,6 +84,11 @@ impl ManagedSurface {
             return false;
         }
 
+        // Drive CEF at the display's refresh rate: one begin-frame per Wayland
+        // frame callback. Without this (external_begin_frame_enabled) CEF would
+        // not paint at all; with the internal pacing it caps near 60fps.
+        self.view.send_begin_frame();
+
         // Is there a new CEF paint since we last presented?
         let generation = self.view.generation();
         let has_new = generation != self.last_generation && !self.view.frame_empty();

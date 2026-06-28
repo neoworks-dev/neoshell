@@ -3,6 +3,9 @@ package renderhost
 import (
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/neoworks/neobar/internal/ipc"
@@ -51,7 +54,15 @@ func Run(hub *server.Hub, url, monitor, binPath string) error {
 		return err
 	}
 	go controller.drainEvents()
-	controller.listen()
+	go controller.listen()
+
+	// Block until interrupted, then the deferred shutdown kills the render host
+	// group. Without this the process would run forever and Ctrl-C would never
+	// reach shutdown, orphaning CEF.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-sigCh
+	log.Printf("received %s, shutting down render host", sig)
 	return nil
 }
 
@@ -67,8 +78,16 @@ func (c *Controller) createBar() error {
 		Role:     barRole,
 		URL:      c.url,
 		Monitor:  c.monitor,
-		Layer:    LayerOverlay,
-		Anchors:  []Edge{EdgeTop, EdgeBottom, EdgeLeft, EdgeRight},
+		// Top, not Overlay: a fullscreen window covers the Top layer but would
+		// draw under an Overlay surface, so Overlay keeps the bar visible over
+		// fullscreen apps. Top hides it there, which is what we want.
+		Layer: LayerTop,
+		// Top+left+right, not all four edges: wlroots ignores the exclusive zone
+		// of a surface anchored to all four edges, so the frontend's
+		// window:exclusive reservation would do nothing. Dropping the bottom
+		// anchor still spans the screen (the render host sizes the height to the
+		// output) while letting the top exclusive zone take effect.
+		Anchors:  []Edge{EdgeTop, EdgeLeft, EdgeRight},
 		Keyboard: KeyboardOnDemand,
 	}
 	if err := c.client.CreateSurface(spec); err != nil {
