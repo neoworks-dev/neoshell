@@ -1,0 +1,6 @@
+[submodule "apps/ui"]
+	path = apps/ui
+	url = /home/moritz/Documents/neoworks/neoshell-ui.git
+[submodule "packages/sdk"]
+	path = packages/sdk
+	url = /home/moritz/Documents/neoworks/neoshell-sdk.git
