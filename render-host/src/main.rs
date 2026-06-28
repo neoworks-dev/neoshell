@@ -5,6 +5,7 @@
 //! this is a child. The browser process brings up CEF and the Wayland event loop.
 
 mod cef_engine;
+mod input;
 mod protocol;
 mod surface;
 mod wayland;
@@ -170,7 +171,7 @@ fn maybe_send_test_surface(sender: &Sender<Command>) {
             anchors: vec![],
             width: 1000,
             height: 560,
-            keyboard: Keyboard::None,
+            keyboard: Keyboard::OnDemand,
             exclusive_edge: None,
             exclusive_size: 0,
         };
