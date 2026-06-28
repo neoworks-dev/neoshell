@@ -1,0 +1,4 @@
+# Build artifacts
+gen/
+src/*.o
+neobar-render

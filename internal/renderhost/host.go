@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"sort"
 	"syscall"
 )
 
@@ -20,35 +18,22 @@ func DefaultBinPath() string {
 	if path := os.Getenv("NEOBAR_RENDER_BIN"); path != "" {
 		return path
 	}
-	return "render-host/target/debug/neobar-render"
+	return "render-host/neobar-render"
 }
 
-// SpawnHost launches the render-host binary with the CEF libraries on its
-// library path. The dynamic linker needs LD_LIBRARY_PATH at process start (and
-// CEF's subprocesses inherit it), so it must be set here rather than after launch.
+// SpawnHost launches the C++/WPE render-host. WPE uses system libraries, so no
+// special library path is needed (unlike the old CEF host).
 func SpawnHost(binPath string) (*Host, error) {
 	if _, err := os.Stat(binPath); err != nil {
 		return nil, fmt.Errorf("render host binary %q: %w", binPath, err)
 	}
 
-	cefDir, err := resolveCEFDir(binPath)
-	if err != nil {
-		return nil, err
-	}
-
 	cmd := exec.Command(binPath)
-	// Put the render host (and CEF's gpu/renderer/utility subprocesses, which it
-	// forks) in its own process group. Two reasons: a terminal Ctrl-C does not
-	// reach CEF directly (Chromium installs its own SIGINT handler that would
-	// otherwise swallow it), and Stop can signal the whole group so no CEF
-	// subprocess orphans and keeps the layer surface mapped.
+	// Put the render host (and WebKit's web/network subprocesses, which it forks)
+	// in its own process group so Stop can signal the whole group and no
+	// subprocess orphans keeping a layer surface mapped.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Env = append(os.Environ(),
-		"LD_LIBRARY_PATH="+cefDir+":"+os.Getenv("LD_LIBRARY_PATH"),
-	)
-	if os.Getenv("RUST_LOG") == "" {
-		cmd.Env = append(cmd.Env, "RUST_LOG=info")
-	}
+	cmd.Env = os.Environ()
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -58,9 +43,9 @@ func SpawnHost(binPath string) (*Host, error) {
 	return &Host{cmd: cmd}, nil
 }
 
-// Stop terminates the render host and every CEF subprocess by signalling the
-// whole process group (negative pid). Falls back to killing the lone process if
-// the group could not be resolved.
+// Stop terminates the render host and every subprocess by signalling the whole
+// process group (negative pid). Falls back to killing the lone process if the
+// group could not be resolved.
 func (h *Host) Stop() {
 	if h.cmd.Process == nil {
 		return
@@ -72,38 +57,4 @@ func (h *Host) Stop() {
 		_ = h.cmd.Process.Kill()
 	}
 	_ = h.cmd.Wait()
-}
-
-// resolveCEFDir locates the CEF runtime directory (libcef.so + resources). Uses
-// NEOBAR_CEF_PATH if set, otherwise globs the cef-dll-sys build output next to the
-// binary (the same libraries the linker used, so the ABI matches).
-func resolveCEFDir(binPath string) (string, error) {
-	if dir := os.Getenv("NEOBAR_CEF_PATH"); dir != "" {
-		return dir, nil
-	}
-
-	profileDir := filepath.Dir(binPath) // e.g. render-host/target/debug
-	matches, err := filepath.Glob(
-		filepath.Join(profileDir, "build", "cef-dll-sys-*", "out", "cef_linux_x86_64"),
-	)
-	if err != nil {
-		return "", err
-	}
-	if len(matches) == 0 {
-		return "", fmt.Errorf("no CEF runtime found under %s/build (set NEOBAR_CEF_PATH)", profileDir)
-	}
-
-	// Newest wins when stale build dirs linger.
-	sort.Slice(matches, func(i, j int) bool {
-		return modTime(matches[i]) > modTime(matches[j])
-	})
-	return matches[0], nil
-}
-
-func modTime(path string) int64 {
-	info, err := os.Stat(path)
-	if err != nil {
-		return 0
-	}
-	return info.ModTime().UnixNano()
 }
