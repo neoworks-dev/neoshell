@@ -16,8 +16,8 @@ use cef::rc::Rc as _;
 use cef::{
     browser_host_create_browser_sync, do_message_loop_work, initialize, shutdown, wrap_client,
     wrap_render_handler, Browser, BrowserSettings, CefString, Client, ImplBrowser, ImplBrowserHost,
-    ImplClient, ImplRenderHandler, PaintElementType, Rect, RenderHandler, Settings, WindowInfo,
-    WrapClient, WrapRenderHandler,
+    ImplClient, ImplRenderHandler, KeyEvent, KeyEventType, MouseButtonType, MouseEvent,
+    PaintElementType, Rect, RenderHandler, Settings, WindowInfo, WrapClient, WrapRenderHandler,
 };
 
 /// Target OSR frame rate. CEF's windowless default is 30; raise it so the engine
@@ -169,6 +169,60 @@ impl CefView {
 
     pub fn frame(&self) -> &SharedFrame {
         &self.frame
+    }
+
+    pub fn send_mouse_move(&self, x: i32, y: i32, leave: bool) {
+        if let Some(host) = self.browser.host() {
+            let event = MouseEvent { x, y, modifiers: 0 };
+            host.send_mouse_move_event(Some(&event), leave as c_int);
+        }
+    }
+
+    pub fn send_mouse_button(&self, x: i32, y: i32, button: MouseButtonType, mouse_up: bool) {
+        if let Some(host) = self.browser.host() {
+            let event = MouseEvent { x, y, modifiers: 0 };
+            host.send_mouse_click_event(Some(&event), button, mouse_up as c_int, 1);
+        }
+    }
+
+    pub fn send_scroll(&self, x: i32, y: i32, delta_x: i32, delta_y: i32) {
+        if let Some(host) = self.browser.host() {
+            let event = MouseEvent { x, y, modifiers: 0 };
+            host.send_mouse_wheel_event(Some(&event), delta_x, delta_y);
+        }
+    }
+
+    /// Fire a RawKeyDown/KeyUp with a Windows virtual key code.
+    pub fn send_key(&self, type_: KeyEventType, windows_key_code: i32) {
+        if let Some(host) = self.browser.host() {
+            let event = KeyEvent {
+                type_,
+                windows_key_code,
+                native_key_code: 0,
+                character: 0,
+                unmodified_character: 0,
+                ..Default::default()
+            };
+            host.send_key_event(Some(&event));
+        }
+    }
+
+    /// Fire Char events for text (one per utf16 code unit) — drives text input.
+    pub fn send_text(&self, text: &str) {
+        let Some(host) = self.browser.host() else {
+            return;
+        };
+        for unit in text.encode_utf16() {
+            let event = KeyEvent {
+                type_: KeyEventType::CHAR,
+                windows_key_code: unit as i32,
+                native_key_code: 0,
+                character: unit,
+                unmodified_character: unit,
+                ..Default::default()
+            };
+            host.send_key_event(Some(&event));
+        }
     }
 }
 

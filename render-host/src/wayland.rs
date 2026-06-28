@@ -8,23 +8,28 @@
 
 use std::collections::HashMap;
 
+use cef::KeyEventType;
 use smithay_client_toolkit::compositor::{CompositorHandler, CompositorState, Region};
 use smithay_client_toolkit::output::{OutputHandler, OutputState};
 use smithay_client_toolkit::registry::{ProvidesRegistryState, RegistryState};
+use smithay_client_toolkit::seat::keyboard::{KeyEvent as SctkKeyEvent, KeyboardHandler, Keysym};
+use smithay_client_toolkit::seat::pointer::{PointerEvent, PointerEventKind, PointerHandler};
+use smithay_client_toolkit::seat::{Capability, SeatHandler, SeatState};
 use smithay_client_toolkit::shell::wlr_layer::{
     LayerShell, LayerShellHandler, LayerSurface, LayerSurfaceConfigure,
 };
 use smithay_client_toolkit::shell::WaylandSurface;
 use smithay_client_toolkit::shm::{Shm, ShmHandler};
 use smithay_client_toolkit::{
-    delegate_compositor, delegate_layer, delegate_output, delegate_registry, delegate_shm,
-    registry_handlers,
+    delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer,
+    delegate_registry, delegate_seat, delegate_shm, registry_handlers,
 };
 use wayland_client::globals::GlobalList;
-use wayland_client::protocol::{wl_output, wl_surface};
+use wayland_client::protocol::{wl_keyboard, wl_output, wl_pointer, wl_seat, wl_surface};
 use wayland_client::{Connection, QueueHandle};
 
 use crate::cef_engine::CefView;
+use crate::input;
 use crate::protocol::{Command, Edge, Rect};
 use crate::surface::{to_sctk_anchor, to_sctk_keyboard, to_sctk_layer, ManagedSurface, SurfaceSpec};
 
@@ -37,6 +42,12 @@ pub struct State {
     qh: QueueHandle<State>,
 
     surfaces: HashMap<String, ManagedSurface>,
+
+    seat_state: SeatState,
+    pointer: Option<wl_pointer::WlPointer>,
+    keyboard: Option<wl_keyboard::WlKeyboard>,
+    pointer_focus: Option<wl_surface::WlSurface>,
+    keyboard_focus: Option<wl_surface::WlSurface>,
 
     // Objective sampling: total frame callbacks vs frames that actually uploaded
     // a new buffer (the rest are idle frame-request commits).
@@ -54,6 +65,7 @@ impl State {
         let layer_shell =
             LayerShell::bind(globals, &qh).map_err(|err| format!("wlr-layer-shell: {err}"))?;
         let shm = Shm::bind(globals, &qh).map_err(|err| format!("wl_shm: {err}"))?;
+        let seat_state = SeatState::new(globals, &qh);
 
         Ok(Self {
             registry_state,
@@ -63,10 +75,48 @@ impl State {
             shm,
             qh,
             surfaces: HashMap::new(),
+            seat_state,
+            pointer: None,
+            keyboard: None,
+            pointer_focus: None,
+            keyboard_focus: None,
             frames: 0,
             uploads: 0,
             fps_since: std::time::Instant::now(),
         })
+    }
+
+    /// The CEF view backing a given wl_surface, if any.
+    fn view_for(&self, surface: &wl_surface::WlSurface) -> Option<&CefView> {
+        self.surfaces
+            .values()
+            .find(|managed| managed.layer.wl_surface() == surface)
+            .map(|managed| &managed.view)
+    }
+
+    /// Fire a keyboard event to the focused view: a RawKeyDown/KeyUp with the
+    /// mapped virtual key, plus Char events for the utf8 text on key down.
+    fn fire_key(&self, event: SctkKeyEvent, is_down: bool) {
+        let Some(surface) = self.keyboard_focus.as_ref() else {
+            return;
+        };
+        let Some(view) = self.view_for(surface) else {
+            return;
+        };
+        let type_ = if is_down {
+            KeyEventType::RAWKEYDOWN
+        } else {
+            KeyEventType::KEYUP
+        };
+        view.send_key(type_, input::windows_key_code(event.keysym));
+
+        if is_down {
+            if let Some(utf8) = event.utf8.as_deref() {
+                if input::is_text(utf8) {
+                    view.send_text(utf8);
+                }
+            }
+        }
     }
 
     fn sample_fps(&mut self) {
@@ -344,7 +394,178 @@ impl ProvidesRegistryState for State {
     fn registry(&mut self) -> &mut RegistryState {
         &mut self.registry_state
     }
-    registry_handlers![OutputState];
+    registry_handlers![OutputState, SeatState];
+}
+
+impl SeatHandler for State {
+    fn seat_state(&mut self) -> &mut SeatState {
+        &mut self.seat_state
+    }
+
+    fn new_seat(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, _seat: wl_seat::WlSeat) {}
+
+    fn new_capability(
+        &mut self,
+        _conn: &Connection,
+        qh: &QueueHandle<Self>,
+        seat: wl_seat::WlSeat,
+        capability: Capability,
+    ) {
+        if capability == Capability::Pointer && self.pointer.is_none() {
+            match self.seat_state.get_pointer(qh, &seat) {
+                Ok(pointer) => self.pointer = Some(pointer),
+                Err(err) => log::warn!("get_pointer: {err}"),
+            }
+        }
+        if capability == Capability::Keyboard && self.keyboard.is_none() {
+            match self.seat_state.get_keyboard::<State, State>(qh, &seat, None) {
+                Ok(keyboard) => self.keyboard = Some(keyboard),
+                Err(err) => log::warn!("get_keyboard: {err}"),
+            }
+        }
+    }
+
+    fn remove_capability(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _seat: wl_seat::WlSeat,
+        capability: Capability,
+    ) {
+        match capability {
+            Capability::Pointer => self.pointer = None,
+            Capability::Keyboard => {
+                self.keyboard = None;
+                self.keyboard_focus = None;
+            }
+            _ => {}
+        }
+    }
+
+    fn remove_seat(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, _seat: wl_seat::WlSeat) {}
+}
+
+impl PointerHandler for State {
+    fn pointer_frame(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _pointer: &wl_pointer::WlPointer,
+        events: &[PointerEvent],
+    ) {
+        for event in events {
+            let (x, y) = (event.position.0 as i32, event.position.1 as i32);
+            match event.kind {
+                PointerEventKind::Enter { .. } => {
+                    self.pointer_focus = Some(event.surface.clone());
+                    if let Some(view) = self.view_for(&event.surface) {
+                        view.send_mouse_move(x, y, false);
+                    }
+                }
+                PointerEventKind::Leave { .. } => {
+                    if let Some(view) = self.view_for(&event.surface) {
+                        view.send_mouse_move(x, y, true);
+                    }
+                    if self.pointer_focus.as_ref() == Some(&event.surface) {
+                        self.pointer_focus = None;
+                    }
+                }
+                PointerEventKind::Motion { .. } => {
+                    if let Some(view) = self.view_for(&event.surface) {
+                        view.send_mouse_move(x, y, false);
+                    }
+                }
+                PointerEventKind::Press { button, .. } => {
+                    if let (Some(mapped), Some(view)) =
+                        (input::map_button(button), self.view_for(&event.surface))
+                    {
+                        view.send_mouse_button(x, y, mapped, false);
+                    }
+                }
+                PointerEventKind::Release { button, .. } => {
+                    if let (Some(mapped), Some(view)) =
+                        (input::map_button(button), self.view_for(&event.surface))
+                    {
+                        view.send_mouse_button(x, y, mapped, true);
+                    }
+                }
+                PointerEventKind::Axis {
+                    horizontal,
+                    vertical,
+                    ..
+                } => {
+                    // Wayland axis is positive down/right; CEF wheel delta is the
+                    // opposite sense, so invert.
+                    let delta_x = -horizontal.absolute as i32;
+                    let delta_y = -vertical.absolute as i32;
+                    if let Some(view) = self.view_for(&event.surface) {
+                        view.send_scroll(x, y, delta_x, delta_y);
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl KeyboardHandler for State {
+    fn enter(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _keyboard: &wl_keyboard::WlKeyboard,
+        surface: &wl_surface::WlSurface,
+        _serial: u32,
+        _raw: &[u32],
+        _keysyms: &[Keysym],
+    ) {
+        self.keyboard_focus = Some(surface.clone());
+    }
+
+    fn leave(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _keyboard: &wl_keyboard::WlKeyboard,
+        surface: &wl_surface::WlSurface,
+        _serial: u32,
+    ) {
+        if self.keyboard_focus.as_ref() == Some(surface) {
+            self.keyboard_focus = None;
+        }
+    }
+
+    fn press_key(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _keyboard: &wl_keyboard::WlKeyboard,
+        _serial: u32,
+        event: SctkKeyEvent,
+    ) {
+        self.fire_key(event, true);
+    }
+
+    fn release_key(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _keyboard: &wl_keyboard::WlKeyboard,
+        _serial: u32,
+        event: SctkKeyEvent,
+    ) {
+        self.fire_key(event, false);
+    }
+
+    fn update_modifiers(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _keyboard: &wl_keyboard::WlKeyboard,
+        _serial: u32,
+        _modifiers: smithay_client_toolkit::seat::keyboard::Modifiers,
+        _layout: u32,
+    ) {
+    }
 }
 
 delegate_compositor!(State);
@@ -352,3 +573,6 @@ delegate_output!(State);
 delegate_shm!(State);
 delegate_layer!(State);
 delegate_registry!(State);
+delegate_seat!(State);
+delegate_pointer!(State);
+delegate_keyboard!(State);
