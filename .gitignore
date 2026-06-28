@@ -19,6 +19,7 @@
 # WebKit/Ultralight runtime cache (cookies, created in the host's cwd)
 /default/
 /apps/render-host/default/
+/apps/shell/default/
 
 # Node
 node_modules/
@@ -26,3 +27,6 @@ node_modules/
 # Editor / OS
 .DS_Store
 *.swp
+
+# Obsolete Ultralight SDK archive (pre-WPE)
+/ultralight-free-sdk-*.7z

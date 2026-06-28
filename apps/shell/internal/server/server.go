@@ -11,10 +11,10 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"github.com/neoworks/neobar/internal/config"
-	"github.com/neoworks/neobar/internal/hyprland"
-	"github.com/neoworks/neobar/internal/shell"
-	"github.com/neoworks/neobar/internal/system"
+	"github.com/neoworks/neoshell/internal/config"
+	"github.com/neoworks/neoshell/internal/hyprland"
+	"github.com/neoworks/neoshell/internal/shell"
+	"github.com/neoworks/neoshell/internal/system"
 )
 
 var upgrader = websocket.Upgrader{

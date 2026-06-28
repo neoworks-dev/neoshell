@@ -1,4 +1,4 @@
-//! Control protocol between the `neobar-bg` daemon, its CLI client, and the Go
+//! Control protocol between the `neoshell-bg` daemon, its CLI client, and the Go
 //! core. Newline-delimited JSON over a unix socket.
 
 use std::path::PathBuf;
@@ -35,7 +35,7 @@ pub enum Response {
 pub fn socket_path() -> PathBuf {
     let runtime = std::env::var("XDG_RUNTIME_DIR")
         .unwrap_or_else(|_| format!("/run/user/{}", unsafe { getuid() }));
-    PathBuf::from(runtime).join("neobar-bg.sock")
+    PathBuf::from(runtime).join("neoshell-bg.sock")
 }
 
 extern "C" {

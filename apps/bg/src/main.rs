@@ -1,11 +1,11 @@
-//! neobar-bg — a small Wayland wallpaper daemon (swww-like) that also publishes
+//! neoshell-bg — a small Wayland wallpaper daemon (swww-like) that also publishes
 //! the averaged colors of the strip behind the bar, so the bar can tint itself
 //! to the wallpaper.
 //!
 //! Usage:
-//!   neobar-bg [daemon] [IMAGE]   run the daemon (optionally setting a wallpaper)
-//!   neobar-bg img <IMAGE>        set the wallpaper on a running daemon
-//!   neobar-bg colors             print the current bar gradient stops as JSON
+//!   neoshell-bg [daemon] [IMAGE]   run the daemon (optionally setting a wallpaper)
+//!   neoshell-bg img <IMAGE>        set the wallpaper on a running daemon
+//!   neoshell-bg colors             print the current bar gradient stops as JSON
 
 mod client;
 mod colors;
@@ -51,27 +51,27 @@ fn main() {
     };
 
     if let Err(message) = result {
-        eprintln!("neobar-bg: {message}");
+        eprintln!("neoshell-bg: {message}");
         std::process::exit(1);
     }
 }
 
 fn print_usage() {
     println!(
-        "neobar-bg - Wayland wallpaper daemon for neobar\n\n\
+        "neoshell-bg - Wayland wallpaper daemon for neoshell\n\n\
          Usage:\n  \
-         neobar-bg [daemon] [IMAGE]   run the daemon (optionally setting a wallpaper)\n  \
-         neobar-bg img <IMAGE>        set the wallpaper on a running daemon\n  \
-         neobar-bg colors             print the current bar gradient stops as JSON\n\n\
+         neoshell-bg [daemon] [IMAGE]   run the daemon (optionally setting a wallpaper)\n  \
+         neoshell-bg img <IMAGE>        set the wallpaper on a running daemon\n  \
+         neoshell-bg colors             print the current bar gradient stops as JSON\n\n\
          Environment:\n  \
-         NEOBAR_MONITOR       output whose strip drives the bar colors (default: first)\n  \
-         NEOBAR_BAR_HEIGHT    bar strip height in px to sample (default: {DEFAULT_BAR_HEIGHT})"
+         NEOSHELL_MONITOR       output whose strip drives the bar colors (default: first)\n  \
+         NEOSHELL_BAR_HEIGHT    bar strip height in px to sample (default: {DEFAULT_BAR_HEIGHT})"
     );
 }
 
 fn run_daemon(initial_wallpaper: Option<PathBuf>) -> Result<(), String> {
-    let monitor = std::env::var("NEOBAR_MONITOR").unwrap_or_default();
-    let bar_height = std::env::var("NEOBAR_BAR_HEIGHT")
+    let monitor = std::env::var("NEOSHELL_MONITOR").unwrap_or_default();
+    let bar_height = std::env::var("NEOSHELL_BAR_HEIGHT")
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(DEFAULT_BAR_HEIGHT);
@@ -112,7 +112,7 @@ fn run_daemon(initial_wallpaper: Option<PathBuf>) -> Result<(), String> {
         }
     }
 
-    log::info!("neobar-bg daemon running");
+    log::info!("neoshell-bg daemon running");
     loop {
         if let Err(err) = event_loop.dispatch(None, &mut state) {
             return Err(format!("dispatch: {err}"));

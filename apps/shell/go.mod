@@ -1,4 +1,4 @@
-module github.com/neoworks/neobar
+module github.com/neoworks/neoshell
 
 go 1.26.2
 

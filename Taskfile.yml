@@ -1,36 +1,39 @@
-# Taskfile for neobar-shell. Requires go-task (https://taskfile.dev).
+# Taskfile for neoshell. Requires go-task (https://taskfile.dev).
 #
 #   task dev     hot-reload dev: Vite (HMR) + Go core loading localhost:5173
 #   task run     production: build UI + serve it from the Go core
-#   task build   compile the render host and the Go core
+#   task build   compile the render host, daemons, settings app, and Go core
 #
 # The Go core spawns the render host, so the render host must be built first.
+# Binary paths are absolute (via ROOT_DIR) so they resolve regardless of the
+# task's working directory (Go tasks run from apps/shell).
 version: "3"
 
 vars:
-  UI_DIR: ../neobar-ui
-  # C++/WPE render host (built by `make` in render-host/).
-  RENDER_BIN: render-host/neobar-render
+  # Svelte UI (git submodule).
+  UI_DIR: apps/ui
+  # C++/WPE render host (built by `make` in apps/render-host/).
+  RENDER_BIN: '{{.ROOT_DIR}}/apps/render-host/neoshell-render'
   # Monitor connector to run on, e.g. `task dev MONITOR=DP-1`. Empty = default.
   # Run `task monitors` to list connectors.
   MONITOR: '{{.MONITOR | default ""}}'
   # Expands to the --monitor flag only when MONITOR is set, so the empty default
   # leaves the binary on its own default monitor.
   MONITOR_FLAG: '{{if .MONITOR}}--monitor {{.MONITOR}}{{end}}'
-  # neobar-bg wallpaper daemon. Release for fast image scaling.
-  BG_BIN: neobar-bg/target/release/neobar-bg
-  # neobar-settings standalone app (Tauri). Spawned by the core on the gear button.
-  SETTINGS_BIN: neobar-settings/target/release/neobar-settings
+  # neoshell-bg wallpaper daemon. Release for fast image scaling.
+  BG_BIN: '{{.ROOT_DIR}}/apps/bg/target/release/neoshell-bg'
+  # neoshell-settings standalone app (Tauri). Spawned by the core on the gear button.
+  SETTINGS_BIN: '{{.ROOT_DIR}}/apps/settings/target/release/neoshell-settings'
   # Wallpaper image to set, e.g. `task wallpaper WALLPAPER=~/pic.png`.
   WALLPAPER: '{{.WALLPAPER | default ""}}'
 
 env:
   # HTTP/WebSocket port for the Go core.
-  NEOBAR_PORT: '{{.NEOBAR_PORT | default "9876"}}'
-  # Point the Go core at the release render host built by render:build.
-  NEOBAR_RENDER_BIN: '{{.RENDER_BIN}}'
+  NEOSHELL_PORT: '{{.NEOSHELL_PORT | default "9876"}}'
+  # Point the Go core at the render host built by render:build.
+  NEOSHELL_RENDER_BIN: '{{.RENDER_BIN}}'
   # Let the core launch the settings app the gear button opens.
-  NEOBAR_SETTINGS_BIN: '{{.SETTINGS_BIN}}'
+  NEOSHELL_SETTINGS_BIN: '{{.SETTINGS_BIN}}'
 
 tasks:
   default:
@@ -46,17 +49,18 @@ tasks:
 
   render:build:
     desc: Build the C++/WPE render host (make)
-    dir: render-host
+    dir: apps/render-host
     cmds:
       - make
 
   core:build:
-    desc: Build the Go core binary (./neobar)
+    desc: Build the Go core binary (./neoshell)
+    dir: apps/shell
     cmds:
-      - go build -o neobar ./cmd/neobar
+      - go build -o "{{.ROOT_DIR}}/neoshell" ./cmd/neoshell
 
   ui:build:
-    desc: Build the UI to neobar-ui/dist
+    desc: Build the UI to apps/ui/dist
     dir: "{{.UI_DIR}}"
     cmds:
       - bun run build
@@ -74,8 +78,9 @@ tasks:
   core:dev:
     desc: Run the Go core (no --frontend, so the render host loads Vite on :5173)
     deps: [render:build]
+    dir: apps/shell
     cmds:
-      - go run ./cmd/neobar {{.MONITOR_FLAG}}
+      - go run ./cmd/neoshell {{.MONITOR_FLAG}}
 
   dev:
     desc: Hot-reload dev — Vite + Go core + wallpaper daemon. Live-reloads the UI.
@@ -84,18 +89,19 @@ tasks:
   run:
     desc: Production-like — build the UI and serve it directly from the Go core
     deps: [render:build, ui:build]
+    dir: apps/shell
     cmds:
-      - go run ./cmd/neobar --frontend {{.UI_DIR}}/dist {{.MONITOR_FLAG}}
+      - go run ./cmd/neoshell --frontend "{{.ROOT_DIR}}/apps/ui/dist" {{.MONITOR_FLAG}}
 
   bg:build:
-    desc: Build the neobar-bg wallpaper daemon (release)
-    dir: neobar-bg
+    desc: Build the neoshell-bg wallpaper daemon (release)
+    dir: apps/bg
     cmds:
       - cargo build --release
 
   settings:build:
-    desc: Build the neobar-settings app (Tauri; first build is slow — webkit2gtk)
-    dir: neobar-settings
+    desc: Build the neoshell-settings app (Tauri; first build is slow — webkit2gtk)
+    dir: apps/settings
     cmds:
       - cargo build --release
 
@@ -104,7 +110,7 @@ tasks:
     deps: [bg:build]
     env:
       # Sample the bar strip on the same monitor the bar runs on.
-      NEOBAR_MONITOR: '{{.MONITOR}}'
+      NEOSHELL_MONITOR: '{{.MONITOR}}'
     cmds:
       - "{{.BG_BIN}} daemon {{.WALLPAPER}}"
 
@@ -125,7 +131,7 @@ tasks:
   clean:
     desc: Remove build artifacts
     cmds:
-      - rm -f neobar
-      - cd render-host && make clean
-      - cd neobar-bg && cargo clean
-      - cd neobar-settings && cargo clean
+      - rm -f neoshell
+      - cd apps/render-host && make clean
+      - cd apps/bg && cargo clean
+      - cd apps/settings && cargo clean

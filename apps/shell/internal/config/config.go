@@ -1,6 +1,6 @@
-// Package config is neobar's settings store — the shell's equivalent of
+// Package config is neoshell's settings store — the shell's equivalent of
 // dconf/gsettings. It holds a nested key/value tree, persists it as JSON under
-// ~/.config/neobar/config.json, and notifies a listener on every change so the
+// ~/.config/neoshell/config.json, and notifies a listener on every change so the
 // bar and other shell surfaces react live.
 package config
 
@@ -62,6 +62,8 @@ func Load() (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	migrateLegacyConfig(path)
 
 	data := Defaults()
 	if raw, err := os.ReadFile(path); err == nil {
@@ -147,7 +149,29 @@ func defaultPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve config dir: %w", err)
 	}
-	return filepath.Join(dir, "neobar", "config.json"), nil
+	return filepath.Join(dir, "neoshell", "config.json"), nil
+}
+
+// migrateLegacyConfig copies a pre-rename ~/.config/neobar/config.json into the
+// neoshell location on first run, so the rename does not orphan user settings.
+// Best-effort: any failure leaves the new path absent and defaults apply.
+func migrateLegacyConfig(newPath string) {
+	if _, err := os.Stat(newPath); err == nil {
+		return // already migrated or freshly created
+	}
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return
+	}
+	legacy := filepath.Join(dir, "neobar", "config.json")
+	raw, err := os.ReadFile(legacy)
+	if err != nil {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
+		return
+	}
+	os.WriteFile(newPath, raw, 0o644)
 }
 
 // mergeInto overlays src onto dst recursively: maps merge key by key, every other

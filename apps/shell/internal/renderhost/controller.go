@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/neoworks/neobar/internal/ipc"
-	"github.com/neoworks/neobar/internal/server"
+	"github.com/neoworks/neoshell/internal/ipc"
+	"github.com/neoworks/neoshell/internal/server"
 )
 
 // barRole is the single overlay surface that hosts the shell frontend. It spans
@@ -20,7 +20,7 @@ import (
 const barRole = "bar"
 
 // settingsRole names the standalone settings application. It is not a shell
-// surface — window:open/close spawn and kill the separate neobar-settings
+// surface — window:open/close spawn and kill the separate neoshell-settings
 // process, which hosts the settings UI in its own window over the WS bus.
 const settingsRole = "settings"
 
@@ -165,7 +165,7 @@ func (c *Controller) isOpen(name string) bool {
 }
 
 // openWindow launches a shell application for a named role. Settings is a
-// separate process (neobar-settings) that hosts its UI in its own window and
+// separate process (neoshell-settings) that hosts its UI in its own window and
 // talks to the Go core over the WS bus — it is not a shell surface.
 func (c *Controller) openWindow(name string) {
 	if name != settingsRole {
@@ -183,7 +183,7 @@ func (c *Controller) openWindow(name string) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	// The app loads the same served frontend as the bar (Vite in dev, Go in prod);
 	// c.url already carries ?port= for the WS bus.
-	cmd.Env = append(os.Environ(), "NEOBAR_SETTINGS_URL="+c.url+"&view=settings")
+	cmd.Env = append(os.Environ(), "NEOSHELL_SETTINGS_URL="+c.url+"&view=settings")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
@@ -226,13 +226,13 @@ func (c *Controller) closeWindow(name string) {
 	}
 }
 
-// settingsBinPath resolves the settings app binary: NEOBAR_SETTINGS_BIN, else
-// "neobar-settings" on PATH.
+// settingsBinPath resolves the settings app binary: NEOSHELL_SETTINGS_BIN, else
+// "neoshell-settings" on PATH.
 func settingsBinPath() string {
-	if path := os.Getenv("NEOBAR_SETTINGS_BIN"); path != "" {
+	if path := os.Getenv("NEOSHELL_SETTINGS_BIN"); path != "" {
 		return path
 	}
-	return "neobar-settings"
+	return "neoshell-settings"
 }
 
 // drainEvents logs render-host events (ready/log) so they are not lost.

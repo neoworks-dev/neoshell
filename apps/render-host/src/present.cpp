@@ -331,7 +331,7 @@ Surface* surface_create(WaylandConn* c, const SurfaceSpec& spec) {
     Output* picked = nullptr;
     wl_output* output = find_output(c, spec.monitor, &picked);
     if (picked) s->output_name = picked->name;
-    std::string ns = "neobar." + spec.role;
+    std::string ns = "neoshell." + spec.role;
     s->layer = zwlr_layer_shell_v1_get_layer_surface(
         c->layer_shell, s->wl, output, (uint32_t)spec.layer, ns.c_str());
     zwlr_layer_surface_v1_add_listener(s->layer, &ls_listener, s);
