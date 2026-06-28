@@ -1,46 +1,41 @@
-# neobar-render
+# neobar render-host (C++ / WPE WebKit)
 
-Ultralight OSR render host. Owns wlr-layer-shell surfaces, paints HTML views into
-them via dmabuf, forwards Wayland input to Ultralight. Driven by the Go core over
-`$XDG_RUNTIME_DIR/neobar-render.sock`. See `../MIGRATION.md` for the design.
+Off-screen web renderer for the neobar shell. Each shell surface (bar, dock,
+desktop, widgets…) is a `wlr-layer-shell` surface backed by an off-screen
+`WebKitWebView`; frames arrive as zero-copy **dmabuf** and are presented at the
+compositor's vblank. Driven by the Go core over a unix-socket JSON protocol.
 
-## Status
+Replaces the previous Rust/CEF host (see `../MIGRATION.md`): WPE is lighter than
+Chromium (no ~200MB runtime, no per-frame BGRA memcpy) at the same 144fps.
 
-Skeleton (stage 1). Control protocol parses; rendering pipeline is stubbed. The
-modules carry stage-tagged TODOs (`wayland.rs`, `ultralight.rs`, `surface.rs`,
-`input.rs`).
+## Build
 
-## Ultralight SDK
-
-Ultralight is a proprietary binary SDK. The `.so` files are not on crates.io.
-
-**Build (needs network):** `ul-next-sys`'s build script auto-downloads the SDK
-revision it pins (currently `158d65c`) from Ultralight's CDN into the crate's
-`OUT_DIR` and links against it. There is no `ULTRALIGHT_SDK_ROOT` override — the
-revision is fixed by the crate so the bindings match the ABI.
-
-**Runtime:** the loader needs the `.so` files and Ultralight needs its
-`resources/` (icudt67l.dat, cacert.pem). Use the *same* SDK the build linked
-against (ABI match), not an arbitrary download. `run.fish` resolves the
-build's downloaded SDK and sets `LD_LIBRARY_PATH` + the resources path for you.
-
-A manually downloaded free SDK is extracted to `render-host/lib/` (git-ignored)
-as an offline fallback for `resources/`, but prefer the build-matched libraries.
-
-## Build & run
-
-```fish
-cargo build
-./run.fish --test-url https://example.com     # standalone, no Go core
+```sh
+make            # -> ./neobar-render
 ```
 
-`run.fish` builds, locates the SDK, exports the runtime env, and launches the
-host. The `--test-url` form creates a fullscreen overlay so rendering and fps can
-be eyeballed without the Go core. To drive it for real, the Go core connects to
-the control socket (see `../MIGRATION.md`).
+Dependencies (system): `wpewebkit`, `libwpe`, `wpebackend-fdo`, EGL, GBM, libdrm,
+wayland-client, xkbcommon, `nlohmann-json`, plus `wayland-protocols` +
+`wlr-protocols` (the layer-shell XML in `protocols/`).
 
-## License / attribution
+## How it works
 
-Ultralight is proprietary. The required attribution notice ships in
-`THIRD_PARTY.md` — keep it in any distributed build. The Rust glue here is part of
-neobar and carries neobar's own license.
+- **`wpe_backend.{h,cpp}`** — a custom WPEPlatform backend (a `WPEDisplay` /
+  `WPEScreen` / `WPEScreenSyncObserver` / `WPEView` / `WPEToplevel`). The sync
+  observer is ticked by the host (from each surface's frame callback), so WPE
+  renders off-screen at a rate we drive. Frames are delivered as `WPEBufferDMABuf`.
+- **`present.{h,cpp}`** — the Wayland connection + N layer-shell surfaces. Imports
+  each dmabuf via `zwp_linux_dmabuf` and attaches it; routes `wl_seat` pointer/
+  keyboard input to the focused surface. Resolves the **compositor's render GPU**
+  from dmabuf-feedback `main_device` — all surfaces render there regardless of
+  which output they're on (the compositor scans out to other GPUs' connectors;
+  cross-GPU buffers are rejected).
+- **`control.{h,cpp}`** — the unix-socket protocol (`$XDG_RUNTIME_DIR/neobar-render.sock`):
+  `surface.create/exclusive/region/show/hide/destroy` in, `ready`/`log` out.
+- **`main.cpp`** — wires it together on a GLib main loop.
+
+## Env
+
+- `NEOBAR_RENDER_NODE` / `NEOBAR_PRIMARY_NODE` — override the auto-detected GPU.
+- `NEOBAR_60FPS` — cap page rendering near 60fps (default: full refresh).
+- `NEOBAR_INPUT_DEBUG`, `NEOBAR_LOG_TITLE` — debug logging.

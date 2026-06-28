@@ -122,3 +122,77 @@ smoothness against the host's present-rate log.
 
 - GPU/dmabuf zero-copy via `OnAcceleratedPaint` (revisit if/when Linux support matures).
 - Multi-surface roles (dock, OSD, launcher, notifications daemon, settings toplevel).
+
+## WPE WebKit evaluation (spike, 2026-06-28)
+
+Evaluated WPE WebKit 2.52.4 as an alternative to CEF — motive: zero-copy dmabuf + lower memory
+than Chromium, without losing 144fps. Spike in `experiments/wpe-spike/` (throwaway). Outcome:
+**viable and architecturally better than CEF on the copy path, but requires writing a custom
+WPEPlatform backend in Rust.** Not migrating now; recorded so it is not re-litigated.
+
+Measured on this box (Hyprland, eDP-2 144Hz integrated + DP-1 144Hz external):
+
+| Config | rAF fps | Note |
+| --- | --- | --- |
+| WebKitGTK 6.0 (Wayland client) | 60 | `PreferPageRenderingUpdatesNear60FPS` flag inert — the DRM vblank monitor can't map a CRTC as a Wayland client, so it uses the hardcoded 60 timer fallback |
+| WPE headless (true off-screen) | 60 | 0 screens → timer fallback |
+| WPE Wayland, external DP-1 | 60 | screen exposes no `sync_observer` |
+| WPE Wayland, integrated eDP-2, flag on | 72 | 144 snapped to nearest 60-harmonic |
+| WPE Wayland, integrated eDP-2, flag **off** | **144** | real vblank via the screen's `WPEScreenSyncObserver` |
+
+Key facts established (all via GObject-introspection probes, no C written):
+
+- The 60Hz "cap" is two knobs, both controllable: (1) the `PreferPageRenderingUpdatesNear60FPS`
+  feature (default on, snaps to a 60-harmonic; disable via `webkit_settings_set_feature_enabled`),
+  and (2) a vblank source that actually reports the real rate. WebKit content fps == the rate of
+  the `WPEScreenSyncObserver` driving `RenderingUpdateScheduler`.
+- `WPEScreenSyncObserver` is a *derivable* type (`start`/`stop`/`sync` vfuncs + `add_callback`).
+  A custom subclass **can fire WebKit's registered vblank callback at any rate we choose** —
+  proven (drove ~144 callbacks/s from our own `GLib` timer). `WPEScreen.get_sync_observer` and
+  `WPEDisplay.get_n_screens`/`get_screen` are overridable too.
+- `WPEBufferDMABuf` exposes `fd`/`format`/`modifier`/`n_planes`/`stride`/`offset` +
+  `rendering_fence`/`release_fence`; `WPEView.render_buffer`/`do_render_buffer`/`buffer_released`
+  is the per-frame backend contract. This is the zero-copy path CEF lacks on Linux (CEF does a
+  full BGRA `memcpy` into `wl_shm`).
+
+The intended design (if pursued): a thin custom WPEPlatform backend whose single screen's sync
+observer is ticked by the render-host's own wlr-layer-shell `wl_surface.frame` callbacks. That
+renders WPE off-screen, at the true refresh of whatever monitor the layer surface is on (fixes
+the off-screen-vblank tension AND the external-monitor `sync_observer=None` gap in one move), and
+reconstructs CEF's external-begin-frame through WPE's native interface. Frames arrive as
+`WPEBufferDMABuf` → import via `zwp_linux_dmabuf` → attach to the layer surface, zero-copy.
+
+Costs / open work: a custom WPEPlatform backend + Rust↔WPE FFI (no mature Rust bindings for the
+new WPEPlatform-2.0 API — hand-written/bindgen against the C GObject API); `surface.rs` present
+loop becomes a buffer-subscription instead of external-begin-frame; dmabuf format/modifier
+negotiation with the compositor; input plumbing through WPEPlatform events. The Python spike
+could not assemble the full backend end-to-end only because `WPEDisplayHeadless` is a `final`
+GType (a binding limitation, not architectural) — Rust implements the backend directly.
+
+### C++ prototype (`experiments/wpe-cpp/`)
+
+Built the full custom backend in **C++** (the intended migration language — the team reads
+C++/Go, not Rust). It subclasses `WPEDisplay`/`WPEScreen`/`WPEScreenSyncObserver`/`WPEView`/
+`WPEToplevel` as plain GObject, ticks the sync observer from our own clock, and renders
+off-screen to dmabuf shown on a wlr-layer-shell surface. Confirms end-to-end:
+
+- WPE renders at **141 render_buffer/s** when our timer drives the observer at 144Hz (71 with
+  the flag on) — the engine is not 60-capped; the rate follows whatever drives the observer.
+- Frames arrive as `WPEBufferDMABuf` and import zero-copy via `zwp_linux_dmabuf` onto a layer
+  surface; the surface's frame callback drives the observer (real-vblank present loop).
+
+Two lessons for the real port, both already handled by the existing Rust host's patterns:
+- **Multi-GPU: render on the compositor's GPU.** This box composites the panel on the AMD
+  iGPU; a buffer rendered on the NVIDIA dGPU is a cross-GPU tiled import the compositor
+  rejects. Render on the AMD node → LINEAR buffer imports fine. Select the render node from
+  the dmabuf-feedback `main_device`.
+- **Present holds a solid 144fps** on the layer surface (panel idle). A one-off ~50–70fps
+  reading was GPU contention from another running app, not a loop limit; the naive
+  synchronous single-buffer loop reaches native refresh. Pipelining (render-ahead + buffer
+  pool) is still worth it for headroom under load but is not required for 144.
+- **GPU cost is workload-bound, not an engine win.** Idle/static page ≈ 0% GPU (the loop
+  renders nothing when nothing animates). Continuous 144fps animation ≈ 70% of the iGPU with
+  either LINEAR or AMD-tiled buffers — roughly engine-independent (CEF pays the same). WPE's
+  efficiency edge over CEF is CPU (no per-frame BGRA memcpy) and RSS, **not** GPU. Render on
+  the GPU that drives the panel (AMD iGPU here); the NVIDIA dGPU's tiled buffers are rejected
+  by the compositor for this output.
