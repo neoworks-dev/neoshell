@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 
@@ -146,138 +145,14 @@ func (s *Server) Listen(addr string) {
 		http.ServeFile(w, r, path)
 	})
 	// Serve the built frontend directly when configured. Registered last and at
-	// the root so the more specific /ws and /icon/ routes take precedence.
+	// the root so the more specific /ws and /icon/ routes take precedence. CEF is
+	// full Chromium, so no compatibility shim or CSS rewriting is needed.
 	if s.frontend != "" {
-		s.serveFrontend()
+		http.Handle("/", http.FileServer(http.Dir(s.frontend)))
 		log.Printf("serving frontend from %s", s.frontend)
 	}
 	log.Printf("server listening on %s", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
-}
-
-// ulCompatShim adapts pages to Ultralight's WebCore. It (1) stubs web-platform
-// globals Ultralight omits but frameworks reference unconditionally (e.g. Svelte
-// 5 does `node instanceof HTMLMediaElement`), and (2) forces hover/pointer
-// interaction media queries to match, since Ultralight reports as a touch device
-// and frameworks gate hover styles behind `@media (hover: hover)`. Served at
-// /ul-compat.js and injected into index.html. Harmless under other engines: the
-// stubs only fill undefined globals and the media override only widens hover.
-// Mirror of render-host/ul-compat.js.
-const ulCompatShim = `(function () {
-  var missing = ["HTMLMediaElement", "HTMLVideoElement", "HTMLAudioElement", "MediaStream"];
-  for (var i = 0; i < missing.length; i++) {
-    if (typeof window[missing[i]] === "undefined") {
-      window[missing[i]] = function () {};
-    }
-  }
-
-  var interactionQuery = /(any-)?hover\s*:\s*hover|(any-)?pointer\s*:\s*fine/;
-  if (window.matchMedia) {
-    var originalMatchMedia = window.matchMedia.bind(window);
-    window.matchMedia = function (query) {
-      if (interactionQuery.test(query)) {
-        return {
-          matches: true, media: query, onchange: null,
-          addEventListener: function () {}, removeEventListener: function () {},
-          addListener: function () {}, removeListener: function () {},
-          dispatchEvent: function () { return false; },
-        };
-      }
-      return originalMatchMedia(query);
-    };
-  }
-
-  function ungateHoverMedia() {
-    var sheets = document.styleSheets;
-    for (var s = 0; s < sheets.length; s++) {
-      var rules;
-      try { rules = sheets[s].cssRules; } catch (e) { continue; }
-      if (!rules) continue;
-      for (var r = 0; r < rules.length; r++) {
-        var rule = rules[r];
-        if (rule.media && interactionQuery.test(rule.media.mediaText)) {
-          try { rule.media.mediaText = "all"; } catch (e) {}
-        }
-      }
-    }
-  }
-  function schedule() { try { ungateHoverMedia(); } catch (e) {} }
-  document.addEventListener("DOMContentLoaded", schedule);
-  window.addEventListener("load", schedule);
-  setTimeout(schedule, 300);
-  setTimeout(schedule, 1500);
-})();
-`
-
-// serveFrontend serves the built frontend, injecting the Ultralight compat shim
-// into index.html and serving the shim script itself.
-func (s *Server) serveFrontend() {
-	fileServer := http.FileServer(http.Dir(s.frontend))
-
-	http.HandleFunc("/ul-compat.js", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/javascript")
-		fmt.Fprint(w, ulCompatShim)
-	})
-
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
-			s.serveIndexWithShim(w, r)
-			return
-		}
-		if strings.HasSuffix(r.URL.Path, ".css") {
-			s.serveCSSWithHoverFix(w, r)
-			return
-		}
-		fileServer.ServeHTTP(w, r)
-	})
-}
-
-// hoverGateRe matches the interaction conditions Ultralight evaluates false
-// (it reports as a touch device), which gate hover styling (Tailwind's `hover:`
-// compiles to `@media (hover:hover){...}`). `(pointer:coarse)` is intentionally
-// left alone.
-var hoverGateRe = regexp.MustCompile(`\((any-)?(hover\s*:\s*hover|pointer\s*:\s*fine)\)`)
-
-// serveCSSWithHoverFix serves a stylesheet with hover/pointer media gates
-// neutralized to an always-true condition, so hover rules are active in
-// Ultralight from parse time (a runtime CSSOM rewrite proved unreliable: rules
-// excluded at parse time were not re-applied to later-created elements).
-func (s *Server) serveCSSWithHoverFix(w http.ResponseWriter, r *http.Request) {
-	cleaned := filepath.Clean("/" + r.URL.Path)
-	data, err := os.ReadFile(filepath.Join(s.frontend, cleaned))
-	if err != nil {
-		http.Error(w, "stylesheet not found", http.StatusNotFound)
-		return
-	}
-	fixed := hoverGateRe.ReplaceAll(data, []byte("(min-width:0)"))
-	w.Header().Set("Content-Type", "text/css; charset=utf-8")
-	w.Write(fixed)
-}
-
-func (s *Server) serveIndexWithShim(w http.ResponseWriter, r *http.Request) {
-	data, err := os.ReadFile(filepath.Join(s.frontend, "index.html"))
-	if err != nil {
-		http.Error(w, "index.html not found", http.StatusNotFound)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, injectShim(string(data)))
-}
-
-// injectShim inserts the compat-shim script tag before the first <script so it
-// runs before the (deferred) app module.
-func injectShim(html string) string {
-	if strings.Contains(html, "ul-compat.js") {
-		return html
-	}
-	tag := `<script src="/ul-compat.js"></script>`
-	if i := strings.Index(html, "<script"); i >= 0 {
-		return html[:i] + tag + "\n\t\t" + html[i:]
-	}
-	if i := strings.Index(html, "</head>"); i >= 0 {
-		return html[:i] + tag + html[i:]
-	}
-	return tag + html
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
@@ -371,4 +246,3 @@ func (s *Server) route(c *Client, msg InMessage) {
 		log.Printf("unknown message type: %s", msg.Type)
 	}
 }
-

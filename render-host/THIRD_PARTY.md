@@ -1,16 +1,12 @@
 # Third-party notices
 
-## Ultralight
+## Chromium Embedded Framework (CEF)
 
-This product uses Ultralight (https://ultralig.ht), © Ultralight, Inc.
-Ultralight is proprietary software used under its license.
+This product uses the Chromium Embedded Framework (https://bitbucket.org/chromiumembedded/cef),
+© Marshall A. Greenblatt, distributed under the New BSD License. CEF bundles Chromium and its
+many third-party components (BSD/MIT/LGPL and others); the full set of notices ships in the CEF
+binary distribution (`LICENSE.txt` and `cef_license.txt` under the downloaded CEF directory) and
+must accompany any distributed build.
 
-- Free license valid only while both annual turnover and raised funding stay
-  under US$100,000; otherwise a Pro or Enterprise license is required.
-- Dynamic linking only — Ultralight must not be statically linked.
-- The exact attribution string required by the license version in use must be
-  taken verbatim from that version's `LICENSE.txt` and reproduced here before
-  any distribution. Replace this paragraph with that string.
-
-Ultralight bundles WebKit/WebCore and JavaScriptCore components; their notices
-are included in the SDK and must accompany distributed builds.
+The CEF binaries are downloaded at build time by the `cef-dll-sys` crate and are not vendored in
+this repository.

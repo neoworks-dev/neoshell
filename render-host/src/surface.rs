@@ -40,6 +40,9 @@ pub struct ManagedSurface {
     configured: bool,
     mapped: bool,
     last_generation: u64,
+    /// Dirty region from the previous present. We alternate two shm slots, so a
+    /// slot reused now is two frames stale; damaging current ∪ previous covers it.
+    prev_dirty: Option<(i32, i32, i32, i32)>,
 }
 
 impl ManagedSurface {
@@ -54,6 +57,7 @@ impl ManagedSurface {
             configured: false,
             mapped: false,
             last_generation: 0,
+            prev_dirty: None,
         }
     }
 
@@ -81,11 +85,8 @@ impl ManagedSurface {
         }
 
         // Is there a new CEF paint since we last presented?
-        let (has_new, generation) = {
-            let frame = self.view.frame().borrow();
-            let has_new = frame.generation != self.last_generation && !frame.data.is_empty();
-            (has_new, frame.generation)
-        };
+        let generation = self.view.generation();
+        let has_new = generation != self.last_generation && !self.view.frame_empty();
         if !has_new && self.mapped {
             let wl_surface = self.layer.wl_surface();
             wl_surface.frame(qh, wl_surface.clone());
@@ -106,6 +107,13 @@ impl ManagedSurface {
                 }
             }
         }
+
+        // The dirty region to repaint: this frame's changes plus last frame's,
+        // since the slot we're about to reuse is two frames stale. Fall back to
+        // the full surface when neither reports a region.
+        let current_dirty = self.view.take_dirty();
+        let damage_region = crate::cef_engine::union_opt(current_dirty, self.prev_dirty)
+            .unwrap_or((0, 0, width as i32, height as i32));
 
         // Disjoint field borrows: read the view's frame while the pool buffer
         // (which borrows the pool) is live.
@@ -128,6 +136,8 @@ impl ManagedSurface {
             }
         };
 
+        // Full-copy keeps every slot's buffer content complete and coherent; the
+        // damage rect below limits how much the compositor re-uploads.
         copy_frame_into(view, canvas, width, height, stride);
 
         let wl_surface = layer.wl_surface();
@@ -135,16 +145,18 @@ impl ManagedSurface {
             log::error!("attach: {err}");
             return false;
         }
-        // Full-surface damage: we alternate shm slots and copy the whole frame
-        // into each, so the compositor must re-upload all of it. Partial damage
-        // leaves 2-frames-stale content in undamaged regions of the other slot
-        // (the ghosting/sliver artifact).
-        wl_surface.damage_buffer(0, 0, width as i32, height as i32);
+        let (left, top, right, bottom) = damage_region;
+        let x = left.clamp(0, width as i32);
+        let y = top.clamp(0, height as i32);
+        let w = (right - left).clamp(0, width as i32 - x);
+        let h = (bottom - top).clamp(0, height as i32 - y);
+        wl_surface.damage_buffer(x, y, w, h);
         wl_surface.frame(qh, wl_surface.clone());
         layer.commit();
 
         self.mapped = true;
         self.last_generation = generation;
+        self.prev_dirty = current_dirty;
         true
     }
 }

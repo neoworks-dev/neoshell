@@ -22,23 +22,22 @@ func DefaultBinPath() string {
 	return "render-host/target/debug/neobar-render"
 }
 
-// SpawnHost launches the render-host binary with the Ultralight SDK on its
-// library path. The dynamic linker needs LD_LIBRARY_PATH at process start, so it
-// must be set here rather than after launch.
+// SpawnHost launches the render-host binary with the CEF libraries on its
+// library path. The dynamic linker needs LD_LIBRARY_PATH at process start (and
+// CEF's subprocesses inherit it), so it must be set here rather than after launch.
 func SpawnHost(binPath string) (*Host, error) {
 	if _, err := os.Stat(binPath); err != nil {
 		return nil, fmt.Errorf("render host binary %q: %w", binPath, err)
 	}
 
-	sdk, err := resolveSDK(binPath)
+	cefDir, err := resolveCEFDir(binPath)
 	if err != nil {
 		return nil, err
 	}
 
 	cmd := exec.Command(binPath)
 	cmd.Env = append(os.Environ(),
-		"LD_LIBRARY_PATH="+filepath.Join(sdk, "bin")+":"+os.Getenv("LD_LIBRARY_PATH"),
-		"ULTRALIGHT_SDK_ROOT="+sdk,
+		"LD_LIBRARY_PATH="+cefDir+":"+os.Getenv("LD_LIBRARY_PATH"),
 	)
 	if os.Getenv("RUST_LOG") == "" {
 		cmd.Env = append(cmd.Env, "RUST_LOG=info")
@@ -60,21 +59,23 @@ func (h *Host) Stop() {
 	}
 }
 
-// resolveSDK locates the Ultralight SDK the binary was built against. Uses
-// NEOBAR_RENDER_SDK if set, otherwise globs the ul-next-sys build output next to
-// the binary (the same SDK the linker used, so the ABI matches).
-func resolveSDK(binPath string) (string, error) {
-	if sdk := os.Getenv("NEOBAR_RENDER_SDK"); sdk != "" {
-		return sdk, nil
+// resolveCEFDir locates the CEF runtime directory (libcef.so + resources). Uses
+// NEOBAR_CEF_PATH if set, otherwise globs the cef-dll-sys build output next to the
+// binary (the same libraries the linker used, so the ABI matches).
+func resolveCEFDir(binPath string) (string, error) {
+	if dir := os.Getenv("NEOBAR_CEF_PATH"); dir != "" {
+		return dir, nil
 	}
 
 	profileDir := filepath.Dir(binPath) // e.g. render-host/target/debug
-	matches, err := filepath.Glob(filepath.Join(profileDir, "build", "ul-next-sys-*", "out", "ul-sdk"))
+	matches, err := filepath.Glob(
+		filepath.Join(profileDir, "build", "cef-dll-sys-*", "out", "cef_linux_x86_64"),
+	)
 	if err != nil {
 		return "", err
 	}
 	if len(matches) == 0 {
-		return "", fmt.Errorf("no Ultralight SDK found under %s/build (set NEOBAR_RENDER_SDK)", profileDir)
+		return "", fmt.Errorf("no CEF runtime found under %s/build (set NEOBAR_CEF_PATH)", profileDir)
 	}
 
 	// Newest wins when stale build dirs linger.

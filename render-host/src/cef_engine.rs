@@ -15,9 +15,12 @@ use cef::args::Args;
 use cef::rc::Rc as _;
 use cef::{
     browser_host_create_browser_sync, do_message_loop_work, initialize, shutdown, wrap_client,
-    wrap_render_handler, Browser, BrowserSettings, CefString, Client, ImplBrowser, ImplBrowserHost,
-    ImplClient, ImplRenderHandler, KeyEvent, KeyEventType, MouseButtonType, MouseEvent,
-    PaintElementType, Rect, RenderHandler, Settings, WindowInfo, WrapClient, WrapRenderHandler,
+    wrap_display_handler, wrap_load_handler, wrap_render_handler, Browser, BrowserSettings,
+    CefString, Client, DisplayHandler, Errorcode, Frame, ImplBrowser, ImplBrowserHost, ImplClient,
+    ImplDisplayHandler, ImplLoadHandler, ImplRenderHandler, KeyEvent, KeyEventType, LoadHandler,
+    LogSeverity, MouseButtonType,
+    MouseEvent, PaintElementType, Rect, RenderHandler, Settings, WindowInfo, WrapClient,
+    WrapDisplayHandler, WrapLoadHandler, WrapRenderHandler,
 };
 
 /// Target OSR frame rate. CEF's windowless default is 30; raise it so the engine
@@ -87,9 +90,27 @@ wrap_render_handler! {
             frame.data.copy_from_slice(src);
             frame.width = width;
             frame.height = height;
-            frame.dirty = union_dirty(dirty_rects, width, height);
+            // Accumulate dirty across paints until a present consumes it.
+            let new_dirty = union_dirty(dirty_rects, width, height);
+            frame.dirty = union_opt(frame.dirty, new_dirty);
             frame.generation += 1;
         }
+    }
+}
+
+/// Union two optional dirty rects (left, top, right, bottom).
+pub fn union_opt(
+    a: Option<(i32, i32, i32, i32)>,
+    b: Option<(i32, i32, i32, i32)>,
+) -> Option<(i32, i32, i32, i32)> {
+    match (a, b) {
+        (None, x) | (x, None) => x,
+        (Some(a), Some(b)) => Some((
+            a.0.min(b.0),
+            a.1.min(b.1),
+            a.2.max(b.2),
+            a.3.max(b.3),
+        )),
     }
 }
 
@@ -113,14 +134,72 @@ fn union_dirty(dirty_rects: Option<&[Rect]>, width: i32, height: i32) -> Option<
     Some((left, top, right, bottom))
 }
 
+wrap_display_handler! {
+    pub struct NeobarDisplayHandler;
+
+    impl DisplayHandler {
+        fn on_console_message(
+            &self,
+            _browser: Option<&mut Browser>,
+            _level: LogSeverity,
+            message: Option<&CefString>,
+            source: Option<&CefString>,
+            line: c_int,
+        ) -> c_int {
+            let message = message.map(|s| s.to_string()).unwrap_or_default();
+            let source = source.map(|s| s.to_string()).unwrap_or_default();
+            log::info!("console: {message} ({source}:{line})");
+            0
+        }
+    }
+}
+
+wrap_load_handler! {
+    pub struct NeobarLoadHandler;
+
+    impl LoadHandler {
+        fn on_load_end(
+            &self,
+            _browser: Option<&mut Browser>,
+            _frame: Option<&mut Frame>,
+            http_status_code: c_int,
+        ) {
+            log::info!("load end: http {http_status_code}");
+        }
+
+        fn on_load_error(
+            &self,
+            _browser: Option<&mut Browser>,
+            _frame: Option<&mut Frame>,
+            error_code: Errorcode,
+            error_text: Option<&CefString>,
+            failed_url: Option<&CefString>,
+        ) {
+            let error_text = error_text.map(|s| s.to_string()).unwrap_or_default();
+            let failed_url = failed_url.map(|s| s.to_string()).unwrap_or_default();
+            log::error!("load error {error_code:?}: {error_text} ({failed_url})");
+        }
+    }
+}
+
 wrap_client! {
     pub struct NeobarClient {
         render_handler: RenderHandler,
+        display_handler: DisplayHandler,
+        load_handler: LoadHandler,
     }
 
     impl Client {
         fn render_handler(&self) -> Option<RenderHandler> {
             Some(self.render_handler.clone())
+        }
+
+        fn display_handler(&self) -> Option<DisplayHandler> {
+            Some(self.display_handler.clone())
+        }
+
+        fn load_handler(&self) -> Option<LoadHandler> {
+            Some(self.load_handler.clone())
         }
     }
 }
@@ -135,7 +214,9 @@ impl CefView {
     pub fn new(url: &str, width: i32, height: i32) -> Option<CefView> {
         let frame = new_shared_frame(width, height);
         let render_handler = NeobarRenderHandler::new(frame.clone());
-        let mut client = NeobarClient::new(render_handler);
+        let display_handler = NeobarDisplayHandler::new();
+        let load_handler = NeobarLoadHandler::new();
+        let mut client = NeobarClient::new(render_handler, display_handler, load_handler);
 
         let window_info = WindowInfo::default().set_as_windowless(0);
         let url = CefString::from(url);
@@ -169,6 +250,19 @@ impl CefView {
 
     pub fn frame(&self) -> &SharedFrame {
         &self.frame
+    }
+
+    pub fn generation(&self) -> u64 {
+        self.frame.borrow().generation
+    }
+
+    pub fn frame_empty(&self) -> bool {
+        self.frame.borrow().data.is_empty()
+    }
+
+    /// Take and clear the accumulated dirty region for this present.
+    pub fn take_dirty(&self) -> Option<(i32, i32, i32, i32)> {
+        self.frame.borrow_mut().dirty.take()
     }
 
     pub fn send_mouse_move(&self, x: i32, y: i32, leave: bool) {
