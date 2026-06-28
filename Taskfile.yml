@@ -18,6 +18,10 @@ vars:
   # Expands to the --monitor flag only when MONITOR is set, so the empty default
   # leaves the binary on its own default monitor.
   MONITOR_FLAG: '{{if .MONITOR}}--monitor {{.MONITOR}}{{end}}'
+  # neobar-bg wallpaper daemon. Release for fast image scaling.
+  BG_BIN: neobar-bg/target/release/neobar-bg
+  # Wallpaper image to set, e.g. `task wallpaper WALLPAPER=~/pic.png`.
+  WALLPAPER: '{{.WALLPAPER | default ""}}'
 
 env:
   # HTTP/WebSocket port for the Go core.
@@ -55,8 +59,8 @@ tasks:
       - bun run build
 
   build:
-    desc: Build the render host and the Go core
-    deps: [render:build, core:build]
+    desc: Build the render host, the wallpaper daemon, and the Go core
+    deps: [render:build, bg:build, core:build]
 
   ui:dev:
     desc: Run the Vite dev server with HMR (port 5173)
@@ -80,6 +84,30 @@ tasks:
     cmds:
       - go run ./cmd/neobar --frontend {{.UI_DIR}}/dist {{.MONITOR_FLAG}}
 
+  bg:build:
+    desc: Build the neobar-bg wallpaper daemon (release)
+    dir: neobar-bg
+    cmds:
+      - cargo build --release
+
+  bg:
+    desc: Run the wallpaper daemon (optionally WALLPAPER=path to set on start)
+    deps: [bg:build]
+    env:
+      # Sample the bar strip on the same monitor the bar runs on.
+      NEOBAR_MONITOR: '{{.MONITOR}}'
+    cmds:
+      - "{{.BG_BIN}} daemon {{.WALLPAPER}}"
+
+  wallpaper:
+    desc: Set the wallpaper on a running daemon — task wallpaper WALLPAPER=~/pic.png
+    deps: [bg:build]
+    preconditions:
+      - sh: test -n "{{.WALLPAPER}}"
+        msg: "set WALLPAPER, e.g. task wallpaper WALLPAPER=~/pic.png"
+    cmds:
+      - "{{.BG_BIN}} img {{.WALLPAPER}}"
+
   monitors:
     desc: List monitor connectors usable with MONITOR=
     cmds:
@@ -90,3 +118,4 @@ tasks:
     cmds:
       - rm -f neobar
       - cd render-host && cargo clean
+      - cd neobar-bg && cargo clean
