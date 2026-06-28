@@ -1,35 +1,69 @@
-//! CEF off-screen engine (C1 bring-up).
+//! CEF off-screen engine: initialize CEF and expose per-surface browser views
+//! whose paints land in a shared frame buffer the wl_shm present reads.
 //!
-//! Initializes CEF, creates a single windowless browser, and logs `on_paint` to
-//! prove the pipeline. The wl_shm/layer-shell integration comes in C2; for now
-//! the view size is fixed and paints are only logged.
+//! Flow is push-based: CEF calls `on_paint` (on the main thread, during
+//! `do_message_loop_work`) with a BGRA buffer + dirty rects; we copy it into the
+//! view's `FrameState` and bump a generation counter. The Wayland frame callback
+//! later copies the latest frame into a wl_shm buffer. CEF's own windowless timer
+//! is set to 144fps so OSR is not capped (the default is 30).
 
+use std::cell::RefCell;
 use std::os::raw::c_int;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::time::{Duration, Instant};
+use std::rc::Rc;
 
 use cef::args::Args;
 use cef::rc::Rc as _;
 use cef::{
     browser_host_create_browser_sync, do_message_loop_work, initialize, shutdown, wrap_client,
-    wrap_render_handler, Browser, BrowserSettings, CefString, Client, ImplClient,
-    ImplRenderHandler, PaintElementType, Rect, RenderHandler, Settings, WindowInfo, WrapClient,
-    WrapRenderHandler,
+    wrap_render_handler, Browser, BrowserSettings, CefString, Client, ImplBrowser, ImplBrowserHost,
+    ImplClient, ImplRenderHandler, PaintElementType, Rect, RenderHandler, Settings, WindowInfo,
+    WrapClient, WrapRenderHandler,
 };
 
-const VIEW_WIDTH: i32 = 1280;
-const VIEW_HEIGHT: i32 = 720;
+/// Target OSR frame rate. CEF's windowless default is 30; raise it so the engine
+/// is not the cap (the whole reason for moving off free Ultralight).
+const WINDOWLESS_FRAME_RATE: i32 = 144;
+
+/// Shared paint state between a view's RenderHandler and its surface.
+pub struct FrameState {
+    /// BGRA pixels, `width * height * 4` bytes.
+    pub data: Vec<u8>,
+    pub width: i32,
+    pub height: i32,
+    /// Union of dirty rects since the last present (left, top, right, bottom).
+    pub dirty: Option<(i32, i32, i32, i32)>,
+    /// Bumped on every paint so the surface can detect new frames.
+    pub generation: u64,
+    /// Size CEF should render at; returned from get_view_rect.
+    pub requested: (i32, i32),
+}
+
+pub type SharedFrame = Rc<RefCell<FrameState>>;
+
+fn new_shared_frame(width: i32, height: i32) -> SharedFrame {
+    Rc::new(RefCell::new(FrameState {
+        data: Vec::new(),
+        width: 0,
+        height: 0,
+        dirty: None,
+        generation: 0,
+        requested: (width.max(1), height.max(1)),
+    }))
+}
 
 wrap_render_handler! {
-    pub struct NeobarRenderHandler;
+    pub struct NeobarRenderHandler {
+        frame: SharedFrame,
+    }
 
     impl RenderHandler {
         fn view_rect(&self, _browser: Option<&mut Browser>, rect: Option<&mut Rect>) {
             if let Some(rect) = rect {
+                let (width, height) = self.frame.borrow().requested;
                 rect.x = 0;
                 rect.y = 0;
-                rect.width = VIEW_WIDTH;
-                rect.height = VIEW_HEIGHT;
+                rect.width = width;
+                rect.height = height;
             }
         }
 
@@ -42,9 +76,41 @@ wrap_render_handler! {
             width: c_int,
             height: c_int,
         ) {
-            log_paint(dirty_rects, buffer, width, height);
+            if buffer.is_null() || width <= 0 || height <= 0 {
+                return;
+            }
+            let len = width as usize * height as usize * 4;
+            let src = unsafe { std::slice::from_raw_parts(buffer, len) };
+
+            let mut frame = self.frame.borrow_mut();
+            frame.data.resize(len, 0);
+            frame.data.copy_from_slice(src);
+            frame.width = width;
+            frame.height = height;
+            frame.dirty = union_dirty(dirty_rects, width, height);
+            frame.generation += 1;
         }
     }
+}
+
+/// Union the dirty rects into one bounding box (left, top, right, bottom). Falls
+/// back to the full frame if no rects are reported.
+fn union_dirty(dirty_rects: Option<&[Rect]>, width: i32, height: i32) -> Option<(i32, i32, i32, i32)> {
+    let rects = dirty_rects.filter(|r| !r.is_empty());
+    let Some(rects) = rects else {
+        return Some((0, 0, width, height));
+    };
+    let mut left = i32::MAX;
+    let mut top = i32::MAX;
+    let mut right = 0;
+    let mut bottom = 0;
+    for rect in rects {
+        left = left.min(rect.x);
+        top = top.min(rect.y);
+        right = right.max(rect.x + rect.width);
+        bottom = bottom.max(rect.y + rect.height);
+    }
+    Some((left, top, right, bottom))
 }
 
 wrap_client! {
@@ -59,59 +125,77 @@ wrap_client! {
     }
 }
 
-/// Log the first few paints with a sampled center pixel (BGRA) to prove OSR works.
-fn log_paint(dirty_rects: Option<&[Rect]>, buffer: *const u8, width: c_int, height: c_int) {
-    static COUNT: AtomicU32 = AtomicU32::new(0);
-    if COUNT.fetch_add(1, Ordering::Relaxed) >= 5 {
-        return;
-    }
-    if buffer.is_null() || width <= 0 || height <= 0 {
-        log::warn!("on_paint: empty buffer {width}x{height}");
-        return;
-    }
-    let stride = width as usize * 4;
-    let mid = (height as usize / 2) * stride + (width as usize / 2) * 4;
-    let pixel = unsafe { std::slice::from_raw_parts(buffer.add(mid), 4) };
-    let rects = dirty_rects.map(|r| r.len()).unwrap_or(0);
-    log::info!(
-        "on_paint {width}x{height} dirty_rects={rects} center BGRA={pixel:?}"
-    );
+/// One CEF browser rendering off-screen into a shared frame buffer.
+pub struct CefView {
+    browser: Browser,
+    frame: SharedFrame,
 }
 
-/// C1: init CEF, create one windowless browser, pump the loop briefly.
-pub fn run_c1(url: &str) {
-    let args = Args::new();
-    let settings = Settings {
-        windowless_rendering_enabled: 1,
-        external_message_pump: 1,
-        no_sandbox: 1,
-        ..Default::default()
-    };
+impl CefView {
+    pub fn new(url: &str, width: i32, height: i32) -> Option<CefView> {
+        let frame = new_shared_frame(width, height);
+        let render_handler = NeobarRenderHandler::new(frame.clone());
+        let mut client = NeobarClient::new(render_handler);
 
-    let initialized = initialize(Some(args.as_main_args()), Some(&settings), None, std::ptr::null_mut());
-    log::info!("cef initialize -> {initialized}");
+        let window_info = WindowInfo::default().set_as_windowless(0);
+        let url = CefString::from(url);
+        let browser_settings = BrowserSettings::default();
 
-    let window_info = WindowInfo::default().set_as_windowless(0);
-    let render_handler = NeobarRenderHandler::new();
-    let mut client = NeobarClient::new(render_handler);
-    let url = CefString::from(url);
-    let browser_settings = BrowserSettings::default();
+        let browser = browser_host_create_browser_sync(
+            Some(&window_info),
+            Some(&mut client),
+            Some(&url),
+            Some(&browser_settings),
+            None,
+            None,
+        )?;
 
-    let browser = browser_host_create_browser_sync(
-        Some(&window_info),
-        Some(&mut client),
-        Some(&url),
-        Some(&browser_settings),
-        None,
-        None,
-    );
-    log::info!("browser created: {}", browser.is_some());
-
-    let start = Instant::now();
-    while start.elapsed() < Duration::from_secs(6) {
-        do_message_loop_work();
-        std::thread::sleep(Duration::from_millis(5));
+        if let Some(host) = browser.host() {
+            host.set_windowless_frame_rate(WINDOWLESS_FRAME_RATE);
+        }
+        Some(CefView { browser, frame })
     }
 
-    shutdown();
+    /// Resize the rendered view; CEF repaints at the new size.
+    pub fn resize(&self, width: i32, height: i32) {
+        {
+            let mut frame = self.frame.borrow_mut();
+            frame.requested = (width.max(1), height.max(1));
+        }
+        if let Some(host) = self.browser.host() {
+            host.was_resized();
+        }
+    }
+
+    pub fn frame(&self) -> &SharedFrame {
+        &self.frame
+    }
+}
+
+/// The CEF runtime (initialized once per process).
+pub struct Engine;
+
+impl Engine {
+    pub fn init() -> Engine {
+        let args = Args::new();
+        let settings = Settings {
+            windowless_rendering_enabled: 1,
+            external_message_pump: 1,
+            no_sandbox: 1,
+            ..Default::default()
+        };
+        let ok = initialize(Some(args.as_main_args()), Some(&settings), None, std::ptr::null_mut());
+        log::info!("cef initialize -> {ok}");
+        Engine
+    }
+
+    pub fn shutdown(self) {
+        shutdown();
+    }
+}
+
+/// Pump CEF's message loop once. Drives paint timers and delivers on_paint.
+/// Called from a calloop timer on the main thread.
+pub fn pump() {
+    do_message_loop_work();
 }
