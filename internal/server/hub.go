@@ -37,6 +37,10 @@ type InMessage struct {
 	// Edge is one of "top", "bottom", "left", "right".
 	Edge string `json:"edge,omitempty"`
 	Size int    `json:"size,omitempty"`
+
+	// config:set — dotted key and its new JSON value.
+	Key   string          `json:"key,omitempty"`
+	Value json.RawMessage `json:"value,omitempty"`
 }
 
 // Hub manages WebSocket clients and topic subscriptions.
@@ -155,8 +159,11 @@ func (h *Hub) Unsubscribe(name string, ch chan ipc.WindowCommand) {
 }
 
 func (h *Hub) SendWindowCommand(name, action string) {
+	// Routed through the shared "window" channel (like exclusive/region) carrying
+	// the target name, so the render controller can open/close named windows such
+	// as "settings".
 	h.mu.RLock()
-	chans := h.windowCmds[name]
+	chans := h.windowCmds["window"]
 	h.mu.RUnlock()
 	cmd := ipc.WindowCommand{Action: action, Name: name}
 	for _, ch := range chans {
@@ -175,4 +182,3 @@ func (h *Hub) SendExclusiveZone(edge string, size int) {
 		ch <- cmd
 	}
 }
-

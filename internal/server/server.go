@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
+	"github.com/neoworks/neobar/internal/config"
 	"github.com/neoworks/neobar/internal/hyprland"
 	"github.com/neoworks/neobar/internal/shell"
 	"github.com/neoworks/neobar/internal/system"
@@ -40,11 +41,12 @@ type Server struct {
 	hub      *Hub
 	hypr     *hyprland.Client
 	sys      *system.System
+	cfg      *config.Store
 	frontend string // dir to serve static frontend from; empty = disabled
 }
 
-func New(hub *Hub, hypr *hyprland.Client, sys *system.System, frontend string) *Server {
-	return &Server{hub: hub, hypr: hypr, sys: sys, frontend: frontend}
+func New(hub *Hub, hypr *hyprland.Client, sys *system.System, cfg *config.Store, frontend string) *Server {
+	return &Server{hub: hub, hypr: hypr, sys: sys, cfg: cfg, frontend: frontend}
 }
 
 func findAppIcon(class string) string {
@@ -241,6 +243,20 @@ func (s *Server) route(c *Client, msg InMessage) {
 
 	case "window:region":
 		s.hub.SendRegionUpdate(msg.Rects)
+
+	case "config:get":
+		data, _ := json.Marshal(OutMessage{Type: "config", Data: s.cfg.Snapshot()})
+		c.Send(data)
+
+	case "config:set":
+		var value any
+		if err := json.Unmarshal(msg.Value, &value); err != nil {
+			log.Printf("config:set %q: bad value: %v", msg.Key, err)
+			return
+		}
+		if err := s.cfg.Set(msg.Key, value); err != nil {
+			log.Printf("config:set %q: %v", msg.Key, err)
+		}
 
 	default:
 		log.Printf("unknown message type: %s", msg.Type)
