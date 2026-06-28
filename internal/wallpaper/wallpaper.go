@@ -37,25 +37,36 @@ type barColors struct {
 
 // Watch connects to the daemon, subscribes to color updates, and rebroadcasts
 // them. Blocks and reconnects forever; run in a goroutine. The daemon may not be
-// running yet, so connection failures are retried rather than fatal.
+// running yet, so failures are retried quietly — only the first failure in a
+// down period is logged, to avoid spamming until neobar-bg appears.
 func Watch(hub Broadcaster) {
+	announcedDown := false
 	for {
-		if err := stream(hub); err != nil {
-			log.Printf("wallpaper: %v (retrying in %s)", err, reconnectWait)
+		connected, err := stream(hub)
+		if connected {
+			// A live connection just ended; let the next failure log once.
+			announcedDown = false
+		}
+		if err != nil && !announcedDown {
+			log.Printf("wallpaper: neobar-bg not connected (%v); start it with `task bg`", err)
+			announcedDown = true
 		}
 		time.Sleep(reconnectWait)
 	}
 }
 
-func stream(hub Broadcaster) error {
+// stream runs one connection. The bool reports whether the connection was ever
+// established (so the caller can distinguish "never up" from "dropped").
+func stream(hub Broadcaster) (bool, error) {
 	conn, err := net.Dial("unix", socketPath())
 	if err != nil {
-		return fmt.Errorf("connect daemon: %w", err)
+		return false, fmt.Errorf("connect daemon: %w", err)
 	}
 	defer conn.Close()
+	log.Printf("wallpaper: connected to neobar-bg")
 
 	if _, err := conn.Write([]byte(`{"cmd":"subscribe"}` + "\n")); err != nil {
-		return fmt.Errorf("subscribe: %w", err)
+		return true, fmt.Errorf("subscribe: %w", err)
 	}
 
 	scanner := bufio.NewScanner(conn)
@@ -69,9 +80,9 @@ func stream(hub Broadcaster) error {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("read daemon: %w", err)
+		return true, fmt.Errorf("read daemon: %w", err)
 	}
-	return fmt.Errorf("daemon closed the connection")
+	return true, fmt.Errorf("daemon closed the connection")
 }
 
 // SetWallpaper tells the daemon to load the image at path. Best-effort: returns
