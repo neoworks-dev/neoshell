@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/neoworks/neoshell/internal/apps"
 )
 
 // Store is the authoritative settings tree. Safe for concurrent use.
@@ -53,14 +55,10 @@ func Defaults() map[string]any {
 			},
 		},
 		// Desktop icons. Positions are top-left px on the desktop surface, snapped
-		// to `grid`. The frontend persists the whole `icons` array on drop.
+		// to `grid`. Seeded from installed .desktop apps on first run (see
+		// seedDesktopIcons); the frontend persists the whole `icons` array on drop.
 		"desktop": map[string]any{
 			"grid": 100,
-			"icons": []any{
-				map[string]any{"id": "terminal", "label": "Terminal", "exec": "kitty", "icon": "terminal", "x": 40, "y": 40},
-				map[string]any{"id": "files", "label": "Files", "exec": "nautilus", "icon": "folder", "x": 40, "y": 160},
-				map[string]any{"id": "browser", "label": "Browser", "exec": "firefox", "icon": "globe", "x": 40, "y": 280},
-			},
 		},
 	}
 }
@@ -82,6 +80,8 @@ func Load() (*Store, error) {
 			mergeInto(data, onDisk)
 		}
 	}
+
+	seedDesktopIcons(data)
 
 	store := &Store{path: path, data: data}
 	// Persist once so the file exists and gains any newly added default keys.
@@ -182,6 +182,71 @@ func migrateLegacyConfig(newPath string) {
 		return
 	}
 	os.WriteFile(newPath, raw, 0o644)
+}
+
+// legacyIconNames are the placeholder icon names the first desktop version
+// shipped before icons were backed by real .desktop entries. Their presence
+// signals a stale set that should be reseeded.
+var legacyIconNames = map[string]bool{"terminal": true, "folder": true, "globe": true, "gear": true}
+
+// seedDesktopIcons fills desktop.icons from installed applications when it is
+// absent or still holds the placeholder set, so the desktop shows real,
+// launchable apps with real icons. A user-arranged set is left untouched.
+func seedDesktopIcons(data map[string]any) {
+	desktop, ok := data["desktop"].(map[string]any)
+	if !ok {
+		desktop = map[string]any{"grid": 100}
+		data["desktop"] = desktop
+	}
+	grid := 100
+	if g, ok := desktop["grid"].(int); ok {
+		grid = g
+	} else if g, ok := desktop["grid"].(float64); ok {
+		grid = int(g)
+	}
+
+	existing, _ := desktop["icons"].([]any)
+	if !desktopIconsNeedSeed(existing) {
+		return
+	}
+	desktop["icons"] = buildDesktopIcons(apps.DefaultSelection(6), grid)
+}
+
+// desktopIconsNeedSeed reports whether the stored icons are missing or are the
+// shipped placeholder set (identified by their legacy icon names).
+func desktopIconsNeedSeed(icons []any) bool {
+	if len(icons) == 0 {
+		return true
+	}
+	for _, raw := range icons {
+		icon, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if name, ok := icon["icon"].(string); ok && legacyIconNames[name] {
+			return true
+		}
+	}
+	return false
+}
+
+// buildDesktopIcons lays the chosen apps out in a grid-aligned left column so the
+// seeded positions are already snap-stable.
+func buildDesktopIcons(selection []apps.App, grid int) []any {
+	icons := make([]any, 0, len(selection))
+	x, y := grid, grid
+	for _, app := range selection {
+		icons = append(icons, map[string]any{
+			"id":    app.ID,
+			"label": app.Name,
+			"exec":  app.Exec,
+			"icon":  app.Icon,
+			"x":     x,
+			"y":     y,
+		})
+		y += grid
+	}
+	return icons
 }
 
 // mergeInto overlays src onto dst recursively: maps merge key by key, every other

@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
+	"github.com/neoworks/neoshell/internal/apps"
 	"github.com/neoworks/neoshell/internal/config"
 	"github.com/neoworks/neoshell/internal/hyprland"
 	"github.com/neoworks/neoshell/internal/shell"
@@ -146,6 +147,17 @@ func (s *Server) Listen(addr string) {
 		path := resolveIconPath(icon, 32)
 		http.ServeFile(w, r, path)
 	})
+	// /appicon/<name> resolves a freedesktop icon name (from a .desktop Icon=)
+	// directly to its themed image, for the desktop's real app icons.
+	http.HandleFunc("/appicon/", func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimPrefix(r.URL.Path, "/appicon/")
+		path := resolveIconPath(name, 64)
+		if path == "" {
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFile(w, r, path)
+	})
 	// Serve the built frontend directly when configured. Registered last and at
 	// the root so the more specific /ws and /icon/ routes take precedence. CEF is
 	// full Chromium, so no compatibility shim or CSS rewriting is needed.
@@ -253,6 +265,10 @@ func (s *Server) route(c *Client, msg InMessage) {
 			name = "bar"
 		}
 		s.hub.SendRegionUpdate(name, msg.Rects)
+
+	case "apps:list":
+		data, _ := json.Marshal(OutMessage{Type: "apps", Data: apps.List()})
+		c.Send(data)
 
 	case "config:get":
 		data, _ := json.Marshal(OutMessage{Type: "config", Data: s.cfg.Snapshot()})
