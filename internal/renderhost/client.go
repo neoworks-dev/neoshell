@@ -137,13 +137,19 @@ func (c *Client) send(command map[string]any) error {
 
 // CreateSurface creates a layer-shell surface running an Ultralight view.
 func (c *Client) CreateSurface(spec SurfaceSpec) error {
+	// Marshal nil anchors as [] rather than null so the host's Vec<Edge>
+	// deserializes (a floating window passes no anchors).
+	anchors := spec.Anchors
+	if anchors == nil {
+		anchors = []Edge{}
+	}
 	command := map[string]any{
 		"cmd":      "surface.create",
 		"role":     spec.Role,
 		"url":      spec.URL,
 		"monitor":  spec.Monitor,
 		"layer":    spec.Layer,
-		"anchors":  spec.Anchors,
+		"anchors":  anchors,
 		"keyboard": spec.Keyboard,
 		"width":    spec.Width,
 		"height":   spec.Height,
