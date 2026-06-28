@@ -1,5 +1,6 @@
-//! Per-role surface: a wlr-layer-shell surface presenting an Ultralight view's
-//! CPU bitmap through a wl_shm buffer (stage 2).
+//! Per-role surface: a wlr-layer-shell surface presenting a CEF view's latest
+//! paint through a wl_shm buffer. The view is push-painted by CEF; we copy the
+//! shared frame buffer on each Wayland frame callback, skipping idle frames.
 
 use smithay_client_toolkit::shell::wlr_layer::{
     Anchor, KeyboardInteractivity, Layer as SctkLayer, LayerSurface,
@@ -10,8 +11,8 @@ use smithay_client_toolkit::shm::Shm;
 use wayland_client::protocol::wl_shm;
 use wayland_client::QueueHandle;
 
+use crate::cef_engine::CefView;
 use crate::protocol::{Edge, Keyboard, Layer};
-use crate::ultralight::View;
 use crate::wayland::State;
 
 /// Resolved spec for creating a surface (from `Command::Create`).
@@ -28,20 +29,21 @@ pub struct SurfaceSpec {
     pub exclusive_size: i32,
 }
 
-/// A live surface: layer-shell handle + Ultralight view + its shm pool.
+/// A live surface: layer-shell handle + CEF view + its shm pool.
 pub struct ManagedSurface {
     pub role: String,
     pub layer: LayerSurface,
-    pub view: View,
+    pub view: CefView,
     pool: Option<SlotPool>,
     width: u32,
     height: u32,
     configured: bool,
     mapped: bool,
+    last_generation: u64,
 }
 
 impl ManagedSurface {
-    pub fn new(role: String, layer: LayerSurface, view: View) -> Self {
+    pub fn new(role: String, layer: LayerSurface, view: CefView) -> Self {
         Self {
             role,
             layer,
@@ -51,13 +53,13 @@ impl ManagedSurface {
             height: 0,
             configured: false,
             mapped: false,
+            last_generation: 0,
         }
     }
 
     /// Apply a layer-surface configure: adopt the compositor-chosen size and
-    /// resize the view to match.
+    /// resize the CEF view to match.
     pub fn configure(&mut self, width: u32, height: u32) {
-        // A zero dimension means "you decide" — keep our requested size.
         if width != 0 {
             self.width = width;
         }
@@ -66,36 +68,25 @@ impl ManagedSurface {
         }
         self.configured = true;
         if self.width > 0 && self.height > 0 {
-            self.view.resize(self.width, self.height);
+            self.view.resize(self.width as i32, self.height as i32);
         }
     }
 
-    /// Set the requested size before the first commit (e.g. a fixed bar height).
-    /// Used once roles get explicit sizing in stage 5.
-    #[allow(dead_code)]
-    pub fn request_size(&mut self, width: u32, height: u32) {
-        self.width = width;
-        self.height = height;
-        self.layer.set_size(width, height);
-    }
-
-    /// Render the view and present it. Returns false if not ready yet.
-    /// `renderer_update_render` must already have been called this frame.
+    /// Present the view's latest CEF frame. Returns true only when a new frame
+    /// was uploaded (so the caller can measure upload rate). Skips the upload
+    /// when nothing changed, but still commits a frame request to keep ticking.
     pub fn present(&mut self, shm: &Shm, qh: &QueueHandle<State>) -> bool {
         if !self.configured || self.width == 0 || self.height == 0 {
             return false;
         }
 
-        // Skip the upload entirely when nothing changed. The frame loop is driven
-        // by frame callbacks, which are only delivered on commit, so we still
-        // commit a bare frame request to keep ticking (the compositor keeps
-        // showing the last buffer). This makes a static shell cost ~nothing.
-        // Always present once first: an unmapped surface (no buffer) may not
-        // receive frame callbacks, so the initial buffer must be attached.
-        // Returns true only when a new buffer was uploaded (a dirty frame), so the
-        // caller can measure real upload rate vs idle frame-request commits.
-        let dirty = self.view.dirty_bounds();
-        if dirty.is_none() && self.mapped {
+        // Is there a new CEF paint since we last presented?
+        let (has_new, generation) = {
+            let frame = self.view.frame().borrow();
+            let has_new = frame.generation != self.last_generation && !frame.data.is_empty();
+            (has_new, frame.generation)
+        };
+        if !has_new && self.mapped {
             let wl_surface = self.layer.wl_surface();
             wl_surface.frame(qh, wl_surface.clone());
             self.layer.commit();
@@ -105,9 +96,6 @@ impl ManagedSurface {
         let width = self.width;
         let height = self.height;
         let stride = width * 4;
-        // Damage the changed region; on the first map there is no dirty rect yet,
-        // so damage the whole surface.
-        let (left, top, right, bottom) = dirty.unwrap_or((0, 0, width as i32, height as i32));
 
         if self.pool.is_none() {
             match SlotPool::new((stride * height) as usize, shm) {
@@ -119,8 +107,8 @@ impl ManagedSurface {
             }
         }
 
-        // Disjoint field borrows so the view's bitmap can be read while the pool
-        // buffer (which borrows the pool) is live.
+        // Disjoint field borrows: read the view's frame while the pool buffer
+        // (which borrows the pool) is live.
         let Self {
             view, pool, layer, ..
         } = self;
@@ -140,44 +128,43 @@ impl ManagedSurface {
             }
         };
 
-        // A fresh slot has no prior content, so the full surface is copied; only
-        // the changed region is reported as damage so the compositor recomposites
-        // just that area.
-        copy_bitmap_into(view, canvas, width, height, stride);
-        view.clear_dirty();
+        copy_frame_into(view, canvas, width, height, stride);
 
         let wl_surface = layer.wl_surface();
         if let Err(err) = buffer.attach_to(wl_surface) {
             log::error!("attach: {err}");
             return false;
         }
-        let damage_x = left.clamp(0, width as i32);
-        let damage_y = top.clamp(0, height as i32);
-        let damage_w = (right - left).clamp(0, width as i32 - damage_x);
-        let damage_h = (bottom - top).clamp(0, height as i32 - damage_y);
-        wl_surface.damage_buffer(damage_x, damage_y, damage_w, damage_h);
+        // Full-surface damage: we alternate shm slots and copy the whole frame
+        // into each, so the compositor must re-upload all of it. Partial damage
+        // leaves 2-frames-stale content in undamaged regions of the other slot
+        // (the ghosting/sliver artifact).
+        wl_surface.damage_buffer(0, 0, width as i32, height as i32);
         wl_surface.frame(qh, wl_surface.clone());
         layer.commit();
+
         self.mapped = true;
+        self.last_generation = generation;
         true
     }
 }
 
-/// Copy the view's BGRA bitmap into the shm canvas, row by row (strides differ).
-fn copy_bitmap_into(view: &View, canvas: &mut [u8], width: u32, height: u32, dst_stride: u32) {
-    let copied = view.with_bitmap(|bitmap| {
-        let rows = height.min(bitmap.height) as usize;
-        let row_bytes = (width.min(bitmap.width) * 4) as usize;
-        for row in 0..rows {
-            let src_start = row * bitmap.stride as usize;
-            let dst_start = row * dst_stride as usize;
-            let src = &bitmap.pixels[src_start..src_start + row_bytes];
-            canvas[dst_start..dst_start + row_bytes].copy_from_slice(src);
-        }
-    });
-    if copied.is_none() {
-        // No CPU surface — clear to transparent so we present *something*.
+/// Copy the view's BGRA frame into the shm canvas, clipped to the surface size.
+fn copy_frame_into(view: &CefView, canvas: &mut [u8], width: u32, height: u32, dst_stride: u32) {
+    let frame = view.frame().borrow();
+    if frame.data.is_empty() || frame.width <= 0 || frame.height <= 0 {
         canvas.fill(0);
+        return;
+    }
+
+    let src_stride = frame.width as u32 * 4;
+    let rows = height.min(frame.height as u32) as usize;
+    let row_bytes = (width.min(frame.width as u32) * 4) as usize;
+    for row in 0..rows {
+        let src_start = row * src_stride as usize;
+        let dst_start = row * dst_stride as usize;
+        canvas[dst_start..dst_start + row_bytes]
+            .copy_from_slice(&frame.data[src_start..src_start + row_bytes]);
     }
 }
 
