@@ -80,12 +80,12 @@ func (h *Hub) Unregister(c *Client) {
 	h.mu.Unlock()
 }
 
-func (h *Hub) SendRegionUpdate(rects []ipc.Rect) {
+func (h *Hub) SendRegionUpdate(name string, rects []ipc.Rect) {
 	h.mu.RLock()
 	chans := h.windowCmds["region"]
 	h.mu.RUnlock()
 	for _, ch := range chans {
-		ch <- ipc.WindowCommand{Action: "region", Rects: rects}
+		ch <- ipc.WindowCommand{Action: "region", Name: name, Rects: rects}
 	}
 }
 
@@ -171,13 +171,13 @@ func (h *Hub) SendWindowCommand(name, action string) {
 	}
 }
 
-// SendExclusiveZone tells the bar window to reserve `size` pixels along `edge`.
+// SendExclusiveZone tells the named window to reserve `size` pixels along `edge`.
 // A size of 0 clears the reservation. Routed through the "window" channel.
-func (h *Hub) SendExclusiveZone(edge string, size int) {
+func (h *Hub) SendExclusiveZone(name, edge string, size int) {
 	h.mu.RLock()
 	chans := h.windowCmds["window"]
 	h.mu.RUnlock()
-	cmd := ipc.WindowCommand{Action: "exclusive", Edge: edge, Size: size}
+	cmd := ipc.WindowCommand{Action: "exclusive", Name: name, Edge: edge, Size: size}
 	for _, ch := range chans {
 		ch <- cmd
 	}
