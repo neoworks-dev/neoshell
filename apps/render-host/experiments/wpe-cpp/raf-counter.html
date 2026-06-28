@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; height: 100%; background: #101418; color: #e8edf2;
+    font-family: monospace; display: flex; align-items: center; justify-content: center; }
+  #fps { font-size: 16vw; font-weight: 700; }
+  #sub { position: fixed; bottom: 4vh; width: 100%; text-align: center;
+    font-size: 3vw; color: #6f7d8c; }
+  /* A moving bar so the compositor actually has damage every frame. */
+  #bar { position: fixed; top: 0; left: 0; height: 6px; width: 120px;
+    background: #3fb6ff; will-change: transform; }
+</style>
+</head>
+<body>
+  <div id="fps">--</div>
+  <div id="sub">requestAnimationFrame fps</div>
+  <div id="bar"></div>
+<script>
+  // Count rAF callbacks per second. Report via document.title so the host
+  // process can read the rate without scraping pixels.
+  let frames = 0;
+  let last = performance.now();
+  const fpsEl = document.getElementById('fps');
+  const bar = document.getElementById('bar');
+
+  function tick(now) {
+    frames++;
+    // Translate the bar every frame -> guarantees per-frame damage.
+    const x = (now / 6) % (window.innerWidth + 120) - 120;
+    bar.style.transform = 'translateX(' + x + 'px)';
+
+    const dt = now - last;
+    if (dt >= 1000) {
+      const fps = Math.round((frames * 1000) / dt);
+      fpsEl.textContent = fps;
+      window.__fps = fps;
+      document.title = 'FPS:' + fps;
+      frames = 0;
+      last = now;
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+</script>
+</body>
+</html>

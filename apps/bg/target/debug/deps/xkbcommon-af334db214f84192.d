@@ -1,0 +1,11 @@
+/home/moritz/Documents/local-llm-assistant/neobar-shell/neobar-bg/target/debug/deps/xkbcommon-af334db214f84192.d: /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/lib.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/xkb/mod.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/xkb/compose.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/xkb/ffi.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/xkb/keysyms.rs
+
+/home/moritz/Documents/local-llm-assistant/neobar-shell/neobar-bg/target/debug/deps/libxkbcommon-af334db214f84192.rlib: /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/lib.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/xkb/mod.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/xkb/compose.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/xkb/ffi.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/xkb/keysyms.rs
+
+/home/moritz/Documents/local-llm-assistant/neobar-shell/neobar-bg/target/debug/deps/libxkbcommon-af334db214f84192.rmeta: /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/lib.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/xkb/mod.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/xkb/compose.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/xkb/ffi.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/xkb/keysyms.rs
+
+/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/lib.rs:
+/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/xkb/mod.rs:
+/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/xkb/compose.rs:
+/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/xkb/ffi.rs:
+/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xkbcommon-0.7.0/src/xkb/keysyms.rs:
