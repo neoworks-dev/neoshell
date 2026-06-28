@@ -1,171 +1,124 @@
-# Migration: WebKitGTK → Ultralight
+# Migration: WebKitGTK → Ultralight → CEF
 
 ## Why
 
 WebKitGTK (2.52, Skia backend) caps at ~30 fps on this setup even with Vulkan/no-blur.
-A desktop shell has to feel smooth. Ultralight is a GPU HTML renderer (WebCore layout +
-JavaScriptCore + custom GPU backend) that hits native refresh, is single-process, and uses
-~50–100 MB versus CEF's ~250–400 MB. The cost is no WebGL / WebGPU / `<video>` / WebRTC —
-none of which this shell needs.
+A desktop shell has to feel smooth, so the renderer moved out of the in-process gotk4 webview
+into a separate Rust **render host** process driving a wlr-layer-shell surface.
 
-The browser glass look is done compositor-side (`layerrule = blur, neobar`), so the missing
-CSS `backdrop-filter` / `filter: blur()` does not matter.
+The host first used **Ultralight**. It rendered the Svelte UI correctly, but the *official free*
+Ultralight binary throttles off-screen rendering to ~60 fps (measured ~45 uploads/s on an
+animation vs ~122 on the dev-channel SDK that `ul-next-sys` auto-downloads and that we are not
+entitled to rely on). The throttle is in the binary, not the license text; uncapped requires
+Ultralight Pro ($3,000/yr). On a 144Hz panel the difference is visible ("says 144, looks like
+60"), which defeats the entire reason for leaving WebKitGTK.
 
-## License (read before shipping)
+The host now uses **CEF** (Chromium Embedded Framework): BSD-licensed, free, no performance cap,
+full Chromium web platform. Cost: ~250–400 MB RAM and a multi-process model. Verified hitting
+full refresh (present loop runs uncapped at 120–290 fps; the panel caps display at 144) with the
+real UI. Because it is full Chromium, **every web-compat shim the Ultralight host needed is gone**
+(no `HTMLMediaElement` stubs, no `hover:hover` CSS rewrite, no `accent-color` workaround).
 
-Ultralight is proprietary, closed-source. The free license (`render-host/THIRD_PARTY.md`)
-imposes **no fps cap, watermark, or throttle** — the pricing page's "limited performance" is
-marketing, not in the legal terms. Free is valid while both annual turnover **and** raised
-funding stay under **US$100,000**; crossing either requires the Pro license ($3k/yr/app)
-within 30 days. Two hard obligations that shape the build:
-
-- **No static linking.** The host must dynamic-link `libUltralightCore.so` / `libUltralight.so`.
-- **Attribution.** Ship the required notice (see `render-host/THIRD_PARTY.md`).
-
-## Architecture
+## Architecture (unchanged across engines)
 
 The frontend (`neobar-ui`, Svelte) and the Go core's WebSocket IPC are **unchanged**. The
-frontend still loads `http://localhost:<port>/<role>` and opens `/ws` for all shell logic
-(system state, hyprland dispatch, run/watch, etc.).
-
-What changes: rendering and Wayland surface ownership move out of the in-process gotk4 webview
-into a separate Rust process, the **render host**.
+frontend loads `http://localhost:<port>/` and opens `/ws` for all shell logic (system state,
+hyprland dispatch, run/watch, etc.). Only the render/engine layer was swapped.
 
 ```
   ┌─────────────────────────┐         ┌──────────────────────────────┐
   │ neobar-core (Go)         │         │ neobar-render (Rust)         │
   │                          │ control │                              │
-  │  WS hub  ── frontend IPC │ socket  │  Ultralight OSR view / role  │
+  │  WS hub  ── frontend IPC │ socket  │  CEF off-screen view / role  │
   │  hyprland IPC            │◄───────►│  owns wlr-layer-shell surface│
-  │  system poll            │ (JSON   │  dmabuf → compositor         │
-  │  surface controller ────┼─ lines) │  wl_seat input → Ultralight  │
+  │  system poll            │ (JSON   │  OnPaint BGRA → wl_shm       │
+  │  surface controller ────┼─ lines) │  wl_seat input → CEF host    │
   │  HTTP: serves frontend  │         │                              │
   └─────────────────────────┘         └──────────────────────────────┘
         ▲  WebSocket /ws (UNCHANGED)            │ loads localhost:<port>/<role>
-        └──────────────────────────────────────┘  in each Ultralight view
+        └──────────────────────────────────────┘  in each CEF browser view
 ```
 
-- **Go core** keeps everything it does today, minus `internal/bar`. A new
-  `internal/renderhost` client speaks the control protocol to the Rust process and replaces
-  the gotk4 surface/region/exclusive handling. The hub's existing window-command routing is
-  reused; commands are forwarded to the host instead of `glib.IdleAdd`.
-- **Render host** is a dumb pixel pump: "create surface X with this layer-shell spec, load
-  this URL, give me frames, forward me input." No shell logic lives here.
+- **Go core** speaks the control protocol to the Rust process (`internal/renderhost`) and serves
+  the frontend over plain HTTP (`internal/server`). No engine-specific logic remains in Go.
+- **Render host** is a dumb pixel pump: "create surface X with this layer-shell spec, load this
+  URL, give me frames, forward me input." No shell logic lives here.
 
-### Multi-surface, not one overlay
+## CEF engine specifics
 
-Today there is a single fullscreen overlay with input regions carved out. The host model
-gives each **role** its own right-sized layer surface (bar, dock, notch, launcher,
-notifications, OSD, widgets). Right-sizing removes most of the input-region hacks; input
-regions remain only where a surface is intentionally larger than its hit area (e.g. the
-notch + bar strip).
+- **Subprocess model.** The same binary is re-executed for the render/gpu/utility processes.
+  `main()` first registers the API version (`cef::api_hash(CEF_API_VERSION_LAST, 0)` — required,
+  else handlers fail with "called with invalid version -1"), then calls `cef::execute_process`.
+  A child returns `>= 0` and exits before touching Wayland; the browser process returns `-1` and
+  proceeds.
+- **Off-screen rendering.** `windowless_rendering_enabled` + a windowless `WindowInfo`. CEF calls
+  `RenderHandler::on_paint(type, dirty_rects, buffer, w, h)` with a CPU **BGRA** buffer on the
+  main thread during `do_message_loop_work`. BGRA matches `wl_shm` `Argb8888` (little-endian), so
+  the buffer copies straight into the shm canvas. `OnAcceleratedPaint` (GPU/dmabuf) is
+  Windows-centric and immature on Linux — not used.
+- **Frame rate.** CEF's windowless default is 30; `host.set_windowless_frame_rate(144)` lifts the
+  cap. `external_message_pump = true` + a calloop ~4 ms timer calling `do_message_loop_work()`
+  drives paints without a CEF-owned thread.
+- **Present path.** `on_paint` writes a shared `Rc<RefCell<FrameState>>` and bumps a generation
+  counter; the Wayland frame callback presents the latest frame through a double-buffered
+  `SlotPool`. Idle frames (no new generation) skip the upload and only re-commit a frame request.
+- **Damage / coherence.** Each present full-copies the frame into the shm slot (keeps every slot
+  coherent) but damages only `current_dirty ∪ prev_dirty`. The union with the previous frame's
+  dirty region is required because the two alternating slots are two frames stale; damaging only
+  the current region ghosts.
+- **Sandbox.** `no_sandbox` (self-contained personal shell, avoids the setuid helper).
+- **Binaries.** The `cef` crate's build script downloads ~200 MB of CEF binaries to the
+  `cef-dll-sys` build output. `internal/renderhost/host.go` resolves that dir (or `NEOBAR_CEF_PATH`)
+  and sets `LD_LIBRARY_PATH` so the host and its subprocesses find `libcef.so` + resources.
 
 ## Control protocol (Go core → render host)
 
-Newline-delimited JSON over a unix socket (`$XDG_RUNTIME_DIR/neobar-render.sock`). The Go
-type is `internal/renderhost.Command`; the Rust type is `protocol::Command`. Keep them in sync.
+Newline-delimited JSON over a unix socket (`$XDG_RUNTIME_DIR/neobar-render.sock`). The Go type is
+`internal/renderhost.Command`; the Rust type is `protocol::Command`. Keep them in sync. Unchanged
+from the Ultralight host — the protocol is engine-agnostic.
 
 | Command          | Fields                                                              | Effect |
 |------------------|--------------------------------------------------------------------|--------|
-| `surface.create` | `role, url, monitor, layer, anchors[], keyboard, exclusiveEdge, exclusiveSize` | create a layer-shell surface running an Ultralight view |
+| `surface.create` | `role, url, monitor, layer, anchors[], keyboard, exclusiveEdge, exclusiveSize` | create a layer-shell surface running a CEF view |
 | `surface.exclusive` | `role, edge, size`                                              | reserve `size` px along `edge` (0 clears) |
 | `surface.region` | `role, rects[]`                                                    | set the input region (empty = whole surface) |
 | `surface.show` / `surface.hide` | `role`                                              | map / unmap without destroying |
 | `surface.destroy`| `role`                                                             | tear down |
 
-Host → core events (same socket, opposite direction): `ready {role}`, `log {level, msg}`.
-Errors are logged, not fatal — a dead surface must not take the shell down.
+## CEF migration stages (branch `migrate/cef`)
 
-## Stages
+- [x] **C1. CEF builds & initializes** — `cef` crate swapped in for `ul-next`, binaries
+      downloaded, `execute_process` + `initialize` + message pump, headless browser loads a test
+      URL, `on_paint` fires with a sane buffer.
+- [x] **C2. One surface** — `on_paint` buffers feed the `wl_shm` present for one layer surface; a
+      test page renders on a real layer-shell surface at 144.
+- [x] **C3. Real UI + fps gate** — the real neobar-ui renders correctly; present loop runs
+      uncapped well above 144 (panel caps display). The whole point: CEF is not throttled.
+- [x] **C4. Input** — wl_pointer/keyboard → CEF `send_mouse_*` / `send_key_event`; click-through
+      via input regions. Native hover works (no CSS shim).
+- [x] **C5. Go controller + cutover** — `host.go` points at the CEF binary + runtime dir;
+      `controller.go` unchanged (same protocol). Removed the Ultralight compat machinery from
+      `internal/server` (`serveCSSWithHoverFix`, `ulCompatShim`, `injectShim`, the `/ul-compat.js`
+      route). Full shell verified: notch renders centered with backend data, click-through and
+      input work, hover is native.
+- [x] **C6. Cleanup** — removed `render-host/src/ultralight.rs`, this doc rewritten, debug present
+      logging removed. The `--test-url <url|fps>` standalone probe is kept.
 
-- [x] **0. Baseline** — committed on `main` (WebKitGTK working).
-- [ ] **1. SDK + skeleton** — Ultralight SDK in place, Rust host compiles, opens a connection,
-      parses the control protocol. (`render-host/` — this branch.)
-- [ ] **2. One surface (wl_shm)** — host creates a single wlr-layer-shell surface and presents
-      Ultralight's CPU bitmap through a `wl_shm` buffer, frame-callback driven. Proves the
-      Wayland + layer-shell + Ultralight + present loop with the simplest pixel path. (Started.)
-- [x] **3. Load the frontend + fps gate** — PASSED. The real neobar-ui (Svelte 5) renders
-      correctly in Ultralight at a steady **144 fps** (host present-rate and on-page RAF both
-      ~144 on the 144Hz panel). The migration premise holds; WebKitGTK's 30fps cap is gone.
-      Required, in order: `refresh_display(0)` each frame (else animations/RAF never tick),
-      `animation_timer_delay`/`scroll_timer_delay` lowered from 1/60 (else RAF capped ~60),
-      and a JS compat shim (below). Verified standalone via `dist/` served statically.
-- [x] **3.5. dirty-bounds (optimization)** — DONE. Present now skips the upload entirely when
-      the view's dirty bounds are empty (commits only a frame request to keep the loop alive),
-      and damages just the changed region otherwise. Idle uploads dropped from ~144/s to ~22/s
-      and idle render-host CPU to ~0%, with no visual artifacts. A full GPU/dmabuf zero-copy
-      path is no longer needed for smoothness; revisit only if heavy continuous full-surface
-      animation ever demands it.
-- [ ] **4. Input** — wl_pointer/keyboard/touch → Ultralight `fire*Event`. Click-through via
-      input regions where needed. IME last.
-- [x] **5. Go controller** — DONE. `internal/renderhost` spawns the host (`host.go`) and drives
-      it (`controller.go`): creates the fullscreen overlay bar surface, forwards hub
-      window:exclusive/region commands, makes the overlay click-through until the frontend
-      defines regions. The Go server injects the compat shim into served index.html. Selected
-      with `--renderer ultralight` (default still `webkit`). Verified on hardware: notch renders
-      with real backend data, click-through works, notch is interactive. ~110 fps on a
-      fullscreen overlay (vs 144 on a small surface — see stage 3.5; full-surface bitmap copy
-      every frame is the cost).
-- [x] **6. Cutover** — DONE. Ultralight is the only render path; `internal/bar`, the
-      `--renderer` flag, and the gotk4 / gotk4-webkitgtk / gotk4-layer-shell dependencies are
-      removed. The Go binary dropped from ~26.8M to ~9.9M and no longer needs cgo/GTK.
-- [ ] **7. Grow the shell** — split roles into separate surfaces (dock, notch, launcher, OSD),
-      then notifications daemon (dbus), settings as a toplevel.
+## Web compatibility
 
-WebKitGTK stays the default until stage 6, so `main` is always shippable and the branch never
-has a broken shell.
+Full Chromium — no shims. The Ultralight host needed an `HTMLMediaElement`/`MediaStream` stub
+(Svelte 5 event delegation did `instanceof HTMLMediaElement`), a server-side `@media (hover: hover)`
+rewrite, and `accent-color` workarounds. None apply under CEF; `oklch`, `:has()`, container
+queries, `accent-color`, native form controls, hover variants, and `backdrop-filter` all work
+natively. Glass blur is still done compositor-side (`layerrule = blur, neobar.*`).
 
-## Web-compat shim (required)
+## Standalone probe
 
-Ultralight's JS engine omits some web-platform globals that modern frameworks
-reference unconditionally. Svelte 5's event delegation does
-`node instanceof HTMLMediaElement`; with `HTMLMediaElement` undefined this throws
-a ReferenceError during module evaluation and aborts the entire app mount (symptom:
-only the body background paints — a black panel, no UI). `render-host/ul-compat.js`
-defines harmless stubs (`HTMLMediaElement`, `HTMLVideoElement`, `HTMLAudioElement`,
-`MediaStream`) so the `instanceof` checks return false instead of throwing.
+`render-host/target/debug/neobar-render --test-url <URL>` opens a centered overlay loading the
+URL with no Go core; the special value `fps` loads a built-in RAF counter + moving box to eyeball
+smoothness against the host's present-rate log.
 
-It must load as a classic script BEFORE the app bundle. For the stage-3 test it was
-injected into the statically served `dist/index.html`. **Production home: the Go
-server injects it into `index.html` when serving the frontend** (stage 5/6) — wire
-this in `internal/server` so every Ultralight-loaded page gets it. Expect to extend
-the stub list as more frameworks/components surface other missing globals.
+## Out of scope (future)
 
-## CSS compatibility (Ultralight 1.4 = Safari 16.4 WebCore)
-
-Probed with `--test-url probe` (uses `CSS.supports`/`getComputedStyle`; UA is
-`AppleWebKit/615.1.18 ... Ultralight/1.4.0 Version/16.4.1 Safari`). Modern CSS is
-broadly supported, so Tailwind v4 output renders correctly. Confirmed working:
-`oklch`, `oklab`, `color-mix`, `:has()`, container queries, `@property`, `@layer`,
-CSS `filter`/`blur()`, `appearance`/`-webkit-appearance`, `transition`, `mask`.
-
-Gaps and their handling:
-- **Touch-device interaction (`hover: hover` and `pointer: fine` both false).**
-  Ultralight reports as a touch device, so frameworks that gate hover styles
-  behind `@media (hover: hover)` (Tailwind's `hover:` variant) silently drop all
-  hover styling. Fixed in two places: the compat shim overrides `matchMedia` for
-  interaction queries, and — reliably — the Go server rewrites those media
-  conditions to always-true as it serves the CSS (`serveCSSWithHoverFix`). A
-  runtime CSSOM rewrite alone was unreliable: rules excluded at parse time were
-  not re-applied to elements created later (e.g. the notch's expand-on-hover
-  buttons), so the served-CSS rewrite is the primary fix.
-- **`accent-color` — unsupported.** Native form controls (range sliders,
-  checkboxes, radios) render in default colors. Fix per control with
-  `appearance: none` + custom CSS (the webkit pseudo-elements work), or accept it.
-- **`backdrop-filter` — unsupported.** Glass blur is done compositor-side
-  (`layerrule = blur, neobar.*`), so this does not matter.
-
-`ResizeObserver`, `MutationObserver`, and `matchMedia` all work. The
-`--test-url probe` page reports all of the above.
-
-Other observed differences vs WebKitGTK (e.g. font rendering, default form
-controls) are minor. Font hinting/gamma are tunable via Ultralight `Config`
-(`font_hinting`, `font_gamma`) if needed. "Hover transitions not animating" is
-still open to confirm — `transition` is supported, so this is likely a specific
-repaint case, not a blanket gap.
-
-## Verify before stage 6
-
-Stage 3's fps counter is the gate. If Ultralight does not hit full refresh with the real
-Svelte UI, stop — the whole migration premise fails and CEF OSR is the fallback. Do not delete
-`internal/bar` until that is green.
+- GPU/dmabuf zero-copy via `OnAcceleratedPaint` (revisit if/when Linux support matures).
+- Multi-surface roles (dock, OSD, launcher, notifications daemon, settings toplevel).
