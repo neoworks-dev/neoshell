@@ -384,9 +384,13 @@ wrap_app! {
 /// background subsystems a desktop shell never uses; disabling them and capping
 /// the renderer count is the bulk of the saving.
 ///
-/// GPU compositing stays on by default because animation smoothness is the whole
-/// reason for CEF. Two env vars trade smoothness for more RAM:
-///   NEOBAR_CEF_DISABLE_GPU=1       software rendering, drops the GPU process
+/// GPU compositing is OFF by default. This is off-screen rendering: every painted
+/// frame is read back to a CPU buffer (OnPaint). With GPU compositing that readback
+/// is a per-frame GPU->CPU copy that pins the GPU (~100% on an iGPU) for no gain —
+/// software compositing rasters straight into the OnPaint buffer with no readback,
+/// and external begin frame still drives it at the display's refresh rate. Opt back
+/// into GPU compositing only if a page needs WebGL/heavy filters. Env vars:
+///   NEOBAR_CEF_ENABLE_GPU=1        re-enable GPU compositing (adds the readback)
 ///   NEOBAR_CEF_SINGLE_PROCESS=1    everything in one process (lowest RAM, less stable)
 fn apply_memory_switches(command_line: &mut CommandLine) {
     const SWITCHES: &[&str] = &[
@@ -415,7 +419,9 @@ fn apply_memory_switches(command_line: &mut CommandLine) {
          AcceptCHFrame,GlobalMediaControls",
     );
 
-    if std::env::var_os("NEOBAR_CEF_DISABLE_GPU").is_some() {
+    // Software compositing for OSR (no GPU->CPU readback per frame). Opt out only
+    // when a page genuinely needs the GPU.
+    if std::env::var_os("NEOBAR_CEF_ENABLE_GPU").is_none() {
         command_line.append_switch(Some(&CefString::from("disable-gpu")));
         command_line.append_switch(Some(&CefString::from("disable-gpu-compositing")));
     }
