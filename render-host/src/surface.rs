@@ -25,6 +25,10 @@ const ACTIVE_WINDOW: Duration = Duration::from_millis(250);
 /// change. Keeps idle GPU near zero while staying responsive.
 const IDLE_PROBE_PERIOD: Duration = Duration::from_millis(100);
 
+/// While active, pace begin-frames to ~144Hz. The pump timer ticks faster than
+/// this, so without the cap a begin-frame would fire every tick and over-render.
+const ACTIVE_FRAME_PERIOD: Duration = Duration::from_micros(6_900);
+
 /// Resolved spec for creating a surface (from `Command::Create`).
 pub struct SurfaceSpec {
     pub role: String,
@@ -48,13 +52,17 @@ pub struct ManagedSurface {
     width: u32,
     height: u32,
     configured: bool,
-    mapped: bool,
     last_generation: u64,
     /// Dirty region from the previous present. We alternate two shm slots, so a
     /// slot reused now is two frames stale; damaging current ∪ previous covers it.
     prev_dirty: Option<(i32, i32, i32, i32)>,
-    /// Last time an idle begin-frame probe was sent (see present()).
-    last_idle_probe: Instant,
+    /// Last time a begin-frame was sent, used to pace them (see maybe_begin_frame).
+    last_begin: Instant,
+    /// Whether the Wayland frame-callback loop is currently running. While active
+    /// the surface re-arms a frame callback each present (vsync-paced); when idle
+    /// it stops re-arming so the compositor can sleep, and the pump timer resumes
+    /// it the moment CEF paints again.
+    active_loop: bool,
 }
 
 impl ManagedSurface {
@@ -67,10 +75,10 @@ impl ManagedSurface {
             width: 0,
             height: 0,
             configured: false,
-            mapped: false,
             last_generation: 0,
             prev_dirty: None,
-            last_idle_probe: Instant::now(),
+            last_begin: Instant::now(),
+            active_loop: false,
         }
     }
 
@@ -89,43 +97,80 @@ impl ManagedSurface {
         }
     }
 
-    /// Present the view's latest CEF frame. Returns true only when a new frame
-    /// was uploaded (so the caller can measure upload rate). Skips the upload
-    /// when nothing changed, but still commits a frame request to keep ticking.
+    /// True while the Wayland frame-callback loop is stopped — the pump timer
+    /// should drive this surface so a new paint resumes it (see idle_probe).
+    pub fn needs_idle_drive(&self) -> bool {
+        self.configured && !self.active_loop && self.width > 0 && self.height > 0
+    }
+
+    /// Frame-callback driver. Commits only when CEF actually produced a new frame
+    /// — committing with no new buffer makes the compositor fire frame callbacks
+    /// immediately, spinning. So when there is no new frame we stop the loop (no
+    /// re-arm) and let the pump timer resume it; the compositor sleeps meanwhile.
+    /// Returns true on upload.
     pub fn present(&mut self, shm: &Shm, qh: &QueueHandle<State>) -> bool {
         if !self.configured || self.width == 0 || self.height == 0 {
             return false;
         }
 
-        // Drive CEF's rendering. With external_begin_frame_enabled CEF only paints
-        // (and advances requestAnimationFrame) in response to a begin-frame, so the
-        // begin-frame rate IS the render rate. Sending one per Wayland frame
-        // callback gives full 144fps but composites every frame even when nothing
-        // changes — ~70% GPU at idle. So gate it: full rate while the view is
-        // active (recent paint or input), and a sparse idle probe otherwise to
-        // catch the next change (the clock ticking, async data, a hover starting).
-        let idle = self.view.idle_for();
-        if idle < ACTIVE_WINDOW {
-            self.view.send_begin_frame();
-        } else if self.last_idle_probe.elapsed() >= IDLE_PROBE_PERIOD {
-            self.view.send_begin_frame();
-            self.last_idle_probe = std::time::Instant::now();
+        // In the active loop the frame callback already fires at the display's
+        // refresh rate, so one begin-frame per callback is correctly vsync-paced —
+        // no extra throttling (that would starve the loop and push work onto the
+        // slower idle pump).
+        self.view.send_begin_frame();
+        if self.try_upload(shm) {
+            self.commit_frame(qh);
+            self.active_loop = true;
+            return true;
         }
+        self.active_loop = false;
+        false
+    }
 
-        // Is there a new CEF paint since we last presented?
-        let generation = self.view.generation();
-        let has_new = generation != self.last_generation && !self.view.frame_empty();
-        if has_new {
-            // A fresh paint keeps the view active, so an animating page (its RAF
-            // producing paints) stays at full refresh until it settles.
-            self.view.mark_active();
-        }
-        if !has_new && self.mapped {
-            let wl_surface = self.layer.wl_surface();
-            wl_surface.frame(qh, wl_surface.clone());
-            self.layer.commit();
+    /// Pump-timer driver for a stopped surface: probe for a new paint and, when
+    /// one lands, present it and restart the frame-callback loop. Cheap while
+    /// nothing changes (a sparse begin-frame, no commit). Returns true on upload.
+    pub fn idle_probe(&mut self, shm: &Shm, qh: &QueueHandle<State>) -> bool {
+        if !self.needs_idle_drive() {
             return false;
         }
+
+        self.maybe_begin_frame();
+        if !self.try_upload(shm) {
+            return false;
+        }
+
+        // New frame while idle — present it and resume the active vsync loop.
+        self.commit_frame(qh);
+        self.active_loop = true;
+        true
+    }
+
+    /// Send a begin-frame, paced to ~144Hz while active and ~10Hz while idle. With
+    /// external_begin_frame_enabled CEF only paints in response to this, so the
+    /// begin-frame rate is the render rate; pacing it is what bounds GPU use.
+    fn maybe_begin_frame(&mut self) {
+        let period = if self.view.idle_for() < ACTIVE_WINDOW {
+            ACTIVE_FRAME_PERIOD
+        } else {
+            IDLE_PROBE_PERIOD
+        };
+        if self.last_begin.elapsed() >= period {
+            self.view.send_begin_frame();
+            self.last_begin = Instant::now();
+        }
+    }
+
+    /// Attach and damage a buffer with the latest CEF frame if one arrived since
+    /// the last present. Does not commit. Returns true when a frame was uploaded.
+    fn try_upload(&mut self, shm: &Shm) -> bool {
+        let generation = self.view.generation();
+        let has_new = generation != self.last_generation && !self.view.frame_empty();
+        if !has_new {
+            return false;
+        }
+        // A fresh paint keeps the view active so an animating page stays at refresh.
+        self.view.mark_active();
 
         let width = self.width;
         let height = self.height;
@@ -184,13 +229,17 @@ impl ManagedSurface {
         let w = (right - left).clamp(0, width as i32 - x);
         let h = (bottom - top).clamp(0, height as i32 - y);
         wl_surface.damage_buffer(x, y, w, h);
-        wl_surface.frame(qh, wl_surface.clone());
-        layer.commit();
 
-        self.mapped = true;
         self.last_generation = generation;
         self.prev_dirty = current_dirty;
         true
+    }
+
+    /// Request the next frame callback and commit the surface.
+    fn commit_frame(&self, qh: &QueueHandle<State>) {
+        let wl_surface = self.layer.wl_surface();
+        wl_surface.frame(qh, wl_surface.clone());
+        self.layer.commit();
     }
 }
 
