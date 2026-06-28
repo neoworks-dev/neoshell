@@ -7,9 +7,10 @@
 //! later copies the latest frame into a wl_shm buffer. CEF's own windowless timer
 //! is set to 144fps so OSR is not capped (the default is 30).
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::os::raw::c_int;
 use std::rc::Rc;
+use std::time::Instant;
 
 use cef::args::Args;
 use cef::rc::Rc as _;
@@ -208,6 +209,10 @@ wrap_client! {
 pub struct CefView {
     browser: Browser,
     frame: SharedFrame,
+    /// Last time this view painted or received input. The present loop drives
+    /// begin-frames at full refresh while recently active and throttles to a low
+    /// idle probe otherwise, so a static page costs almost no GPU.
+    last_active: Rc<Cell<Instant>>,
 }
 
 impl CefView {
@@ -242,7 +247,22 @@ impl CefView {
         if let Some(host) = browser.host() {
             host.set_windowless_frame_rate(WINDOWLESS_FRAME_RATE);
         }
-        Some(CefView { browser, frame })
+        Some(CefView {
+            browser,
+            frame,
+            last_active: Rc::new(Cell::new(Instant::now())),
+        })
+    }
+
+    /// Mark the view as active right now (a fresh paint or an input event). Keeps
+    /// begin-frames at full refresh rate for the active window that follows.
+    pub fn mark_active(&self) {
+        self.last_active.set(Instant::now());
+    }
+
+    /// Time since the view was last active.
+    pub fn idle_for(&self) -> std::time::Duration {
+        self.last_active.get().elapsed()
     }
 
     /// Request the next off-screen frame. With external_begin_frame_enabled CEF
@@ -284,6 +304,7 @@ impl CefView {
     }
 
     pub fn send_mouse_move(&self, x: i32, y: i32, leave: bool) {
+        self.mark_active();
         if let Some(host) = self.browser.host() {
             let event = MouseEvent { x, y, modifiers: 0 };
             host.send_mouse_move_event(Some(&event), leave as c_int);
@@ -291,6 +312,7 @@ impl CefView {
     }
 
     pub fn send_mouse_button(&self, x: i32, y: i32, button: MouseButtonType, mouse_up: bool) {
+        self.mark_active();
         if let Some(host) = self.browser.host() {
             let event = MouseEvent { x, y, modifiers: 0 };
             host.send_mouse_click_event(Some(&event), button, mouse_up as c_int, 1);
@@ -298,6 +320,7 @@ impl CefView {
     }
 
     pub fn send_scroll(&self, x: i32, y: i32, delta_x: i32, delta_y: i32) {
+        self.mark_active();
         if let Some(host) = self.browser.host() {
             let event = MouseEvent { x, y, modifiers: 0 };
             host.send_mouse_wheel_event(Some(&event), delta_x, delta_y);
@@ -306,6 +329,7 @@ impl CefView {
 
     /// Fire a RawKeyDown/KeyUp with a Windows virtual key code.
     pub fn send_key(&self, type_: KeyEventType, windows_key_code: i32) {
+        self.mark_active();
         if let Some(host) = self.browser.host() {
             let event = KeyEvent {
                 type_,
@@ -321,6 +345,7 @@ impl CefView {
 
     /// Fire Char events for text (one per utf16 code unit) — drives text input.
     pub fn send_text(&self, text: &str) {
+        self.mark_active();
         let Some(host) = self.browser.host() else {
             return;
         };
