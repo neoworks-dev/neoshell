@@ -20,6 +20,8 @@ vars:
   MONITOR_FLAG: '{{if .MONITOR}}--monitor {{.MONITOR}}{{end}}'
   # neobar-bg wallpaper daemon. Release for fast image scaling.
   BG_BIN: neobar-bg/target/release/neobar-bg
+  # neobar-settings standalone app (Tauri). Spawned by the core on the gear button.
+  SETTINGS_BIN: neobar-settings/target/release/neobar-settings
   # Wallpaper image to set, e.g. `task wallpaper WALLPAPER=~/pic.png`.
   WALLPAPER: '{{.WALLPAPER | default ""}}'
 
@@ -28,6 +30,8 @@ env:
   NEOBAR_PORT: '{{.NEOBAR_PORT | default "9876"}}'
   # Point the Go core at the release render host built by render:build.
   NEOBAR_RENDER_BIN: '{{.RENDER_BIN}}'
+  # Let the core launch the settings app the gear button opens.
+  NEOBAR_SETTINGS_BIN: '{{.SETTINGS_BIN}}'
 
 tasks:
   default:
@@ -59,8 +63,8 @@ tasks:
       - bun run build
 
   build:
-    desc: Build the render host, the wallpaper daemon, and the Go core
-    deps: [render:build, bg:build, core:build]
+    desc: Build the render host, daemons, the settings app, and the Go core
+    deps: [render:build, bg:build, settings:build, core:build]
 
   ui:dev:
     desc: Run the Vite dev server with HMR (port 5173)
@@ -76,7 +80,7 @@ tasks:
 
   dev:
     desc: Hot-reload dev — Vite + Go core + wallpaper daemon. Live-reloads the UI.
-    deps: [ui:dev, core:dev, bg]
+    deps: [settings:build, ui:dev, core:dev, bg]
 
   run:
     desc: Production-like — build the UI and serve it directly from the Go core
@@ -87,6 +91,12 @@ tasks:
   bg:build:
     desc: Build the neobar-bg wallpaper daemon (release)
     dir: neobar-bg
+    cmds:
+      - cargo build --release
+
+  settings:build:
+    desc: Build the neobar-settings app (Tauri; first build is slow — webkit2gtk)
+    dir: neobar-settings
     cmds:
       - cargo build --release
 
@@ -119,3 +129,4 @@ tasks:
       - rm -f neobar
       - cd render-host && cargo clean
       - cd neobar-bg && cargo clean
+      - cd neobar-settings && cargo clean
