@@ -49,14 +49,18 @@ const (
 
 // SurfaceSpec describes a layer-shell surface to create.
 type SurfaceSpec struct {
-	Role          string   `json:"role"`
-	URL           string   `json:"url"`
-	Monitor       string   `json:"monitor,omitempty"`
-	Layer         Layer    `json:"layer"`
-	Anchors       []Edge   `json:"anchors"`
-	Keyboard      Keyboard `json:"keyboard"`
-	ExclusiveEdge *Edge    `json:"exclusive_edge,omitempty"`
-	ExclusiveSize int      `json:"exclusive_size,omitempty"`
+	Role     string   `json:"role"`
+	URL      string   `json:"url"`
+	Monitor  string   `json:"monitor,omitempty"`
+	Layer    Layer    `json:"layer"`
+	Anchors  []Edge   `json:"anchors"`
+	Keyboard Keyboard `json:"keyboard"`
+	// Explicit size for surfaces that don't span their axis via anchors (e.g. a
+	// floating window). Zero lets the render host resolve it from the output.
+	Width         int   `json:"width,omitempty"`
+	Height        int   `json:"height,omitempty"`
+	ExclusiveEdge *Edge `json:"exclusive_edge,omitempty"`
+	ExclusiveSize int   `json:"exclusive_size,omitempty"`
 }
 
 // Event is a message from the render host to the core.
@@ -141,6 +145,8 @@ func (c *Client) CreateSurface(spec SurfaceSpec) error {
 		"layer":    spec.Layer,
 		"anchors":  spec.Anchors,
 		"keyboard": spec.Keyboard,
+		"width":    spec.Width,
+		"height":   spec.Height,
 	}
 	if spec.ExclusiveEdge != nil {
 		command["exclusive_edge"] = *spec.ExclusiveEdge

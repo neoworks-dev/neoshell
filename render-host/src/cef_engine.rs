@@ -275,6 +275,14 @@ impl CefView {
         }
     }
 
+    /// Close the underlying browser so destroying a surface frees its CEF
+    /// resources instead of leaving an off-screen browser running.
+    pub fn close(&self) {
+        if let Some(host) = self.browser.host() {
+            host.close_browser(1);
+        }
+    }
+
     /// Resize the rendered view; CEF repaints at the new size.
     pub fn resize(&self, width: i32, height: i32) {
         {

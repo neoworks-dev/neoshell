@@ -74,6 +74,25 @@ func stream(hub Broadcaster) error {
 	return fmt.Errorf("daemon closed the connection")
 }
 
+// SetWallpaper tells the daemon to load the image at path. Best-effort: returns
+// an error if the daemon is unreachable.
+func SetWallpaper(path string) error {
+	conn, err := net.Dial("unix", socketPath())
+	if err != nil {
+		return fmt.Errorf("connect daemon: %w", err)
+	}
+	defer conn.Close()
+
+	request, err := json.Marshal(map[string]string{"cmd": "img", "path": path})
+	if err != nil {
+		return err
+	}
+	if _, err := conn.Write(append(request, '\n')); err != nil {
+		return fmt.Errorf("send wallpaper: %w", err)
+	}
+	return nil
+}
+
 func socketPath() string {
 	runtime := os.Getenv("XDG_RUNTIME_DIR")
 	if runtime == "" {

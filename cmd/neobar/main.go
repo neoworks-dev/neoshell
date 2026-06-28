@@ -6,7 +6,9 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"sync"
 
+	"github.com/neoworks/neobar/internal/config"
 	"github.com/neoworks/neobar/internal/hyprland"
 	"github.com/neoworks/neobar/internal/renderhost"
 	"github.com/neoworks/neobar/internal/server"
@@ -76,9 +78,40 @@ Environment:
 		log.Fatalf("failed to connect to hyprland: %v", err)
 	}
 
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
+	}
+
 	hub := server.NewHub()
 	sys := system.New()
-	srv := server.New(hub, hypr, sys, *frontend)
+	srv := server.New(hub, hypr, sys, cfg, *frontend)
+
+	// Config is the shell's source of truth: broadcast every change so the bar and
+	// settings window react live, and drive the wallpaper daemon when it changes.
+	var wallpaperMu sync.Mutex
+	var lastWallpaper string
+	applyWallpaper := func() {
+		path, _ := cfg.Get("appearance.wallpaper")
+		wallpaperPath, _ := path.(string)
+		wallpaperMu.Lock()
+		defer wallpaperMu.Unlock()
+		if wallpaperPath == "" || wallpaperPath == lastWallpaper {
+			return
+		}
+		lastWallpaper = wallpaperPath
+		if err := wallpaper.SetWallpaper(wallpaperPath); err != nil {
+			log.Printf("apply wallpaper: %v", err)
+		}
+	}
+	cfg.OnChange(func(snapshot map[string]any) {
+		hub.Broadcast("config", snapshot)
+		applyWallpaper()
+	})
+	// Seed the cached topic state so subscribers hydrate immediately, and apply the
+	// persisted wallpaper once the daemon is reachable.
+	hub.Broadcast("config", cfg.Snapshot())
+	go applyWallpaper()
 
 	// When the frontend is served by the Go server, point the render host at it;
 	// otherwise fall back to the Vite dev server.

@@ -171,7 +171,9 @@ impl State {
             Command::Show { role } => log::info!("show {role} (stage: map/unmap TODO)"),
             Command::Hide { role } => log::info!("hide {role} (stage: map/unmap TODO)"),
             Command::Destroy { role } => {
-                self.surfaces.remove(&role);
+                if let Some(surface) = self.surfaces.remove(&role) {
+                    surface.view.close();
+                }
             }
         }
     }

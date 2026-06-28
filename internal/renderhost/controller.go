@@ -17,6 +17,14 @@ import (
 // reserves space via window:exclusive, exactly as in the WebKitGTK build.
 const barRole = "bar"
 
+// settingsRole is the floating shell window that hosts the settings UI. It loads
+// the same frontend with ?view=settings and is created/destroyed on demand.
+const settingsRole = "settings"
+
+// Default floating size for the settings window.
+const settingsWidth = 960
+const settingsHeight = 640
+
 // Controller spawns the render host and bridges hub window/region/exclusive
 // commands to it. It replaces internal/bar in the Ultralight render path.
 type Controller struct {
@@ -25,6 +33,8 @@ type Controller struct {
 	client  *Client
 	url     string
 	monitor string
+	// Open shell windows beyond the bar, keyed by role (e.g. "settings").
+	openWindows map[string]bool
 }
 
 // Run spawns the render host, creates the bar surface, and forwards hub commands
@@ -42,11 +52,12 @@ func Run(hub *server.Hub, url, monitor, binPath string) error {
 	}
 
 	controller := &Controller{
-		hub:     hub,
-		host:    host,
-		client:  client,
-		url:     url,
-		monitor: monitor,
+		hub:         hub,
+		host:        host,
+		client:      client,
+		url:         url,
+		monitor:     monitor,
+		openWindows: make(map[string]bool),
 	}
 	defer controller.shutdown()
 
@@ -75,9 +86,9 @@ func (c *Controller) shutdown() {
 // click-through; the frontend then defines its interactive regions.
 func (c *Controller) createBar() error {
 	spec := SurfaceSpec{
-		Role:     barRole,
-		URL:      c.url,
-		Monitor:  c.monitor,
+		Role:    barRole,
+		URL:     c.url,
+		Monitor: c.monitor,
 		// Top, not Overlay: a fullscreen window covers the Top layer but would
 		// draw under an Overlay surface, so Overlay keeps the bar visible over
 		// fullscreen apps. Top hides it there, which is what we want.
@@ -129,12 +140,56 @@ func (c *Controller) handle(msg ipc.WindowCommand) {
 		if err := c.client.SetInputRegion(barRole, msg.Rects); err != nil {
 			log.Printf("render host region: %v", err)
 		}
-	case "open", "close", "toggle":
-		// No-op in the overlay model: the frontend drives input regions, so
-		// panel open/close is expressed through window:region updates.
+	case "open":
+		c.openWindow(msg.Name)
+	case "close":
+		c.closeWindow(msg.Name)
+	case "toggle":
+		if c.openWindows[msg.Name] {
+			c.closeWindow(msg.Name)
+		} else {
+			c.openWindow(msg.Name)
+		}
 	default:
 		log.Printf("render host: unhandled window action %q", msg.Action)
 	}
+}
+
+// openWindow creates a floating shell window for a named role. Only known shell
+// windows are handled; the bar is always present and ignored here.
+func (c *Controller) openWindow(name string) {
+	if name != settingsRole {
+		return
+	}
+	if c.openWindows[name] {
+		return
+	}
+	spec := SurfaceSpec{
+		Role: settingsRole,
+		// Same frontend bundle, settings view. The URL already carries ?port=.
+		URL:      c.url + "&view=settings",
+		Monitor:  c.monitor,
+		Layer:    LayerOverlay,
+		Anchors:  nil, // unanchored + explicit size = the compositor centers it
+		Width:    settingsWidth,
+		Height:   settingsHeight,
+		Keyboard: KeyboardOnDemand,
+	}
+	if err := c.client.CreateSurface(spec); err != nil {
+		log.Printf("open %s window: %v", name, err)
+		return
+	}
+	c.openWindows[name] = true
+}
+
+func (c *Controller) closeWindow(name string) {
+	if !c.openWindows[name] {
+		return
+	}
+	if err := c.client.Destroy(name); err != nil {
+		log.Printf("close %s window: %v", name, err)
+	}
+	delete(c.openWindows, name)
 }
 
 // drainEvents logs render-host events (ready/log) so they are not lost.
