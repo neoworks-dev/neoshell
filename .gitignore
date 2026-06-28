@@ -8,6 +8,7 @@
 
 # Rust build artifacts
 /render-host/target/
+/neobar-bg/target/
 
 # Ultralight SDK (proprietary binary, fetched per machine)
 /render-host/lib/

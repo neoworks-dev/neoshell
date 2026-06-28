@@ -11,6 +11,7 @@ import (
 	"github.com/neoworks/neobar/internal/renderhost"
 	"github.com/neoworks/neobar/internal/server"
 	"github.com/neoworks/neobar/internal/system"
+	"github.com/neoworks/neobar/internal/wallpaper"
 )
 
 const defaultPort = 9876
@@ -90,6 +91,9 @@ Environment:
 	go srv.Listen(fmt.Sprintf(":%d", *port))
 	go hypr.EventLoop(hub)
 	go sys.Poll(hub)
+	// Bridge the wallpaper daemon's bar-strip colors to the frontend. Tolerates
+	// the daemon being absent; reconnects when it appears.
+	go wallpaper.Watch(hub)
 
 	// The frontend reads ?port to find the WebSocket regardless of where the page
 	// is served, so the render host's surface URL carries it too.
