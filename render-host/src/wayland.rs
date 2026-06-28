@@ -178,7 +178,11 @@ impl State {
 
     fn create_surface(&mut self, spec: SurfaceSpec) {
         let wl_surface = self.compositor_state.create_surface(&self.qh);
-        let output = self.find_output(&spec.monitor);
+        // Fall back to the first output so we can read its size even when no
+        // monitor was named; sizing below needs a concrete output.
+        let output = self
+            .find_output(&spec.monitor)
+            .or_else(|| self.output_state.outputs().next());
 
         // Per-role namespace so the compositor can target it, e.g.
         // `layerrule = blur, neobar.bar`.
@@ -200,8 +204,11 @@ impl State {
                 Edge::Top | Edge::Bottom => layer.set_size(0, spec.exclusive_size as u32),
                 Edge::Left | Edge::Right => layer.set_size(spec.exclusive_size as u32, 0),
             }
-        } else if spec.width > 0 || spec.height > 0 {
-            layer.set_size(spec.width.max(0) as u32, spec.height.max(0) as u32);
+        } else {
+            let (width, height) = self.resolve_size(&spec, output.as_ref());
+            if width > 0 || height > 0 {
+                layer.set_size(width, height);
+            }
         }
 
         // Provisional view size; resized on the first configure.
@@ -253,6 +260,51 @@ impl State {
         }
         log::warn!("output {connector:?} not found, using default");
         None
+    }
+
+    /// Resolve the explicit surface size. A zero dimension is only legal when the
+    /// surface is anchored to both opposing edges (the compositor then fills it);
+    /// otherwise we fill it from the output. This lets a bar anchored to top+left+
+    /// right declare a real height so it can reserve an exclusive zone — a surface
+    /// anchored to all four edges has its exclusive zone ignored by wlroots.
+    fn resolve_size(&self, spec: &SurfaceSpec, output: Option<&wl_output::WlOutput>) -> (u32, u32) {
+        let mut width = spec.width.max(0) as u32;
+        let mut height = spec.height.max(0) as u32;
+
+        let spans_horizontally =
+            spec.anchors.contains(&Edge::Left) && spec.anchors.contains(&Edge::Right);
+        let spans_vertically =
+            spec.anchors.contains(&Edge::Top) && spec.anchors.contains(&Edge::Bottom);
+        let needs_width = width == 0 && !spans_horizontally;
+        let needs_height = height == 0 && !spans_vertically;
+        if !needs_width && !needs_height {
+            return (width, height);
+        }
+
+        if let Some((output_width, output_height)) =
+            output.and_then(|output| self.output_logical_size(output))
+        {
+            if needs_width {
+                width = output_width as u32;
+            }
+            if needs_height {
+                height = output_height as u32;
+            }
+        }
+        (width, height)
+    }
+
+    /// Output size in layer-shell (logical) coordinates, falling back to the
+    /// current mode's pixel dimensions when the logical size is not advertised.
+    fn output_logical_size(&self, output: &wl_output::WlOutput) -> Option<(i32, i32)> {
+        let info = self.output_state.info(output)?;
+        if let Some(size) = info.logical_size {
+            return Some(size);
+        }
+        info.modes
+            .iter()
+            .find(|mode| mode.current)
+            .map(|mode| mode.dimensions)
     }
 
     fn present(&mut self, wl_surface: &wl_surface::WlSurface) {

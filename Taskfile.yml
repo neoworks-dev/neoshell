@@ -1,0 +1,92 @@
+# Taskfile for neobar-shell. Requires go-task (https://taskfile.dev).
+#
+#   task dev     hot-reload dev: Vite (HMR) + Go core loading localhost:5173
+#   task run     production: build UI + serve it from the Go core
+#   task build   compile the render host and the Go core
+#
+# The Go core spawns the render host, so the render host must be built first.
+version: "3"
+
+vars:
+  UI_DIR: ../neobar-ui
+  # Release build: the render host's per-frame pixel copy is the hot path, and a
+  # debug build janks at 144Hz. It rarely changes, so the extra compile is cheap.
+  RENDER_BIN: render-host/target/release/neobar-render
+  # Monitor connector to run on, e.g. `task dev MONITOR=DP-1`. Empty = default.
+  # Run `task monitors` to list connectors.
+  MONITOR: '{{.MONITOR | default ""}}'
+  # Expands to the --monitor flag only when MONITOR is set, so the empty default
+  # leaves the binary on its own default monitor.
+  MONITOR_FLAG: '{{if .MONITOR}}--monitor {{.MONITOR}}{{end}}'
+
+env:
+  # HTTP/WebSocket port for the Go core.
+  NEOBAR_PORT: '{{.NEOBAR_PORT | default "9876"}}'
+  # Point the Go core at the release render host built by render:build.
+  NEOBAR_RENDER_BIN: '{{.RENDER_BIN}}'
+
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  install:
+    desc: Install UI dependencies (bun)
+    dir: "{{.UI_DIR}}"
+    cmds:
+      - bun install
+
+  render:build:
+    desc: Build the Rust render host in release (CEF, downloads ~200MB on first build)
+    dir: render-host
+    cmds:
+      - cargo build --release
+
+  core:build:
+    desc: Build the Go core binary (./neobar)
+    cmds:
+      - go build -o neobar ./cmd/neobar
+
+  ui:build:
+    desc: Build the UI to neobar-ui/dist
+    dir: "{{.UI_DIR}}"
+    cmds:
+      - bun run build
+
+  build:
+    desc: Build the render host and the Go core
+    deps: [render:build, core:build]
+
+  ui:dev:
+    desc: Run the Vite dev server with HMR (port 5173)
+    dir: "{{.UI_DIR}}"
+    cmds:
+      - bun run dev
+
+  core:dev:
+    desc: Run the Go core (no --frontend, so the render host loads Vite on :5173)
+    deps: [render:build]
+    cmds:
+      - go run ./cmd/neobar {{.MONITOR_FLAG}}
+
+  dev:
+    desc: Hot-reload dev — Vite + Go core. Edit UI and it live-reloads in the shell.
+    deps: [ui:dev, core:dev]
+
+  run:
+    desc: Production-like — build the UI and serve it directly from the Go core
+    deps: [render:build, ui:build]
+    cmds:
+      - go run ./cmd/neobar --frontend {{.UI_DIR}}/dist {{.MONITOR_FLAG}}
+
+  monitors:
+    desc: List monitor connectors usable with MONITOR=
+    cmds:
+      - hyprctl monitors -j | jq -r '.[].name'
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -f neobar
+      - cd render-host && cargo clean

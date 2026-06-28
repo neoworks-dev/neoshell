@@ -14,12 +14,12 @@ use std::rc::Rc;
 use cef::args::Args;
 use cef::rc::Rc as _;
 use cef::{
-    browser_host_create_browser_sync, do_message_loop_work, initialize, shutdown, wrap_client,
-    wrap_display_handler, wrap_load_handler, wrap_render_handler, Browser, BrowserSettings,
-    CefString, Client, DisplayHandler, Errorcode, Frame, ImplBrowser, ImplBrowserHost, ImplClient,
-    ImplDisplayHandler, ImplLoadHandler, ImplRenderHandler, KeyEvent, KeyEventType, LoadHandler,
-    LogSeverity, MouseButtonType,
-    MouseEvent, PaintElementType, Rect, RenderHandler, Settings, WindowInfo, WrapClient,
+    browser_host_create_browser_sync, do_message_loop_work, initialize, shutdown, wrap_app,
+    wrap_client, wrap_display_handler, wrap_load_handler, wrap_render_handler, App, Browser,
+    BrowserSettings, CefString, Client, CommandLine, DisplayHandler, Errorcode, Frame, ImplApp,
+    ImplBrowser, ImplBrowserHost, ImplClient, ImplCommandLine, ImplDisplayHandler, ImplLoadHandler,
+    ImplRenderHandler, KeyEvent, KeyEventType, LoadHandler, LogSeverity, MouseButtonType,
+    MouseEvent, PaintElementType, Rect, RenderHandler, Settings, WindowInfo, WrapApp, WrapClient,
     WrapDisplayHandler, WrapLoadHandler, WrapRenderHandler,
 };
 
@@ -218,7 +218,15 @@ impl CefView {
         let load_handler = NeobarLoadHandler::new();
         let mut client = NeobarClient::new(render_handler, display_handler, load_handler);
 
-        let window_info = WindowInfo::default().set_as_windowless(0);
+        // external_begin_frame_enabled lifts CEF's ~60fps internal OSR pacing:
+        // with it, paints (and the page's requestAnimationFrame) are driven by our
+        // send_external_begin_frame calls instead of CEF's internal timer, so the
+        // surface can render at the display's refresh rate. The present loop sends
+        // one begin-frame per Wayland frame callback (see surface.rs).
+        let window_info = WindowInfo {
+            external_begin_frame_enabled: 1,
+            ..WindowInfo::default().set_as_windowless(0)
+        };
         let url = CefString::from(url);
         let browser_settings = BrowserSettings::default();
 
@@ -235,6 +243,16 @@ impl CefView {
             host.set_windowless_frame_rate(WINDOWLESS_FRAME_RATE);
         }
         Some(CefView { browser, frame })
+    }
+
+    /// Request the next off-screen frame. With external_begin_frame_enabled CEF
+    /// only paints in response to this, so it must be called once per display
+    /// frame to drive rendering (and the page's requestAnimationFrame) at refresh
+    /// rate rather than CEF's ~60fps internal cap.
+    pub fn send_begin_frame(&self) {
+        if let Some(host) = self.browser.host() {
+            host.send_external_begin_frame();
+        }
     }
 
     /// Resize the rendered view; CEF repaints at the new size.
@@ -320,6 +338,77 @@ impl CefView {
     }
 }
 
+wrap_app! {
+    pub struct NeobarApp;
+
+    impl App {
+        fn on_before_command_line_processing(
+            &self,
+            _process_type: Option<&CefString>,
+            command_line: Option<&mut CommandLine>,
+        ) {
+            if let Some(command_line) = command_line {
+                apply_memory_switches(command_line);
+            }
+        }
+    }
+}
+
+/// Append Chromium switches that trim CEF's resident memory. CEF is full Chromium
+/// and spins up several processes (browser, gpu, renderer, utility) plus many
+/// background subsystems a desktop shell never uses; disabling them and capping
+/// the renderer count is the bulk of the saving.
+///
+/// GPU compositing stays on by default because animation smoothness is the whole
+/// reason for CEF. Two env vars trade smoothness for more RAM:
+///   NEOBAR_CEF_DISABLE_GPU=1       software rendering, drops the GPU process
+///   NEOBAR_CEF_SINGLE_PROCESS=1    everything in one process (lowest RAM, less stable)
+fn apply_memory_switches(command_line: &mut CommandLine) {
+    const SWITCHES: &[&str] = &[
+        "disable-extensions",
+        "disable-component-update",
+        "disable-background-networking",
+        "disable-breakpad",
+        "disable-domain-reliability",
+        "no-pings",
+        // No zygote fork server: one fewer resident process. Safe with no-sandbox.
+        "no-zygote",
+    ];
+    for switch in SWITCHES {
+        command_line.append_switch(Some(&CefString::from(*switch)));
+    }
+
+    // One page, so one renderer is enough; the default lets Chromium spawn more.
+    append_switch_value(command_line, "renderer-process-limit", "1");
+
+    // Background subsystems a shell never uses; each costs memory/threads.
+    append_switch_value(
+        command_line,
+        "disable-features",
+        "Translate,OptimizationHints,MediaRouter,InterestFeedContentSuggestions,\
+         CalculateNativeWinOcclusion,OptimizationTargetPrediction,DialMediaRouteProvider,\
+         AcceptCHFrame,GlobalMediaControls",
+    );
+
+    if std::env::var_os("NEOBAR_CEF_DISABLE_GPU").is_some() {
+        command_line.append_switch(Some(&CefString::from("disable-gpu")));
+        command_line.append_switch(Some(&CefString::from("disable-gpu-compositing")));
+    }
+    if std::env::var_os("NEOBAR_CEF_SINGLE_PROCESS").is_some() {
+        command_line.append_switch(Some(&CefString::from("single-process")));
+    }
+}
+
+fn append_switch_value(command_line: &mut CommandLine, name: &str, value: &str) {
+    command_line.append_switch_with_value(Some(&CefString::from(name)), Some(&CefString::from(value)));
+}
+
+/// Build the CEF app handler shared by the subprocess launcher and the browser
+/// process so the same switches apply everywhere.
+pub fn new_app() -> App {
+    NeobarApp::new()
+}
+
 /// The CEF runtime (initialized once per process).
 pub struct Engine;
 
@@ -332,7 +421,13 @@ impl Engine {
             no_sandbox: 1,
             ..Default::default()
         };
-        let ok = initialize(Some(args.as_main_args()), Some(&settings), None, std::ptr::null_mut());
+        let mut app = new_app();
+        let ok = initialize(
+            Some(args.as_main_args()),
+            Some(&settings),
+            Some(&mut app),
+            std::ptr::null_mut(),
+        );
         log::info!("cef initialize -> {ok}");
         Engine
     }
