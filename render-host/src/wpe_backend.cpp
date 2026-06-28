@@ -266,9 +266,18 @@ bool neobar_display_tick_vblank(WPEDisplay* display) {
     auto* self = NEOBAR_DISPLAY(display);
     if (!self->screen) return false;
     auto* obs = NEOBAR_SYNC_OBSERVER(neobar_screen_get_sync_observer(WPE_SCREEN(self->screen)));
-    if (!obs->active) return false;
+    // Fire the registered callback even if WebKit "stopped" the observer: a
+    // one-shot input-driven repaint (e.g. CSS :hover) needs a sync to run and
+    // present, but WebKit does not reliably restart the observer for it.
     auto* oc = WPE_SCREEN_SYNC_OBSERVER_GET_CLASS(obs);
     if (oc->sync) oc->sync(WPE_SCREEN_SYNC_OBSERVER(obs));
-    return true;
+    return obs->active;
+}
+
+bool neobar_display_observer_active(WPEDisplay* display) {
+    auto* self = NEOBAR_DISPLAY(display);
+    if (!self->screen) return false;
+    auto* obs = NEOBAR_SYNC_OBSERVER(neobar_screen_get_sync_observer(WPE_SCREEN(self->screen)));
+    return obs->active;
 }
 
