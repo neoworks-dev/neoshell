@@ -2,27 +2,21 @@
 name = "neobar-render"
 version = "0.1.0"
 edition = "2021"
-description = "Ultralight OSR render host for neobar — paints HTML views into wlr-layer-shell surfaces"
+description = "CEF off-screen render host for neobar — paints HTML views into wlr-layer-shell surfaces"
 
 [[bin]]
 name = "neobar-render"
 path = "src/main.rs"
 
 [dependencies]
-# Ultralight bindings. ul-next is the most actively maintained Rust wrapper.
-# Stage 2 uses its CPU surface (bitmap) path. The GPU/dmabuf path (stage 3.5)
-# would additionally need a custom GPUDriver; confirm ul-next exposes it then.
-# The actual .so libraries come from the proprietary SDK (see README.md).
-ul-next = "0.4"
+# Chromium Embedded Framework (BSD, uncapped). Off-screen rendering via the CPU
+# OnPaint path on Linux (OnAcceleratedPaint/dmabuf is Windows-centric). The build
+# script downloads the ~200MB CEF binaries to ~/.local/share/cef.
+cef = "149.3"
 
-# Wayland: connection + protocol types.
+# Wayland + wlr-layer-shell + wl_shm + seat/input (reused from the Ultralight host).
 wayland-client = "0.31"
-# smithay-client-toolkit bundles wlr-layer-shell, wl_shm slot pools, seat/input,
-# and the registry/handler boilerplate.
 smithay-client-toolkit = "0.19"
-
-# Event loop. WaylandSource + a calloop channel let the control socket and the
-# Wayland frame callbacks be serviced in one loop.
 calloop = "0.14"
 calloop-wayland-source = "0.4"
 
@@ -33,11 +27,6 @@ serde_json = "1"
 # Logging.
 log = "0.4"
 env_logger = "0.11"
-
-# dmabuf/GPU path (stage 3.5) — uncomment when swapping shm for zero-copy:
-# khronos-egl = { version = "6", features = ["dynamic"] }
-# gbm = "0.15"
-# drm = "0.14"
 
 [profile.release]
 opt-level = 3
