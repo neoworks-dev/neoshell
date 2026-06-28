@@ -8,23 +8,23 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/neoworks/neobar/internal/config"
-	"github.com/neoworks/neobar/internal/hyprland"
-	"github.com/neoworks/neobar/internal/renderhost"
-	"github.com/neoworks/neobar/internal/server"
-	"github.com/neoworks/neobar/internal/system"
-	"github.com/neoworks/neobar/internal/wallpaper"
+	"github.com/neoworks/neoshell/internal/config"
+	"github.com/neoworks/neoshell/internal/hyprland"
+	"github.com/neoworks/neoshell/internal/renderhost"
+	"github.com/neoworks/neoshell/internal/server"
+	"github.com/neoworks/neoshell/internal/system"
+	"github.com/neoworks/neoshell/internal/wallpaper"
 )
 
 const defaultPort = 9876
 
 func main() {
-	fs := flag.NewFlagSet("neobar", flag.ExitOnError)
+	fs := flag.NewFlagSet("neoshell", flag.ExitOnError)
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, `neobar - Hyprland overlay bar
+		fmt.Fprintf(os.Stderr, `neoshell - Hyprland overlay bar
 
 Usage:
-  neobar [options]
+  neoshell [options]
 
 Options:
   --monitor string    monitor connector to run on (e.g. HDMI-A-1); empty = default
@@ -34,15 +34,15 @@ Options:
   --help, -h          show this help and exit
 
 Environment:
-  NEOBAR_MONITOR    default for --monitor
-  NEOBAR_PORT       default for --port
-  NEOBAR_FRONTEND   default for --frontend
+  NEOSHELL_MONITOR    default for --monitor
+  NEOSHELL_PORT       default for --port
+  NEOSHELL_FRONTEND   default for --frontend
 `, defaultPort)
 	}
 
 	// Monitor connector to display the bar on (e.g. "HDMI-A-1").
 	// Empty means the first/default monitor. Flag overrides the env var.
-	monitor := fs.String("monitor", os.Getenv("NEOBAR_MONITOR"),
+	monitor := fs.String("monitor", os.Getenv("NEOSHELL_MONITOR"),
 		"monitor connector name to run on (e.g. HDMI-A-1); empty = default")
 
 	// Port for the embedded HTTP/WebSocket server. The webview also loads the
@@ -52,7 +52,7 @@ Environment:
 
 	// Path to a built frontend directory. When set, the Go server serves it
 	// directly so no separate dev server is required.
-	frontend := fs.String("frontend", os.Getenv("NEOBAR_FRONTEND"),
+	frontend := fs.String("frontend", os.Getenv("NEOSHELL_FRONTEND"),
 		"path to a built frontend directory to serve directly")
 	fs.StringVar(frontend, "f", *frontend, "shorthand for --frontend")
 
@@ -136,9 +136,9 @@ Environment:
 	}
 }
 
-// envPort returns the port from NEOBAR_PORT, or defaultPort if unset/invalid.
+// envPort returns the port from NEOSHELL_PORT, or defaultPort if unset/invalid.
 func envPort() int {
-	if v := os.Getenv("NEOBAR_PORT"); v != "" {
+	if v := os.Getenv("NEOSHELL_PORT"); v != "" {
 		if p, err := strconv.Atoi(v); err == nil {
 			return p
 		}

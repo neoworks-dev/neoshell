@@ -1,0 +1,16 @@
+{
+  "name": "neoshell",
+  "private": true,
+  "type": "module",
+  "description": "neoshell — a Wayland desktop shell (bar, desktop, widgets) rendered via a C++/WPE host, driven by a Go core.",
+  "workspaces": [
+    "apps/ui",
+    "packages/sdk"
+  ],
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

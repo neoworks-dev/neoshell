@@ -22,9 +22,9 @@ static std::string socket_path() {
     const char* runtime = getenv("XDG_RUNTIME_DIR");
     char buf[256];
     if (runtime && *runtime)
-        snprintf(buf, sizeof(buf), "%s/neobar-render.sock", runtime);
+        snprintf(buf, sizeof(buf), "%s/neoshell-render.sock", runtime);
     else
-        snprintf(buf, sizeof(buf), "/run/user/%d/neobar-render.sock", getuid());
+        snprintf(buf, sizeof(buf), "/run/user/%d/neoshell-render.sock", getuid());
     return buf;
 }
 

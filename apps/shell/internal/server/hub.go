@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/neoworks/neobar/internal/ipc"
+	"github.com/neoworks/neoshell/internal/ipc"
 )
 
 // OutMessage is sent to WebSocket clients.

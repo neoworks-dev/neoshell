@@ -21,13 +21,13 @@ real UI. Because it is full Chromium, **every web-compat shim the Ultralight hos
 
 ## Architecture (unchanged across engines)
 
-The frontend (`neobar-ui`, Svelte) and the Go core's WebSocket IPC are **unchanged**. The
+The frontend (`neoshell-ui`, Svelte) and the Go core's WebSocket IPC are **unchanged**. The
 frontend loads `http://localhost:<port>/` and opens `/ws` for all shell logic (system state,
 hyprland dispatch, run/watch, etc.). Only the render/engine layer was swapped.
 
 ```
   ┌─────────────────────────┐         ┌──────────────────────────────┐
-  │ neobar-core (Go)         │         │ neobar-render (Rust)         │
+  │ neoshell-core (Go)         │         │ neoshell-render (Rust)         │
   │                          │ control │                              │
   │  WS hub  ── frontend IPC │ socket  │  CEF off-screen view / role  │
   │  hyprland IPC            │◄───────►│  owns wlr-layer-shell surface│
@@ -68,12 +68,12 @@ hyprland dispatch, run/watch, etc.). Only the render/engine layer was swapped.
   the current region ghosts.
 - **Sandbox.** `no_sandbox` (self-contained personal shell, avoids the setuid helper).
 - **Binaries.** The `cef` crate's build script downloads ~200 MB of CEF binaries to the
-  `cef-dll-sys` build output. `internal/renderhost/host.go` resolves that dir (or `NEOBAR_CEF_PATH`)
+  `cef-dll-sys` build output. `internal/renderhost/host.go` resolves that dir (or `NEOSHELL_CEF_PATH`)
   and sets `LD_LIBRARY_PATH` so the host and its subprocesses find `libcef.so` + resources.
 
 ## Control protocol (Go core → render host)
 
-Newline-delimited JSON over a unix socket (`$XDG_RUNTIME_DIR/neobar-render.sock`). The Go type is
+Newline-delimited JSON over a unix socket (`$XDG_RUNTIME_DIR/neoshell-render.sock`). The Go type is
 `internal/renderhost.Command`; the Rust type is `protocol::Command`. Keep them in sync. Unchanged
 from the Ultralight host — the protocol is engine-agnostic.
 
@@ -92,7 +92,7 @@ from the Ultralight host — the protocol is engine-agnostic.
       URL, `on_paint` fires with a sane buffer.
 - [x] **C2. One surface** — `on_paint` buffers feed the `wl_shm` present for one layer surface; a
       test page renders on a real layer-shell surface at 144.
-- [x] **C3. Real UI + fps gate** — the real neobar-ui renders correctly; present loop runs
+- [x] **C3. Real UI + fps gate** — the real neoshell-ui renders correctly; present loop runs
       uncapped well above 144 (panel caps display). The whole point: CEF is not throttled.
 - [x] **C4. Input** — wl_pointer/keyboard → CEF `send_mouse_*` / `send_key_event`; click-through
       via input regions. Native hover works (no CSS shim).
@@ -110,11 +110,11 @@ Full Chromium — no shims. The Ultralight host needed an `HTMLMediaElement`/`Me
 (Svelte 5 event delegation did `instanceof HTMLMediaElement`), a server-side `@media (hover: hover)`
 rewrite, and `accent-color` workarounds. None apply under CEF; `oklch`, `:has()`, container
 queries, `accent-color`, native form controls, hover variants, and `backdrop-filter` all work
-natively. Glass blur is still done compositor-side (`layerrule = blur, neobar.*`).
+natively. Glass blur is still done compositor-side (`layerrule = blur, neoshell.*`).
 
 ## Standalone probe
 
-`render-host/target/debug/neobar-render --test-url <URL>` opens a centered overlay loading the
+`render-host/target/debug/neoshell-render --test-url <URL>` opens a centered overlay loading the
 URL with no Go core; the special value `fps` loads a built-in RAF counter + moving box to eyeball
 smoothness against the host's present-rate log.
 

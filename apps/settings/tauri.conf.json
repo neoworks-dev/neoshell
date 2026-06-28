@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "neobar-settings",
+  "productName": "neoshell-settings",
   "version": "0.1.0",
-  "identifier": "dev.neobar.settings",
+  "identifier": "dev.neoshell.settings",
   "build": {
     "frontendDist": "./dist"
   },

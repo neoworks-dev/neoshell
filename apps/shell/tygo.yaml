@@ -1,3 +1,3 @@
 packages:
-  - path: "github.com/neoworks/neobar/internal/hyprland"
-    output_path: "../neobar-ui/src/lib/sdk/types.ts"
+  - path: "github.com/neoworks/neoshell/internal/hyprland"
+    output_path: "../neoshell-ui/src/lib/sdk/types.ts"

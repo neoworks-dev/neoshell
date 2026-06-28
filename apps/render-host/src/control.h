@@ -1,4 +1,4 @@
-// Control protocol: a listening unix socket at $XDG_RUNTIME_DIR/neobar-render.sock
+// Control protocol: a listening unix socket at $XDG_RUNTIME_DIR/neoshell-render.sock
 // speaking newline-delimited JSON. Drop-in replacement for the Rust render-host's
 // protocol (see render-host/src/protocol.rs). The Go core dials in as the client.
 #pragma once

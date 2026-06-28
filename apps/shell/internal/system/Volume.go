@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/neoworks/neobar/internal/shell"
+	"github.com/neoworks/neoshell/internal/shell"
 )
 
 type VolumeState struct {

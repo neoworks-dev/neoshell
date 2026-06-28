@@ -19,19 +19,19 @@ using RenderCallback =
 
 // Create the custom display. drm_render_node e.g. "/dev/dri/renderD128",
 // drm_primary_node e.g. "/dev/dri/card1". width/height/refresh seed the screen.
-WPEDisplay* neobar_display_new(const char* drm_primary_node,
+WPEDisplay* neoshell_display_new(const char* drm_primary_node,
                                const char* drm_render_node,
                                int width, int height, int refresh_mhz);
 
 // Install the per-frame delivery callback.
-void neobar_display_set_render_callback(WPEDisplay* display, RenderCallback cb);
+void neoshell_display_set_render_callback(WPEDisplay* display, RenderCallback cb);
 
 // Fire one vblank: ticks the screen's sync observer so WPE advances a frame.
 // Returns true if the observer was active (WebKit wanted frames). One shared
 // observer drives all views; idle views produce no frames, so this is cheap.
-bool neobar_display_tick_vblank(WPEDisplay* display);
+bool neoshell_display_tick_vblank(WPEDisplay* display);
 
 // True while WebKit wants to render (it started the sync observer). Used to keep
 // ticking — so input-driven repaints (e.g. CSS :hover) render promptly — without
 // ticking when the page is fully idle.
-bool neobar_display_observer_active(WPEDisplay* display);
+bool neoshell_display_observer_active(WPEDisplay* display);

@@ -1,11 +1,11 @@
 [package]
-name = "neobar-settings"
+name = "neoshell-settings"
 version = "0.1.0"
 edition = "2021"
-description = "Standalone settings app for neobar — a Tauri WebView window over the WS bus"
+description = "Standalone settings app for neoshell — a Tauri WebView window over the WS bus"
 
 [[bin]]
-name = "neobar-settings"
+name = "neoshell-settings"
 path = "src/main.rs"
 
 [build-dependencies]

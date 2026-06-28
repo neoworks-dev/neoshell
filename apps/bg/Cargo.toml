@@ -1,11 +1,11 @@
 [package]
-name = "neobar-bg"
+name = "neoshell-bg"
 version = "0.1.0"
 edition = "2021"
-description = "Wayland wallpaper daemon for neobar — paints a background layer and samples the colors behind the bar"
+description = "Wayland wallpaper daemon for neoshell — paints a background layer and samples the colors behind the bar"
 
 [[bin]]
-name = "neobar-bg"
+name = "neoshell-bg"
 path = "src/main.rs"
 
 [dependencies]

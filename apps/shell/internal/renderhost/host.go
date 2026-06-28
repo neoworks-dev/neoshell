@@ -12,13 +12,13 @@ type Host struct {
 	cmd *exec.Cmd
 }
 
-// DefaultBinPath returns the render-host binary path from NEOBAR_RENDER_BIN, or a
+// DefaultBinPath returns the render-host binary path from NEOSHELL_RENDER_BIN, or a
 // sensible default relative to the working directory.
 func DefaultBinPath() string {
-	if path := os.Getenv("NEOBAR_RENDER_BIN"); path != "" {
+	if path := os.Getenv("NEOSHELL_RENDER_BIN"); path != "" {
 		return path
 	}
-	return "render-host/neobar-render"
+	return "apps/render-host/neoshell-render"
 }
 
 // SpawnHost launches the C++/WPE render-host. WPE uses system libraries, so no

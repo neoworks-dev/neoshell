@@ -17,7 +17,7 @@ PROTO_SRCS := $(addprefix $(GEN)/,$(addsuffix -protocol.c,$(PROTOCOLS)))
 SRCS := src/main.cpp src/wpe_backend.cpp src/present.cpp src/control.cpp
 OBJS := $(SRCS:.cpp=.o)
 
-all: neobar-render
+all: neoshell-render
 
 $(GEN):
 	mkdir -p $(GEN)
@@ -36,7 +36,7 @@ $(OBJS): $(PROTO_HDRS)
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -I$(GEN) -c $< -o $@
 
-neobar-render: $(OBJS) $(PROTO_SRCS:.c=.o)
+neoshell-render: $(OBJS) $(PROTO_SRCS:.c=.o)
 	$(CXX) $(OBJS) $(PROTO_SRCS:.c=.o) $(LDFLAGS) -o $@
 
 # Compile generated protocol code as C: in C++ `const` globals get internal
@@ -45,6 +45,6 @@ $(GEN)/%-protocol.o: $(GEN)/%-protocol.c
 	gcc $(shell pkg-config --cflags wayland-client) -I$(GEN) -O1 -c $< -o $@
 
 clean:
-	rm -rf $(GEN) src/*.o neobar-render
+	rm -rf $(GEN) src/*.o neoshell-render
 
 .PHONY: all clean

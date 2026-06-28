@@ -222,7 +222,7 @@ impl State {
             &self.qh,
             wl_surface,
             SctkLayer::Background,
-            Some("neobar.wallpaper".to_string()),
+            Some("neoshell.wallpaper".to_string()),
             Some(&output),
         );
         layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);

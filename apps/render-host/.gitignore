@@ -1,4 +1,4 @@
 # Build artifacts
 gen/
 src/*.o
-neobar-render
+neoshell-render

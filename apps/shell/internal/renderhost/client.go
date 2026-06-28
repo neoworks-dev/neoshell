@@ -15,7 +15,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/neoworks/neobar/internal/ipc"
+	"github.com/neoworks/neoshell/internal/ipc"
 )
 
 // Layer mirrors zwlr_layer_shell_v1 layers.
@@ -84,7 +84,7 @@ func DefaultSocketPath() string {
 	if runtime == "" {
 		runtime = fmt.Sprintf("/run/user/%d", os.Getuid())
 	}
-	return runtime + "/neobar-render.sock"
+	return runtime + "/neoshell-render.sock"
 }
 
 // Dial connects to the render host at the given socket path and starts reading

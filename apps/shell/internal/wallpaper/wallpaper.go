@@ -1,4 +1,4 @@
-// Package wallpaper bridges the neobar-bg wallpaper daemon to the WebSocket hub.
+// Package wallpaper bridges the neoshell-bg wallpaper daemon to the WebSocket hub.
 // It subscribes to the daemon's bar-strip gradient stops and rebroadcasts them
 // on the "theme:bar" topic so the frontend can tint the bar to the wallpaper.
 package wallpaper
@@ -38,7 +38,7 @@ type barColors struct {
 // Watch connects to the daemon, subscribes to color updates, and rebroadcasts
 // them. Blocks and reconnects forever; run in a goroutine. The daemon may not be
 // running yet, so failures are retried quietly — only the first failure in a
-// down period is logged, to avoid spamming until neobar-bg appears.
+// down period is logged, to avoid spamming until neoshell-bg appears.
 func Watch(hub Broadcaster) {
 	announcedDown := false
 	for {
@@ -48,7 +48,7 @@ func Watch(hub Broadcaster) {
 			announcedDown = false
 		}
 		if err != nil && !announcedDown {
-			log.Printf("wallpaper: neobar-bg not connected (%v); start it with `task bg`", err)
+			log.Printf("wallpaper: neoshell-bg not connected (%v); start it with `task bg`", err)
 			announcedDown = true
 		}
 		time.Sleep(reconnectWait)
@@ -63,7 +63,7 @@ func stream(hub Broadcaster) (bool, error) {
 		return false, fmt.Errorf("connect daemon: %w", err)
 	}
 	defer conn.Close()
-	log.Printf("wallpaper: connected to neobar-bg")
+	log.Printf("wallpaper: connected to neoshell-bg")
 
 	if _, err := conn.Write([]byte(`{"cmd":"subscribe"}` + "\n")); err != nil {
 		return true, fmt.Errorf("subscribe: %w", err)
@@ -109,5 +109,5 @@ func socketPath() string {
 	if runtime == "" {
 		runtime = fmt.Sprintf("/run/user/%d", os.Getuid())
 	}
-	return filepath.Join(runtime, "neobar-bg.sock")
+	return filepath.Join(runtime, "neoshell-bg.sock")
 }

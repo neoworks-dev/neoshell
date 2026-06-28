@@ -1767,7 +1767,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "neobar-settings"
+name = "neoshell-settings"
 version = "0.1.0"
 dependencies = [
  "tauri",
