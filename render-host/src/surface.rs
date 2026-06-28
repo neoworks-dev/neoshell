@@ -11,9 +11,19 @@ use smithay_client_toolkit::shm::Shm;
 use wayland_client::protocol::wl_shm;
 use wayland_client::QueueHandle;
 
+use std::time::{Duration, Instant};
+
 use crate::cef_engine::CefView;
 use crate::protocol::{Edge, Keyboard, Layer};
 use crate::wayland::State;
+
+/// While the view painted or took input within this window, begin-frames run at
+/// full refresh rate for smooth animation.
+const ACTIVE_WINDOW: Duration = Duration::from_millis(250);
+
+/// When idle, send a begin-frame only this often (~10Hz) to catch the next
+/// change. Keeps idle GPU near zero while staying responsive.
+const IDLE_PROBE_PERIOD: Duration = Duration::from_millis(100);
 
 /// Resolved spec for creating a surface (from `Command::Create`).
 pub struct SurfaceSpec {
@@ -43,6 +53,8 @@ pub struct ManagedSurface {
     /// Dirty region from the previous present. We alternate two shm slots, so a
     /// slot reused now is two frames stale; damaging current ∪ previous covers it.
     prev_dirty: Option<(i32, i32, i32, i32)>,
+    /// Last time an idle begin-frame probe was sent (see present()).
+    last_idle_probe: Instant,
 }
 
 impl ManagedSurface {
@@ -58,6 +70,7 @@ impl ManagedSurface {
             mapped: false,
             last_generation: 0,
             prev_dirty: None,
+            last_idle_probe: Instant::now(),
         }
     }
 
@@ -84,14 +97,29 @@ impl ManagedSurface {
             return false;
         }
 
-        // Drive CEF at the display's refresh rate: one begin-frame per Wayland
-        // frame callback. Without this (external_begin_frame_enabled) CEF would
-        // not paint at all; with the internal pacing it caps near 60fps.
-        self.view.send_begin_frame();
+        // Drive CEF's rendering. With external_begin_frame_enabled CEF only paints
+        // (and advances requestAnimationFrame) in response to a begin-frame, so the
+        // begin-frame rate IS the render rate. Sending one per Wayland frame
+        // callback gives full 144fps but composites every frame even when nothing
+        // changes — ~70% GPU at idle. So gate it: full rate while the view is
+        // active (recent paint or input), and a sparse idle probe otherwise to
+        // catch the next change (the clock ticking, async data, a hover starting).
+        let idle = self.view.idle_for();
+        if idle < ACTIVE_WINDOW {
+            self.view.send_begin_frame();
+        } else if self.last_idle_probe.elapsed() >= IDLE_PROBE_PERIOD {
+            self.view.send_begin_frame();
+            self.last_idle_probe = std::time::Instant::now();
+        }
 
         // Is there a new CEF paint since we last presented?
         let generation = self.view.generation();
         let has_new = generation != self.last_generation && !self.view.frame_empty();
+        if has_new {
+            // A fresh paint keeps the view active, so an animating page (its RAF
+            // producing paints) stays at full refresh until it settles.
+            self.view.mark_active();
+        }
         if !has_new && self.mapped {
             let wl_surface = self.layer.wl_surface();
             wl_surface.frame(qh, wl_surface.clone());
