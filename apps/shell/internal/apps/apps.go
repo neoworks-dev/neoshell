@@ -4,11 +4,32 @@
 package apps
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 )
+
+// Launch starts a command detached from the shell, in its own session, so the
+// compositor maps the new window and the app outlives the launcher. Runs through
+// `sh -c` so cleaned .desktop Exec lines (which may set env, e.g. `env A=b app`)
+// work. Hyprland 0.55 moved its dispatch IPC to a Lua API; spawning directly is
+// version-proof and is all an app launcher needs.
+func Launch(command string) error {
+	if strings.TrimSpace(command) == "" {
+		return fmt.Errorf("empty launch command")
+	}
+	cmd := exec.Command("sh", "-c", command)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go cmd.Wait() // reap when the app eventually exits
+	return nil
+}
 
 // App is a launchable application parsed from a .desktop entry.
 type App struct {
