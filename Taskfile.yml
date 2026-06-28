@@ -75,8 +75,8 @@ tasks:
       - go run ./cmd/neobar {{.MONITOR_FLAG}}
 
   dev:
-    desc: Hot-reload dev — Vite + Go core. Edit UI and it live-reloads in the shell.
-    deps: [ui:dev, core:dev]
+    desc: Hot-reload dev — Vite + Go core + wallpaper daemon. Live-reloads the UI.
+    deps: [ui:dev, core:dev, bg]
 
   run:
     desc: Production-like — build the UI and serve it directly from the Go core
