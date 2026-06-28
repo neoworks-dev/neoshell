@@ -1,25 +1,27 @@
-# Compiled binary
-/neobar
-
 # Go build artifacts
 *.exe
 *.test
 *.out
+/apps/shell/neoshell
+/neoshell
 
 # Rust build artifacts
-/render-host/target/
-/neobar-bg/target/
-/neobar-settings/target/
+/apps/bg/target/
+/apps/settings/target/
 # Tauri-generated permission schemas
-/neobar-settings/gen/schemas/
+/apps/settings/gen/schemas/
 
-# Ultralight SDK (proprietary binary, fetched per machine)
-/render-host/lib/
-/ultralight-free-sdk-*.7z
+# C++/WPE render host build output
+/apps/render-host/gen/
+/apps/render-host/src/*.o
+/apps/render-host/neoshell-render
 
-# Ultralight runtime cache (cookies, etc.) — created in the host's cwd
-/render-host/default/
+# WebKit/Ultralight runtime cache (cookies, created in the host's cwd)
 /default/
+/apps/render-host/default/
+
+# Node
+node_modules/
 
 # Editor / OS
 .DS_Store
