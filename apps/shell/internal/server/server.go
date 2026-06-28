@@ -270,6 +270,12 @@ func (s *Server) route(c *Client, msg InMessage) {
 		data, _ := json.Marshal(OutMessage{Type: "apps", Data: apps.List()})
 		c.Send(data)
 
+	case "launch":
+		// Spawn an application detached; the compositor maps its window.
+		if err := apps.Launch(msg.Cmd); err != nil {
+			log.Printf("launch %q: %v", msg.Cmd, err)
+		}
+
 	case "config:get":
 		data, _ := json.Marshal(OutMessage{Type: "config", Data: s.cfg.Snapshot()})
 		c.Send(data)
