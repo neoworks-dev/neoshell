@@ -1,0 +1,11 @@
+<!DOCTYPE html><html><head><meta charset=utf-8>
+<style>html,body{margin:0;height:100%;background:#16202a;color:#cfe;font-family:monospace;
+display:flex;align-items:center;justify-content:center;font-size:5vw}</style></head>
+<body><div id=o>idle</div>
+<script>
+let clicks=0;
+addEventListener('pointermove',e=>{document.title='move '+Math.round(e.clientX)+','+Math.round(e.clientY)});
+addEventListener('pointerdown',e=>{clicks++;document.getElementById('o').textContent='CLICK '+clicks;
+  document.title='DOWN '+clicks+' @'+Math.round(e.clientX)+','+Math.round(e.clientY)});
+addEventListener('keydown',e=>{document.title='KEY '+e.key});
+</script></body></html>

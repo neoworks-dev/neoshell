@@ -1,0 +1,10 @@
+/home/moritz/Documents/local-llm-assistant/neobar-shell/neobar-bg/target/release/deps/wayland_client-a015dd758628859e.d: /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.14/src/lib.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.14/src/conn.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.14/src/event_queue.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.14/src/globals.rs
+
+/home/moritz/Documents/local-llm-assistant/neobar-shell/neobar-bg/target/release/deps/libwayland_client-a015dd758628859e.rlib: /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.14/src/lib.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.14/src/conn.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.14/src/event_queue.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.14/src/globals.rs
+
+/home/moritz/Documents/local-llm-assistant/neobar-shell/neobar-bg/target/release/deps/libwayland_client-a015dd758628859e.rmeta: /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.14/src/lib.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.14/src/conn.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.14/src/event_queue.rs /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.14/src/globals.rs
+
+/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.14/src/lib.rs:
+/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.14/src/conn.rs:
+/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.14/src/event_queue.rs:
+/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.14/src/globals.rs:
