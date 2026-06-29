@@ -204,6 +204,9 @@ func seedDesktopIcons(data map[string]any) {
 	} else if g, ok := desktop["grid"].(float64); ok {
 		grid = int(g)
 	}
+	if _, ok := desktop["snap"]; !ok {
+		desktop["snap"] = true
+	}
 
 	// Seed one example clock widget to the right of the icon column on first run.
 	if _, ok := desktop["widgets"]; !ok {
