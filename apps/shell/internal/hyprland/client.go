@@ -60,6 +60,13 @@ func (c *Client) Dispatch(dispatcher, arg string) error {
 	return err
 }
 
+// Keyword sets a config keyword at runtime (e.g. `layerrule blur,neoshell.bar`),
+// the IPC equivalent of `hyprctl keyword`.
+func (c *Client) Keyword(name, value string) error {
+	_, err := c.Request(fmt.Sprintf("keyword %s %s", name, value))
+	return err
+}
+
 // Typed queries
 
 func (c *Client) Workspaces() ([]Workspace, error) {
