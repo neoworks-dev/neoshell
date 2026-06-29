@@ -243,6 +243,36 @@ WebKitUserContentManager* make_user_content_manager() {
     return manager;
 }
 
+// Reload context carried through the GLib timeout. Holds the surface's `alive`
+// flag so a reload scheduled before destroy doesn't touch a freed webview.
+struct ReloadCtx {
+    Surf* surf;
+    std::shared_ptr<bool> alive;
+};
+
+gboolean reload_surface(gpointer data) {
+    auto* ctx = static_cast<ReloadCtx*>(data);
+    if (*ctx->alive) {
+        webkit_web_view_load_uri(ctx->surf->webview, ctx->surf->url.c_str());
+    }
+    delete ctx;
+    return G_SOURCE_REMOVE;
+}
+
+// Retry on a failed load so the surface recovers when the page becomes reachable
+// — chiefly the dev server not yet listening at startup or a Vite HMR restart.
+// Cancelled loads (superseded by a newer navigation) are left alone.
+gboolean on_load_failed(WebKitWebView*, WebKitLoadEvent, const char* uri,
+                        GError* error, gpointer user) {
+    if (error && g_error_matches(error, WEBKIT_NETWORK_ERROR, WEBKIT_NETWORK_ERROR_CANCELLED)) {
+        return FALSE;
+    }
+    Surf* s = static_cast<Surf*>(user);
+    control_emit_log(g_host.control, "load-failed", error ? error->message : uri);
+    g_timeout_add(500, reload_surface, new ReloadCtx{s, s->alive});
+    return TRUE;  // suppress WebKit's default error page; we retry instead
+}
+
 // First configure: size the WPE view, map it, load the page. Later configures
 // just resize. Emits `ready` once.
 void on_surface_configured(Surf* s, int w, int h) {
@@ -303,6 +333,7 @@ void handle_create(const SurfaceSpec& spec, const std::string& url) {
     bool cap60 = getenv("NEOSHELL_60FPS") != nullptr;
     set_60fps_feature(webkit_web_view_get_settings(s->webview), cap60);
     s->wpe_view = webkit_web_view_get_wpe_view(s->webview);
+    g_signal_connect(s->webview, "load-failed", G_CALLBACK(on_load_failed), s);
     if (getenv("NEOSHELL_LOG_TITLE"))
         g_signal_connect(s->webview, "notify::title",
                          G_CALLBACK(+[](GObject* o, GParamSpec*, gpointer) {
