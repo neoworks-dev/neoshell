@@ -1,6 +1,7 @@
 #include "present.h"
 
 #include <wayland-client.h>
+#include <wayland-cursor.h>
 #define namespace namespace_   // layer-shell uses `namespace` (C++ keyword)
 #include "wlr-layer-shell-unstable-v1-client.h"
 #undef namespace
@@ -38,6 +39,18 @@ struct WaylandConn {
     wl_surface* pointer_focus = nullptr;
     wl_surface* keyboard_focus = nullptr;
     double px = 0, py = 0;
+
+    // Cursor: WebKit asks for a named cursor (set_cursor_from_name); we apply it
+    // to the seat's pointer from a wl_cursor theme.
+    wl_shm* shm = nullptr;
+    uint32_t enter_serial = 0;
+    wl_cursor_theme* cursor_theme = nullptr;
+    wl_surface* cursor_surface = nullptr;
+    std::string cursor_name = "default";
+
+    // Scroll deltas accumulated within a wl_pointer frame (legacy axis + v120).
+    double axis_x = 0, axis_y = 0;
+    int v120_x = 0, v120_y = 0;
 
     xkb_context* xkb_ctx = nullptr;
     xkb_keymap* keymap = nullptr;
@@ -78,12 +91,66 @@ static void output_description(void*, wl_output*, const char*) {}
 static const wl_output_listener output_listener = {
     output_geometry, output_mode, output_done, output_scale, output_name, output_description};
 
+// ------------------------------------------------------------------ cursor ----
+// Classic xcursor names for themes that lack the CSS-named aliases WebKit sends.
+static const char* cursor_xname(const std::string& css) {
+    if (css == "pointer") return "hand2";
+    if (css == "grab") return "openhand";
+    if (css == "grabbing") return "closedhand";
+    if (css == "text" || css == "vertical-text") return "xterm";
+    if (css == "move" || css == "all-scroll") return "fleur";
+    if (css == "wait" || css == "progress") return "watch";
+    if (css == "help") return "question_arrow";
+    if (css == "crosshair") return "cross";
+    if (css == "not-allowed" || css == "no-drop") return "crossed_circle";
+    if (css == "ew-resize" || css == "col-resize") return "sb_h_double_arrow";
+    if (css == "ns-resize" || css == "row-resize") return "sb_v_double_arrow";
+    return "left_ptr";
+}
+
+void present_set_cursor(WaylandConn* c, const char* css_name) {
+    if (!c || !c->pointer || !c->shm || !c->compositor) return;
+    std::string name = (css_name && *css_name) ? css_name : "default";
+    c->cursor_name = name;
+
+    if (name == "none") {  // hide the cursor
+        wl_pointer_set_cursor(c->pointer, c->enter_serial, nullptr, 0, 0);
+        return;
+    }
+    if (!c->cursor_theme) {
+        const char* theme = getenv("XCURSOR_THEME");
+        const char* sz = getenv("XCURSOR_SIZE");
+        int size = sz ? atoi(sz) : 24;
+        if (size <= 0) size = 24;
+        c->cursor_theme = wl_cursor_theme_load(theme, size, c->shm);
+        if (!c->cursor_theme) return;
+    }
+    if (!c->cursor_surface)
+        c->cursor_surface = wl_compositor_create_surface(c->compositor);
+
+    wl_cursor* cur = wl_cursor_theme_get_cursor(c->cursor_theme, name.c_str());
+    if (!cur) cur = wl_cursor_theme_get_cursor(c->cursor_theme, cursor_xname(name));
+    if (!cur) cur = wl_cursor_theme_get_cursor(c->cursor_theme, "left_ptr");
+    if (!cur || cur->image_count == 0) return;
+
+    wl_cursor_image* img = cur->images[0];
+    wl_buffer* buf = wl_cursor_image_get_buffer(img);
+    if (!buf) return;
+    wl_pointer_set_cursor(c->pointer, c->enter_serial, c->cursor_surface,
+                          img->hotspot_x, img->hotspot_y);
+    wl_surface_attach(c->cursor_surface, buf, 0, 0);
+    wl_surface_damage(c->cursor_surface, 0, 0, img->width, img->height);
+    wl_surface_commit(c->cursor_surface);
+}
+
 // ------------------------------------------------------------------ input ----
-static void ptr_enter(void* data, wl_pointer*, uint32_t, wl_surface* surface,
+static void ptr_enter(void* data, wl_pointer*, uint32_t serial, wl_surface* surface,
                       wl_fixed_t sx, wl_fixed_t sy) {
     auto* c = static_cast<WaylandConn*>(data);
     c->pointer_focus = surface;
+    c->enter_serial = serial;
     c->px = wl_fixed_to_double(sx); c->py = wl_fixed_to_double(sy);
+    present_set_cursor(c, c->cursor_name.c_str());  // restore cursor with the new serial
     if (c->sink.pointer_enter) c->sink.pointer_enter(surface, c->px, c->py);
 }
 static void ptr_leave(void* data, wl_pointer*, uint32_t, wl_surface*) {
@@ -102,23 +169,45 @@ static void ptr_button(void* data, wl_pointer*, uint32_t, uint32_t, uint32_t but
         c->sink.pointer_button(c->pointer_focus, c->px, c->py, button,
                                state == WL_POINTER_BUTTON_STATE_PRESSED);
 }
+// Pixels of scroll per wheel notch. WebKit receives precise (pixel) deltas.
+static constexpr double SCROLL_PIXELS_PER_NOTCH = 48.0;
+
 static void ptr_axis(void* data, wl_pointer*, uint32_t, uint32_t axis, wl_fixed_t value) {
     auto* c = static_cast<WaylandConn*>(data);
-    if (!c->pointer_focus || !c->sink.pointer_axis) return;
     double v = wl_fixed_to_double(value);
-    double dx = axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL ? v : 0;
-    double dy = axis == WL_POINTER_AXIS_VERTICAL_SCROLL ? v : 0;
-    c->sink.pointer_axis(c->pointer_focus, c->px, c->py, dx, dy);
+    if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL) c->axis_y += v;
+    else if (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL) c->axis_x += v;
 }
-static void ptr_noop_frame(void*, wl_pointer*) {}
+// High-resolution scroll (modern mice/touchpads): 120 units per logical notch.
+static void ptr_v120(void* data, wl_pointer*, uint32_t axis, int32_t value) {
+    auto* c = static_cast<WaylandConn*>(data);
+    if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL) c->v120_y += value;
+    else if (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL) c->v120_x += value;
+}
+// Emit one accumulated scroll per frame; prefer v120 when present (else legacy).
+static void ptr_frame(void* data, wl_pointer*) {
+    auto* c = static_cast<WaylandConn*>(data);
+    double dx = 0, dy = 0;
+    if (c->v120_x || c->v120_y) {
+        dx = (c->v120_x / 120.0) * SCROLL_PIXELS_PER_NOTCH;
+        dy = (c->v120_y / 120.0) * SCROLL_PIXELS_PER_NOTCH;
+    } else if (c->axis_x != 0 || c->axis_y != 0) {
+        dx = c->axis_x * (SCROLL_PIXELS_PER_NOTCH / 10.0);
+        dy = c->axis_y * (SCROLL_PIXELS_PER_NOTCH / 10.0);
+    }
+    c->axis_x = c->axis_y = 0;
+    c->v120_x = c->v120_y = 0;
+    // WPE's scroll-delta sign is opposite the Wayland axis sign, so negate.
+    if ((dx != 0 || dy != 0) && c->pointer_focus && c->sink.pointer_axis)
+        c->sink.pointer_axis(c->pointer_focus, c->px, c->py, -dx, -dy);
+}
 static void ptr_noop_src(void*, wl_pointer*, uint32_t) {}
 static void ptr_noop_stop(void*, wl_pointer*, uint32_t, uint32_t) {}
 static void ptr_noop_disc(void*, wl_pointer*, uint32_t, int32_t) {}
-static void ptr_noop_v120(void*, wl_pointer*, uint32_t, int32_t) {}
 static void ptr_noop_dir(void*, wl_pointer*, uint32_t, uint32_t) {}
 static const wl_pointer_listener pointer_listener = {
-    ptr_enter, ptr_leave, ptr_motion, ptr_button, ptr_axis, ptr_noop_frame,
-    ptr_noop_src, ptr_noop_stop, ptr_noop_disc, ptr_noop_v120, ptr_noop_dir};
+    ptr_enter, ptr_leave, ptr_motion, ptr_button, ptr_axis, ptr_frame,
+    ptr_noop_src, ptr_noop_stop, ptr_noop_disc, ptr_v120, ptr_noop_dir};
 
 static void kb_keymap(void* data, wl_keyboard*, uint32_t format, int fd, uint32_t size) {
     auto* c = static_cast<WaylandConn*>(data);
@@ -197,6 +286,9 @@ static void reg_global(void* data, wl_registry* r, uint32_t name, const char* if
         c->seat = static_cast<wl_seat*>(
             wl_registry_bind(r, name, &wl_seat_interface, std::min(ver, 7u)));
         seat_setup(c);
+    } else if (!strcmp(iface, wl_shm_interface.name)) {
+        c->shm = static_cast<wl_shm*>(
+            wl_registry_bind(r, name, &wl_shm_interface, std::min(ver, 1u)));
     }
 }
 static void reg_remove(void*, wl_registry*, uint32_t) {}

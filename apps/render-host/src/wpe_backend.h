@@ -26,6 +26,11 @@ WPEDisplay* neoshell_display_new(const char* drm_primary_node,
 // Install the per-frame delivery callback.
 void neoshell_display_set_render_callback(WPEDisplay* display, RenderCallback cb);
 
+// Called when WebKit requests a named cursor for a view (CSS cursor name, e.g.
+// "pointer", "grab", "text"). The host applies it to the Wayland seat pointer.
+using CursorCallback = std::function<void(WPEView* view, const char* name)>;
+void neoshell_display_set_cursor_callback(WPEDisplay* display, CursorCallback cb);
+
 // Fire one vblank: ticks the screen's sync observer so WPE advances a frame.
 // Returns true if the observer was active (WebKit wanted frames). One shared
 // observer drives all views; idle views produce no frames, so this is cheap.
