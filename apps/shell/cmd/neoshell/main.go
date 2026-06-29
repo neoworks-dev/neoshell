@@ -10,6 +10,7 @@ import (
 
 	"github.com/neoworks/neoshell/internal/config"
 	"github.com/neoworks/neoshell/internal/hyprland"
+	"github.com/neoworks/neoshell/internal/notifications"
 	"github.com/neoworks/neoshell/internal/renderhost"
 	"github.com/neoworks/neoshell/internal/server"
 	"github.com/neoworks/neoshell/internal/system"
@@ -85,7 +86,18 @@ Environment:
 
 	hub := server.NewHub()
 	sys := system.New()
-	srv := server.New(hub, hypr, sys, cfg, *frontend)
+
+	// Notification daemon: own the freedesktop name (replacing any other daemon)
+	// and bridge each notification onto the WS "notification" topic. A bus failure
+	// is non-fatal — the rest of the shell runs without notifications.
+	notifier, err := notifications.NewDaemon(func(event notifications.Event) {
+		hub.Broadcast("notification", event)
+	})
+	if err != nil {
+		log.Printf("notifications: %v", err)
+	}
+
+	srv := server.New(hub, hypr, sys, cfg, notifier, *frontend)
 
 	// Config is the shell's source of truth: broadcast every change so the bar and
 	// settings window react live, and drive the wallpaper daemon when it changes.

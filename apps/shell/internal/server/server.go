@@ -14,6 +14,7 @@ import (
 	"github.com/neoworks/neoshell/internal/apps"
 	"github.com/neoworks/neoshell/internal/config"
 	"github.com/neoworks/neoshell/internal/hyprland"
+	"github.com/neoworks/neoshell/internal/notifications"
 	"github.com/neoworks/neoshell/internal/shell"
 	"github.com/neoworks/neoshell/internal/system"
 )
@@ -43,11 +44,12 @@ type Server struct {
 	hypr     *hyprland.Client
 	sys      *system.System
 	cfg      *config.Store
-	frontend string // dir to serve static frontend from; empty = disabled
+	notifier *notifications.Daemon // may be nil if the bus was unavailable
+	frontend string                // dir to serve static frontend from; empty = disabled
 }
 
-func New(hub *Hub, hypr *hyprland.Client, sys *system.System, cfg *config.Store, frontend string) *Server {
-	return &Server{hub: hub, hypr: hypr, sys: sys, cfg: cfg, frontend: frontend}
+func New(hub *Hub, hypr *hyprland.Client, sys *system.System, cfg *config.Store, notifier *notifications.Daemon, frontend string) *Server {
+	return &Server{hub: hub, hypr: hypr, sys: sys, cfg: cfg, notifier: notifier, frontend: frontend}
 }
 
 func findAppIcon(class string) string {
@@ -274,6 +276,16 @@ func (s *Server) route(c *Client, msg InMessage) {
 		// Spawn an application detached; the compositor maps its window.
 		if err := apps.Launch(msg.Cmd); err != nil {
 			log.Printf("launch %q: %v", msg.Cmd, err)
+		}
+
+	case "notification:action":
+		if s.notifier != nil {
+			s.notifier.InvokeAction(msg.NotifID, msg.ActionKey)
+		}
+
+	case "notification:close":
+		if s.notifier != nil {
+			s.notifier.Close(msg.NotifID, msg.Reason)
 		}
 
 	case "config:get":
