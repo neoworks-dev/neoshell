@@ -41,6 +41,11 @@ type InMessage struct {
 	// config:set — dotted key and its new JSON value.
 	Key   string          `json:"key,omitempty"`
 	Value json.RawMessage `json:"value,omitempty"`
+
+	// notification:action / notification:close
+	NotifID   uint32 `json:"notifId,omitempty"`
+	ActionKey string `json:"actionKey,omitempty"`
+	Reason    int    `json:"reason,omitempty"`
 }
 
 // Hub manages WebSocket clients and topic subscriptions.
