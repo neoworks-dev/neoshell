@@ -54,6 +54,15 @@ func Defaults() map[string]any {
 				"clock":       true,
 				"launcher":    true,
 			},
+			// Clock representation. timeZone "" = system local; an IANA name
+			// (e.g. "Europe/Berlin") overrides it.
+			"clock": map[string]any{
+				"hour12":      false,
+				"seconds":     false,
+				"showDate":    true,
+				"showWeekday": true,
+				"timeZone":    "",
+			},
 		},
 		// Desktop icons. Positions are top-left px on the desktop surface, aligned
 		// to an 8px virtual grid. Seeded from installed .desktop apps on first run
