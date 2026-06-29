@@ -160,6 +160,19 @@ func (s *Server) Listen(addr string) {
 		}
 		http.ServeFile(w, r, path)
 	})
+	// /wallpaper serves the configured wallpaper image so the desktop can sample
+	// it (per-icon label contrast). CORS-open so the canvas isn't tainted in dev,
+	// where the page is served from a different origin than this server.
+	http.HandleFunc("/wallpaper", func(w http.ResponseWriter, r *http.Request) {
+		value, _ := s.cfg.Get("appearance.wallpaper")
+		path, _ := value.(string)
+		if path == "" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		http.ServeFile(w, r, path)
+	})
 	// Serve the built frontend directly when configured. Registered last and at
 	// the root so the more specific /ws and /icon/ routes take precedence. CEF is
 	// full Chromium, so no compatibility shim or CSS rewriting is needed.
