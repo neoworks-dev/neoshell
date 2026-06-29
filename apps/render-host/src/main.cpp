@@ -119,6 +119,9 @@ void install_input() {
             g_printerr("[input] pointer enter %.0f,%.0f\n", x, y);
         move(w, x, y, WPE_EVENT_POINTER_ENTER);
     };
+    sink.pointer_leave = [move](wl_surface* w, double x, double y) {
+        move(w, x, y, WPE_EVENT_POINTER_LEAVE);
+    };
     sink.pointer_motion = [move](wl_surface* w, double x, double y) {
         move(w, x, y, WPE_EVENT_POINTER_MOVE);
     };

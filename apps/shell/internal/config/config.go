@@ -66,7 +66,7 @@ func Defaults() map[string]any {
 		// installed .desktop entries on first run (see seedDock); the frontend shows
 		// a running dot and focuses or launches on click.
 		"dock": map[string]any{
-			"iconSize": 48,
+			"iconSize": 60,
 		},
 	}
 }
@@ -249,8 +249,12 @@ func desktopIconsNeedSeed(icons []any) bool {
 func seedDock(data map[string]any) {
 	dock, ok := data["dock"].(map[string]any)
 	if !ok {
-		dock = map[string]any{"iconSize": 48}
+		dock = map[string]any{"iconSize": 60}
 		data["dock"] = dock
+	}
+	// Raise the first-release default (48) to the larger one; a custom size is kept.
+	if size, ok := dock["iconSize"].(float64); ok && size == 48 {
+		dock["iconSize"] = 60
 	}
 	if _, ok := dock["apps"]; ok {
 		return
