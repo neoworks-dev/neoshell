@@ -62,6 +62,12 @@ func Defaults() map[string]any {
 		"desktop": map[string]any{
 			"grid": 8,
 		},
+		// Dock (macOS-style bottom bar). `apps` is the pinned app list, seeded from
+		// installed .desktop entries on first run (see seedDock); the frontend shows
+		// a running dot and focuses or launches on click.
+		"dock": map[string]any{
+			"iconSize": 48,
+		},
 	}
 }
 
@@ -84,6 +90,7 @@ func Load() (*Store, error) {
 	}
 
 	seedDesktopIcons(data)
+	seedDock(data)
 	seedWallpaper(data)
 
 	store := &Store{path: path, data: data}
@@ -237,6 +244,36 @@ func desktopIconsNeedSeed(icons []any) bool {
 	return false
 }
 
+// seedDock fills dock.apps from installed applications when absent, so the dock
+// shows real, launchable apps on first run. A user-arranged list is left as is.
+func seedDock(data map[string]any) {
+	dock, ok := data["dock"].(map[string]any)
+	if !ok {
+		dock = map[string]any{"iconSize": 48}
+		data["dock"] = dock
+	}
+	if _, ok := dock["apps"]; ok {
+		return
+	}
+	dock["apps"] = buildDockApps(apps.DefaultSelection(7))
+}
+
+// buildDockApps maps the chosen apps to dock entries. WMClass lets the frontend
+// match a running window so the dock shows a dot and focuses instead of relaunching.
+func buildDockApps(selection []apps.App) []any {
+	entries := make([]any, 0, len(selection))
+	for _, app := range selection {
+		entries = append(entries, map[string]any{
+			"id":      app.ID,
+			"label":   app.Name,
+			"exec":    app.Exec,
+			"icon":    app.Icon,
+			"wmClass": app.WMClass,
+		})
+	}
+	return entries
+}
+
 // seedWallpaper picks a default background from the user's ~/Pictures on first
 // run, so the desktop has a wallpaper out of the box. A configured value wins.
 func seedWallpaper(data map[string]any) {
@@ -251,7 +288,7 @@ func seedWallpaper(data map[string]any) {
 	if err != nil {
 		return
 	}
-	if image := firstImage(filepath.Join(home, "Pictures")); image != "" {
+	if image := firstImage(filepath.Join(home, "Pictures", "Wallpapers")); image != "" {
 		appearance["wallpaper"] = image
 	}
 }

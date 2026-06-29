@@ -23,6 +23,11 @@ const barRole = "bar"
 // sits on the bottom layer — above the wallpaper, below application windows.
 const desktopRole = "desktop"
 
+// dockRole is the macOS-style bottom dock surface. It sits on the Top layer,
+// anchored to the bottom edge, and is click-through except over the dock itself
+// (the frontend sends its interactive region and a bottom exclusive zone).
+const dockRole = "dock"
+
 // settingsRole names the standalone settings application. It is not a shell
 // surface — window:open/close spawn and kill the separate neoshell-settings
 // process, which hosts the settings UI in its own window over the WS bus.
@@ -77,6 +82,9 @@ func Run(hub *server.Hub, url, monitor, binPath string) error {
 		return err
 	}
 	if err := controller.createDesktop(); err != nil {
+		return err
+	}
+	if err := controller.createDock(); err != nil {
 		return err
 	}
 	go controller.drainEvents()
@@ -149,6 +157,29 @@ func (c *Controller) createDesktop() error {
 // already carries the WS port query (…?port=N).
 func desktopURL(base string) string {
 	return base + "&view=desktop"
+}
+
+// createDock creates the bottom dock surface: a full-width strip anchored to the
+// bottom edge on the Top layer. It starts click-through; the frontend sends an
+// interactive region over the dock pill and reserves a bottom exclusive zone.
+func (c *Controller) createDock() error {
+	spec := SurfaceSpec{
+		Role:     dockRole,
+		URL:      dockURL(c.url),
+		Monitor:  c.monitor,
+		Layer:    LayerTop,
+		Anchors:  []Edge{EdgeBottom, EdgeLeft, EdgeRight},
+		Keyboard: KeyboardNone,
+	}
+	if err := c.client.CreateSurface(spec); err != nil {
+		return fmt.Errorf("create dock surface: %w", err)
+	}
+	return c.client.SetInputRegion(dockRole, nil)
+}
+
+// dockURL appends the dock view selector to the shared frontend URL.
+func dockURL(base string) string {
+	return base + "&view=dock"
 }
 
 // listen forwards hub window/region commands to the render host.
