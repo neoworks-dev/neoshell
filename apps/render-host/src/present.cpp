@@ -154,7 +154,12 @@ static void ptr_enter(void* data, wl_pointer*, uint32_t serial, wl_surface* surf
     if (c->sink.pointer_enter) c->sink.pointer_enter(surface, c->px, c->py);
 }
 static void ptr_leave(void* data, wl_pointer*, uint32_t, wl_surface*) {
-    static_cast<WaylandConn*>(data)->pointer_focus = nullptr;
+    auto* c = static_cast<WaylandConn*>(data);
+    // Notify WPE so the page clears :hover / fires pointerleave; without this the
+    // last-hovered element stays hovered until the pointer enters another surface.
+    if (c->pointer_focus && c->sink.pointer_leave)
+        c->sink.pointer_leave(c->pointer_focus, c->px, c->py);
+    c->pointer_focus = nullptr;
 }
 static void ptr_motion(void* data, wl_pointer*, uint32_t, wl_fixed_t sx, wl_fixed_t sy) {
     auto* c = static_cast<WaylandConn*>(data);

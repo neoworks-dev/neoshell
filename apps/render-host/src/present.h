@@ -40,6 +40,7 @@ struct SurfaceSpec {
 // wl_surface to its WPE view and builds the WPEEvent. Coords are surface-local.
 struct InputSink {
     std::function<void(wl_surface*, double x, double y)> pointer_enter;
+    std::function<void(wl_surface*, double x, double y)> pointer_leave;
     std::function<void(wl_surface*, double x, double y)> pointer_motion;
     std::function<void(wl_surface*, double x, double y, uint32_t button, bool pressed)> pointer_button;
     std::function<void(wl_surface*, double x, double y, double dx, double dy)> pointer_axis;
