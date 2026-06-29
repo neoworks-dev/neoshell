@@ -37,6 +37,7 @@ type App struct {
 	Name       string   `json:"name"`       // display name
 	Exec       string   `json:"exec"`       // command with field codes (%U, %f, …) removed
 	Icon       string   `json:"icon"`       // freedesktop icon name or absolute path
+	WMClass    string   `json:"wmClass"`    // StartupWMClass, for matching a running window
 	Categories []string `json:"categories"` // freedesktop main categories
 }
 
@@ -131,6 +132,8 @@ func parse(path, id string) (App, bool) {
 			app.Exec = cleanExec(value)
 		case "Icon":
 			app.Icon = value
+		case "StartupWMClass":
+			app.WMClass = value
 		case "Categories":
 			app.Categories = splitList(value)
 		}
