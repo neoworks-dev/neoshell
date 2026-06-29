@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -54,11 +55,12 @@ func Defaults() map[string]any {
 				"launcher":    true,
 			},
 		},
-		// Desktop icons. Positions are top-left px on the desktop surface, snapped
-		// to `grid`. Seeded from installed .desktop apps on first run (see
-		// seedDesktopIcons); the frontend persists the whole `icons` array on drop.
+		// Desktop icons. Positions are top-left px on the desktop surface, aligned
+		// to an 8px virtual grid. Seeded from installed .desktop apps on first run
+		// (see seedDesktopIcons); the frontend persists the whole `icons` array on
+		// drop.
 		"desktop": map[string]any{
-			"grid": 100,
+			"grid": 8,
 		},
 	}
 }
@@ -82,6 +84,7 @@ func Load() (*Store, error) {
 	}
 
 	seedDesktopIcons(data)
+	seedWallpaper(data)
 
 	store := &Store{path: path, data: data}
 	// Persist once so the file exists and gains any newly added default keys.
@@ -195,14 +198,8 @@ var legacyIconNames = map[string]bool{"terminal": true, "folder": true, "globe":
 func seedDesktopIcons(data map[string]any) {
 	desktop, ok := data["desktop"].(map[string]any)
 	if !ok {
-		desktop = map[string]any{"grid": 100}
+		desktop = map[string]any{"grid": 8}
 		data["desktop"] = desktop
-	}
-	grid := 100
-	if g, ok := desktop["grid"].(int); ok {
-		grid = g
-	} else if g, ok := desktop["grid"].(float64); ok {
-		grid = int(g)
 	}
 	if _, ok := desktop["snap"]; !ok {
 		desktop["snap"] = true
@@ -211,7 +208,7 @@ func seedDesktopIcons(data map[string]any) {
 	// Seed one example clock widget to the right of the icon column on first run.
 	if _, ok := desktop["widgets"]; !ok {
 		desktop["widgets"] = []any{
-			map[string]any{"id": "clock", "type": "clock", "x": 4 * grid, "y": grid, "w": 260, "h": 120},
+			map[string]any{"id": "clock", "type": "clock", "x": 200, "y": 16, "w": 260, "h": 120},
 		}
 	}
 
@@ -219,7 +216,7 @@ func seedDesktopIcons(data map[string]any) {
 	if !desktopIconsNeedSeed(existing) {
 		return
 	}
-	desktop["icons"] = buildDesktopIcons(apps.DefaultSelection(6), grid)
+	desktop["icons"] = buildDesktopIcons(apps.DefaultSelection(6))
 }
 
 // desktopIconsNeedSeed reports whether the stored icons are missing or are the
@@ -240,21 +237,70 @@ func desktopIconsNeedSeed(icons []any) bool {
 	return false
 }
 
-// buildDesktopIcons lays the chosen apps out in a grid-aligned left column so the
-// seeded positions are already snap-stable.
-func buildDesktopIcons(selection []apps.App, grid int) []any {
+// seedWallpaper picks a default background from the user's ~/Pictures on first
+// run, so the desktop has a wallpaper out of the box. A configured value wins.
+func seedWallpaper(data map[string]any) {
+	appearance, ok := data["appearance"].(map[string]any)
+	if !ok {
+		return
+	}
+	if current, _ := appearance["wallpaper"].(string); current != "" {
+		return
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	if image := firstImage(filepath.Join(home, "Pictures")); image != "" {
+		appearance["wallpaper"] = image
+	}
+}
+
+// firstImage returns the alphabetically-first JPEG/PNG directly in dir, or "".
+func firstImage(dir string) string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	var names []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := strings.ToLower(entry.Name())
+		if strings.HasSuffix(name, ".jpg") || strings.HasSuffix(name, ".jpeg") ||
+			strings.HasSuffix(name, ".png") {
+			names = append(names, entry.Name())
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	sort.Strings(names)
+	return filepath.Join(dir, names[0])
+}
+
+// buildDesktopIcons lays the chosen apps out in an 8px-aligned left column. The
+// column origin and row pitch are multiples of 8 so the seeded positions sit on
+// the virtual grid and clear the 96px icon height.
+func buildDesktopIcons(selection []apps.App) []any {
+	const (
+		columnX = 16
+		firstY  = 16
+		rowStep = 112
+	)
 	icons := make([]any, 0, len(selection))
-	x, y := grid, grid
+	y := firstY
 	for _, app := range selection {
 		icons = append(icons, map[string]any{
 			"id":    app.ID,
 			"label": app.Name,
 			"exec":  app.Exec,
 			"icon":  app.Icon,
-			"x":     x,
+			"x":     columnX,
 			"y":     y,
 		})
-		y += grid
+		y += rowStep
 	}
 	return icons
 }
