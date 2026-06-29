@@ -66,8 +66,8 @@ func Defaults() map[string]any {
 		// installed .desktop entries on first run (see seedDock); the frontend shows
 		// a running dot and focuses or launches on click.
 		"dock": map[string]any{
-			"iconSize": 44,
-			"gap":      12,
+			"iconSize": 30,
+			"gap":      10,
 			"autoHide": true,
 		},
 	}
@@ -254,18 +254,24 @@ func seedDock(data map[string]any) {
 		dock = map[string]any{}
 		data["dock"] = dock
 	}
-	// `gap` is new with the dock settings UI; its absence marks a pre-UI config
-	// whose icon size was auto-assigned (never user-chosen), so reset sizing to
-	// the current defaults. Once `gap` exists the settings sliders own these.
-	if _, hasGap := dock["gap"]; !hasGap {
-		dock["iconSize"] = 44
-		dock["gap"] = 12
-	}
+	// Fill absent keys.
 	if _, ok := dock["iconSize"]; !ok {
-		dock["iconSize"] = 44
+		dock["iconSize"] = 30
+	}
+	if _, ok := dock["gap"]; !ok {
+		dock["gap"] = 10
 	}
 	if _, ok := dock["autoHide"]; !ok {
 		dock["autoHide"] = true
+	}
+	// Adopt the current sizing when the stored values are prior shipped defaults
+	// (auto-assigned, never picked via the sliders), so default changes take
+	// effect once. Any other value is user-chosen and left alone.
+	if size, ok := dock["iconSize"].(float64); ok && (size == 44 || size == 48 || size == 60) {
+		dock["iconSize"] = 30
+	}
+	if gap, ok := dock["gap"].(float64); ok && gap == 12 {
+		dock["gap"] = 10
 	}
 	if _, ok := dock["apps"]; ok {
 		return
