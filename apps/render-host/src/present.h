@@ -60,6 +60,10 @@ bool conn_ok(WaylandConn*);
 const char* conn_render_node(WaylandConn*);
 const char* conn_primary_node(WaylandConn*);
 
+// Apply a named cursor (CSS cursor name, e.g. "pointer", "grab", "text") to the
+// seat pointer, from a wl_cursor theme. Driven by WebKit's set_cursor_from_name.
+void present_set_cursor(WaylandConn*, const char* css_name);
+
 // ---- surfaces ----
 Surface* surface_create(WaylandConn*, const SurfaceSpec&);
 void surface_set_exclusive(Surface*, EdgeKind, int size);

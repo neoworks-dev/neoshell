@@ -117,6 +117,10 @@ G_DEFINE_TYPE(NeoshellView, neoshell_view, WPE_TYPE_VIEW)
 // Forward decl: fetch the host render callback stored on the display.
 static RenderCallback* neoshell_display_render_cb(WPEDisplay*);
 
+// One shared cursor callback: WebKit-requested cursor names are applied to the
+// single Wayland seat the host owns, so a per-display callback is unnecessary.
+static CursorCallback g_cursor_cb;
+
 static gboolean neoshell_view_render_buffer(WPEView* view, WPEBuffer* buffer,
                                           const WPERectangle* damage, guint n_damage,
                                           GError** error) {
@@ -128,11 +132,19 @@ static gboolean neoshell_view_render_buffer(WPEView* view, WPEBuffer* buffer,
     return TRUE;
 }
 static gboolean neoshell_view_can_be_mapped(WPEView*) { return TRUE; }
+static void neoshell_view_set_cursor_from_name(WPEView* view, const char* name) {
+    if (g_cursor_cb) g_cursor_cb(view, name);
+}
 static void neoshell_view_init(NeoshellView*) {}
 static void neoshell_view_class_init(NeoshellViewClass* klass) {
     auto* vc = WPE_VIEW_CLASS(klass);
     vc->render_buffer = neoshell_view_render_buffer;
     vc->can_be_mapped = neoshell_view_can_be_mapped;
+    vc->set_cursor_from_name = neoshell_view_set_cursor_from_name;
+}
+
+void neoshell_display_set_cursor_callback(WPEDisplay*, CursorCallback cb) {
+    g_cursor_cb = std::move(cb);
 }
 
 // ----------------------------------------------------------------------------

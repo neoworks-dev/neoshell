@@ -83,6 +83,10 @@ WPEDisplay* get_display(const GpuNodes& gpu) {
         return nullptr;
     }
     neoshell_display_set_render_callback(d, on_render);
+    // Apply WebKit-requested cursors to the shared seat pointer.
+    neoshell_display_set_cursor_callback(d, [](WPEView*, const char* name) {
+        present_set_cursor(g_host.conn, name);
+    });
     g_host.displays[gpu.render] = d;
     g_printerr("[neoshell-wpe] created display for render node %s\n", gpu.render.c_str());
     return d;

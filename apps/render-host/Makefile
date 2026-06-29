@@ -3,8 +3,8 @@
 
 CXX      := g++
 CXXFLAGS := -std=c++20 -g -O1 -Wall -Wno-unused-parameter \
-            $(shell pkg-config --cflags wpe-webkit-2.0 wpe-platform-2.0 wayland-client egl gbm libdrm xkbcommon)
-LDFLAGS  := $(shell pkg-config --libs wpe-webkit-2.0 wpe-platform-2.0 wayland-client egl gbm libdrm xkbcommon) -ldrm
+            $(shell pkg-config --cflags wpe-webkit-2.0 wpe-platform-2.0 wayland-client wayland-cursor egl gbm libdrm xkbcommon)
+LDFLAGS  := $(shell pkg-config --libs wpe-webkit-2.0 wpe-platform-2.0 wayland-client wayland-cursor egl gbm libdrm xkbcommon) -ldrm
 
 GEN := gen
 PROTO := protocols
