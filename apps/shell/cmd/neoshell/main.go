@@ -140,6 +140,15 @@ Environment:
 	// the daemon being absent; reconnects when it appears.
 	go wallpaper.Watch(hub)
 
+	// Enable compositor blur behind the bar and dock layers. CSS backdrop-filter
+	// can't blur across surfaces, so the blur must come from Hyprland. These are
+	// fullscreen-transparent layers, so ignorealpha confines the blur to the
+	// painted regions. Best-effort; needs global blur (decoration:blur) enabled.
+	for _, namespace := range []string{"neoshell.bar", "neoshell.dock"} {
+		hypr.Keyword("layerrule", "blur,"+namespace)
+		hypr.Keyword("layerrule", "ignorealpha 0.1,"+namespace)
+	}
+
 	// The frontend reads ?port to find the WebSocket regardless of where the page
 	// is served, so the render host's surface URL carries it too.
 	surfaceURL := fmt.Sprintf("%s?port=%d", uri, *port)
