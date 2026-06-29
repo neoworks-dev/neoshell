@@ -116,9 +116,25 @@ Environment:
 			log.Printf("apply wallpaper: %v", err)
 		}
 	}
+	// The bar/dock blur is composited by Hyprland (CSS can't blur across surfaces),
+	// so the blur amount maps onto Hyprland's global blur size and keeps blur on.
+	applyBlur := func() {
+		size := 8
+		if value, ok := cfg.Get("appearance.background.blur"); ok {
+			switch v := value.(type) {
+			case int:
+				size = v
+			case float64:
+				size = int(v)
+			}
+		}
+		hypr.Keyword("decoration:blur:enabled", "true")
+		hypr.Keyword("decoration:blur:size", strconv.Itoa(size))
+	}
 	cfg.OnChange(func(snapshot map[string]any) {
 		hub.Broadcast("config", snapshot)
 		applyWallpaper()
+		applyBlur()
 	})
 	// Seed the cached topic state so subscribers hydrate immediately, and apply the
 	// persisted wallpaper once the daemon is reachable.
@@ -148,6 +164,7 @@ Environment:
 		hypr.Keyword("layerrule", "blur,"+namespace)
 		hypr.Keyword("layerrule", "ignorealpha 0.1,"+namespace)
 	}
+	applyBlur()
 
 	// The frontend reads ?port to find the WebSocket regardless of where the page
 	// is served, so the render host's surface URL carries it too.
