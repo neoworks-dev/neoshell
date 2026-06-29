@@ -205,6 +205,13 @@ func seedDesktopIcons(data map[string]any) {
 		grid = int(g)
 	}
 
+	// Seed one example clock widget to the right of the icon column on first run.
+	if _, ok := desktop["widgets"]; !ok {
+		desktop["widgets"] = []any{
+			map[string]any{"id": "clock", "type": "clock", "x": 4 * grid, "y": grid, "w": 260, "h": 120},
+		}
+	}
+
 	existing, _ := desktop["icons"].([]any)
 	if !desktopIconsNeedSeed(existing) {
 		return
