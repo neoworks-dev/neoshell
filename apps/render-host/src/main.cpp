@@ -119,8 +119,11 @@ void install_input() {
             g_printerr("[input] pointer enter %.0f,%.0f\n", x, y);
         move(w, x, y, WPE_EVENT_POINTER_ENTER);
     };
-    sink.pointer_leave = [move](wl_surface* w, double x, double y) {
-        move(w, x, y, WPE_EVENT_POINTER_LEAVE);
+    sink.pointer_leave = [move](wl_surface* w, double, double) {
+        // Hit-test off-view so WebKit finds no element under the pointer and clears
+        // hover; passing the last in-region coords would keep that element hovered.
+        move(w, -1, -1, WPE_EVENT_POINTER_LEAVE);
+        move(w, -1, -1, WPE_EVENT_POINTER_MOVE);
     };
     sink.pointer_motion = [move](wl_surface* w, double x, double y) {
         move(w, x, y, WPE_EVENT_POINTER_MOVE);
