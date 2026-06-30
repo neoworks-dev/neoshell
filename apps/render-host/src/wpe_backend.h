@@ -40,3 +40,7 @@ bool neoshell_display_tick_vblank(WPEDisplay* display);
 // ticking — so input-driven repaints (e.g. CSS :hover) render promptly — without
 // ticking when the page is fully idle.
 bool neoshell_display_observer_active(WPEDisplay* display);
+
+// Update the screen's mode (pixels + refresh in mHz) live, e.g. after a monitor
+// hotplug or mode switch, so WPE's render cadence tracks the real refresh rate.
+void neoshell_display_set_mode(WPEDisplay* display, int width, int height, int refresh_mhz);

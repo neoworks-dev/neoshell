@@ -18,10 +18,12 @@
 #include <filesystem>
 
 struct Output {
+    WaylandConn* conn = nullptr;
     wl_output* output = nullptr;
     uint32_t global = 0;
     std::string name;
     int32_t width = 0, height = 0;   // current mode pixels
+    int32_t refresh = 0;             // current mode refresh, mHz
 };
 
 struct WaylandConn {
@@ -36,6 +38,8 @@ struct WaylandConn {
     wl_pointer* pointer = nullptr;
     wl_keyboard* keyboard = nullptr;
     InputSink sink;
+    // Fired after any output add/remove/mode change so the host re-checks the mode.
+    std::function<void()> on_outputs_changed;
     wl_surface* pointer_focus = nullptr;
     wl_surface* keyboard_focus = nullptr;
     double px = 0, py = 0;
@@ -81,13 +85,21 @@ struct Surface {
 // ---------------------------------------------------------------- outputs ----
 static void output_geometry(void*, wl_output*, int, int, int, int, int, const char*,
                             const char*, int) {}
-static void output_mode(void* data, wl_output*, uint32_t flags, int w, int h, int) {
+static void output_mode(void* data, wl_output*, uint32_t flags, int w, int h, int refresh) {
     if (flags & WL_OUTPUT_MODE_CURRENT) {
         auto* o = static_cast<Output*>(data);
-        o->width = w; o->height = h;
+        o->width = w; o->height = h; o->refresh = refresh;
     }
 }
-static void output_done(void*, wl_output*) {}
+// done batches the preceding mode/name/geometry events atomically — the right
+// point to tell the host the output set or a mode settled (covers connect + mode
+// switch). Disconnect is handled separately in reg_remove.
+static void output_done(void* data, wl_output*) {
+    auto* o = static_cast<Output*>(data);
+    if (o->conn && o->conn->on_outputs_changed) {
+        o->conn->on_outputs_changed();
+    }
+}
 static void output_scale(void*, wl_output*, int) {}
 static void output_name(void* data, wl_output*, const char* name) {
     static_cast<Output*>(data)->name = name ? name : "";
@@ -287,6 +299,7 @@ static void reg_global(void* data, wl_registry* r, uint32_t name, const char* if
             wl_registry_bind(r, name, &zwp_linux_dmabuf_v1_interface, std::min(ver, 4u)));
     } else if (!strcmp(iface, wl_output_interface.name)) {
         auto* o = new Output();
+        o->conn = c;
         o->global = name;
         o->output = static_cast<wl_output*>(
             wl_registry_bind(r, name, &wl_output_interface, std::min(ver, 4u)));
@@ -301,7 +314,23 @@ static void reg_global(void* data, wl_registry* r, uint32_t name, const char* if
             wl_registry_bind(r, name, &wl_shm_interface, std::min(ver, 1u)));
     }
 }
-static void reg_remove(void*, wl_registry*, uint32_t) {}
+// A removed global is an unplugged output (or other interface). Drop the matching
+// Output and tell the host so it re-checks the mode.
+static void reg_remove(void* data, wl_registry*, uint32_t name) {
+    auto* c = static_cast<WaylandConn*>(data);
+    for (auto it = c->outputs.begin(); it != c->outputs.end(); ++it) {
+        if ((*it)->global != name) {
+            continue;
+        }
+        wl_output_destroy((*it)->output);
+        delete *it;
+        c->outputs.erase(it);
+        if (c->on_outputs_changed) {
+            c->on_outputs_changed();
+        }
+        return;
+    }
+}
 static const wl_registry_listener registry_listener = {reg_global, reg_remove};
 
 // ---- dmabuf feedback: learn the compositor's render device ----
@@ -369,7 +398,29 @@ WaylandConn* conn_new() {
 }
 const char* conn_render_node(WaylandConn* c) { return c->render_node.c_str(); }
 const char* conn_primary_node(WaylandConn* c) { return c->primary_node.c_str(); }
+
+// Current mode of the named output, or the first output when name is empty. Used
+// to seed the WPE display with the real refresh rate instead of a hardcoded one.
+bool conn_output_mode(WaylandConn* c, const char* name, int* w, int* h, int* refresh) {
+    Output* picked = nullptr;
+    if (name && *name) {
+        for (auto* o : c->outputs)
+            if (o->name == name) { picked = o; break; }
+    } else if (!c->outputs.empty()) {
+        picked = c->outputs.front();
+    }
+    if (!picked || picked->refresh <= 0) {
+        return false;
+    }
+    if (w) *w = picked->width;
+    if (h) *h = picked->height;
+    if (refresh) *refresh = picked->refresh;
+    return true;
+}
 void conn_set_input(WaylandConn* c, InputSink sink) { c->sink = std::move(sink); }
+void conn_set_outputs_changed_cb(WaylandConn* c, std::function<void()> cb) {
+    c->on_outputs_changed = std::move(cb);
+}
 bool conn_ok(WaylandConn* c) { return c->display && c->compositor && c->layer_shell && c->dmabuf; }
 int conn_fd(WaylandConn* c) { return wl_display_get_fd(c->display); }
 void conn_flush(WaylandConn* c) { wl_display_flush(c->display); }
