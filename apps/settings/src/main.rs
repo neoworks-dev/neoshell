@@ -14,7 +14,18 @@ fn settings_url() -> String {
         .unwrap_or_else(|_| "http://localhost:9876?view=settings".to_string())
 }
 
+/// WebKitGTK's DMABUF renderer triggers "Protocol error dispatching to Wayland
+/// display" and a web-process crash on some wlroots/GPU combinations, especially
+/// for a transparent window. Force the SHM path; a settings window does not need
+/// GPU compositing. An explicit caller-set value still wins.
+fn disable_webkit_dmabuf_renderer() {
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+}
+
 fn main() {
+    disable_webkit_dmabuf_renderer();
     tauri::Builder::default()
         .setup(|app| {
             let parsed = settings_url().parse().expect("valid NEOSHELL_SETTINGS_URL");
