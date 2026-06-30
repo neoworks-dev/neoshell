@@ -247,13 +247,9 @@ func (s *Server) route(c *Client, msg InMessage) {
 
 	case "search:files":
 		// Echo the query back so the client can drop stale (out-of-order) results.
-		results := []fileindex.Entry{}
-		if s.index != nil {
-			results = s.index.Search(msg.Query, 30)
-		}
 		data, _ := json.Marshal(OutMessage{Type: "searchResults", Data: map[string]any{
 			"query":   msg.Query,
-			"results": results,
+			"results": s.searchFiles(msg.Query),
 		}})
 		c.Send(data)
 
