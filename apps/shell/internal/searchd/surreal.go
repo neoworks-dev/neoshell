@@ -163,8 +163,8 @@ DEFINE FIELD IF NOT EXISTS isDir    ON chunk TYPE bool;
 DEFINE FIELD IF NOT EXISTS ord      ON chunk TYPE int;
 DEFINE FIELD IF NOT EXISTS text     ON chunk TYPE string;
 DEFINE FIELD IF NOT EXISTS modality ON chunk TYPE string;
-DEFINE FIELD IF NOT EXISTS embedding ON chunk TYPE array<float>;
-DEFINE INDEX IF NOT EXISTS chunk_bm25 ON chunk FIELDS text SEARCH ANALYZER doc BM25 HIGHLIGHTS;
+DEFINE FIELD IF NOT EXISTS embedding ON chunk TYPE option<array<float>>;
+DEFINE INDEX IF NOT EXISTS chunk_bm25 ON chunk FIELDS text FULLTEXT ANALYZER doc BM25 HIGHLIGHTS;
 DEFINE INDEX IF NOT EXISTS chunk_vec ON chunk FIELDS embedding HNSW DIMENSION 768 DIST COSINE;
 `
 
@@ -235,19 +235,26 @@ func (s *surrealStore) PutFile(ctx context.Context, file FileRecord, chunks []Ch
 }
 
 func (s *surrealStore) insertChunk(ctx context.Context, file FileRecord, fileID models.RecordID, chunk ChunkRecord) error {
-	vars := map[string]any{
-		"id":        recordID("chunk", fmt.Sprintf("%s#%d", file.Path, chunk.Ord)),
-		"file":      fileID,
-		"path":      file.Path,
-		"name":      file.Name,
-		"isDir":     file.IsDir,
-		"ord":       chunk.Ord,
-		"text":      chunk.Text,
-		"modality":  chunk.Modality,
-		"embedding": chunk.Embedding,
+	// Build the content in Go and omit `embedding` when there is none: the field is
+	// option<array<float>>, which wants the key absent (NONE) — an explicit NULL is
+	// rejected.
+	content := map[string]any{
+		"file":     fileID,
+		"path":     file.Path,
+		"name":     file.Name,
+		"isDir":    file.IsDir,
+		"ord":      chunk.Ord,
+		"text":     chunk.Text,
+		"modality": chunk.Modality,
 	}
-	query := "CREATE $id CONTENT {file:$file,path:$path,name:$name,isDir:$isDir,ord:$ord,text:$text,modality:$modality,embedding:$embedding};"
-	_, err := surrealdb.Query[any](ctx, s.db, query, vars)
+	if len(chunk.Embedding) > 0 {
+		content["embedding"] = chunk.Embedding
+	}
+	vars := map[string]any{
+		"id":      recordID("chunk", fmt.Sprintf("%s#%d", file.Path, chunk.Ord)),
+		"content": content,
+	}
+	_, err := surrealdb.Query[any](ctx, s.db, "CREATE $id CONTENT $content;", vars)
 	return err
 }
 
@@ -287,9 +294,10 @@ func (s *surrealStore) SearchVector(ctx context.Context, embedding []float32, li
 	if len(embedding) == 0 {
 		return nil, nil
 	}
-	// KNN operator requires a literal neighbor count; limit is an int we control.
+	// SurrealDB 3 KNN: `<|k, EF|>` against the HNSW index. k = neighbor count,
+	// EF = search breadth (higher = more accurate, slower). Both are ints we set.
 	query := fmt.Sprintf(
-		"SELECT path,name,isDir,text,modality,vector::similarity::cosine(embedding,$q) AS score FROM chunk WHERE embedding <|%d|> $q ORDER BY score DESC",
+		"SELECT path,name,isDir,text,modality,vector::similarity::cosine(embedding,$q) AS score FROM chunk WHERE embedding <|%d,64|> $q ORDER BY score DESC",
 		limit)
 	result, err := surrealdb.Query[[]scoredRow](ctx, s.db, query,
 		map[string]any{"q": embedding})
