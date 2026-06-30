@@ -14,9 +14,14 @@ Chromium (no ~200MB runtime, no per-frame BGRA memcpy) at the same 144fps.
 make            # -> ./neoshell-render
 ```
 
-Dependencies (system): `wpewebkit`, `libwpe`, `wpebackend-fdo`, EGL, GBM, libdrm,
-wayland-client, xkbcommon, `nlohmann-json`, plus `wayland-protocols` +
-`wlr-protocols` (the layer-shell XML in `protocols/`).
+Build dependencies (system): `wpewebkit`, `libwpe`, EGL (`libglvnd`), GBM
+(`mesa`), `libdrm`, `wayland` (client + `wayland-scanner`), `libxkbcommon`,
+`nlohmann-json`. The layer-shell / xdg-shell / dmabuf protocol XML is vendored in
+`protocols/`, so `wayland-protocols`/`wlr-protocols` are not required.
+
+The custom `WPEPlatform` backend (`wpe_backend.cpp`) replaced the FDO backend, so
+`wpebackend-fdo` is no longer a dependency. Full runtime + build dependency list
+for the whole project: [`../../DEPENDENCIES.md`](../../DEPENDENCIES.md).
 
 ## How it works
 
