@@ -21,6 +21,13 @@ import (
 const defaultPort = 9876
 
 func main() {
+	// Surface control subcommands (e.g. `neoshell toggle overlay`) talk to a
+	// running core over HTTP and exit, so Hyprland binds don't need curl.
+	if len(os.Args) > 1 && controlActions[os.Args[1]] {
+		runControl(os.Args[1], os.Args[2:])
+		return
+	}
+
 	fs := flag.NewFlagSet("neoshell", flag.ExitOnError)
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, `neoshell - Hyprland overlay bar
@@ -179,10 +186,14 @@ Environment:
 	}
 	applyBlur()
 
-	// Win+Space toggles the apps overlay. The compositor can't call into the core
-	// directly, so the bind hits the local /toggle endpoint over HTTP (needs curl).
-	overlayBind := fmt.Sprintf("SUPER,space,exec,curl -s http://localhost:%d/toggle?surface=overlay", *port)
-	hypr.Keyword("bind", overlayBind)
+	// Optional built-in overlay keybind. Off by default so it never fights a bind
+	// the user already defined (e.g. a lua-managed Hyprland config); set
+	// bar.overlayKeybind (e.g. "SUPER,slash") to have the core inject it. Either
+	// way the overlay can be toggled with `neoshell toggle overlay`.
+	if combo := overlayKeybind(cfg); combo != "" {
+		bind := fmt.Sprintf("%s,exec,neoshell toggle overlay", combo)
+		hypr.Keyword("bind", bind)
+	}
 
 	// The frontend reads ?port to find the WebSocket regardless of where the page
 	// is served, so the render host's surface URL carries it too.
