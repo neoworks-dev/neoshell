@@ -46,9 +46,10 @@ type Embedder struct {
 	dir       string
 	tokenizer *tokenizer.Tokenizer
 
-	mu       sync.Mutex // onnxruntime sessions are not safe for concurrent Run
-	textSess *ort.DynamicAdvancedSession
-	vision   *visionSession // nil until the vision model is loaded (Phase 3)
+	mu        sync.Mutex // onnxruntime sessions are not safe for concurrent Run
+	textSession  *ort.DynamicAdvancedSession
+	vision    *visionSession // nil until the vision model is loaded (Phase 3)
+	queryCache *embeddingCache    // caches query embeddings (lookups repeat constantly)
 }
 
 // ModelsDir resolves where the libonnxruntime.so and *.onnx model files live.
@@ -90,13 +91,29 @@ func New(dir string) (*Embedder, error) {
 		return nil, fmt.Errorf("load text model: %w", err)
 	}
 	// Vision model is optional: absent → images stay filename-only.
-	return &Embedder{dir: dir, tokenizer: tk, textSess: session, vision: loadVision(dir)}, nil
+	return &Embedder{
+		dir: dir, tokenizer: tk, textSession: session,
+		vision:    loadVision(dir),
+		queryCache: newEmbeddingCache(queryCacheSize),
+	}, nil
 }
 
-func (e *Embedder) Available(context.Context) bool { return e != nil && e.textSess != nil }
+func (e *Embedder) Available(context.Context) bool { return e != nil && e.textSession != nil }
 
 func (e *Embedder) EmbedQuery(_ context.Context, query string) ([]float32, error) {
-	return e.embedText(queryPrefix + query)
+	if e.queryCache != nil {
+		if cached, ok := e.queryCache.get(query); ok {
+			return cached, nil
+		}
+	}
+	vector, err := e.embedText(queryPrefix + query)
+	if err != nil {
+		return nil, err
+	}
+	if e.queryCache != nil {
+		e.queryCache.put(query, vector)
+	}
+	return vector, nil
 }
 
 func (e *Embedder) EmbedDocuments(_ context.Context, texts []string) ([][]float32, error) {
@@ -146,7 +163,7 @@ func (e *Embedder) embedText(text string) ([]float32, error) {
 	defer out.Destroy()
 
 	e.mu.Lock()
-	err = e.textSess.Run(
+	err = e.textSession.Run(
 		[]ort.ArbitraryTensor{idsT, typeT, maskT},
 		[]ort.ArbitraryTensor{out},
 	)
