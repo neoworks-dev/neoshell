@@ -46,7 +46,7 @@ makedepends=(
 optdepends=(
   'gst-plugins-good: <video>/<audio> playback in web surfaces'
   'gst-plugins-bad: extra media codecs in web surfaces'
-  'ollama: semantic file search embeddings (nomic-embed-text/vision)'
+  'ollama: semantic file search embeddings (nomic-embed-text + moondream for image captions)'
   'surrealdb: persistent BM25 + vector index for semantic file search'
 )
 

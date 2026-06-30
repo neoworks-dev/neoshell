@@ -44,7 +44,7 @@ The Go core itself links only libc — it is statically built otherwise.
 | Package | Enables |
 |---|---|
 | `gst-plugins-good`, `gst-plugins-bad` | `<video>` / `<audio>` playback in web surfaces (wpewebkit ships only `gst-plugins-base`) |
-| `ollama` | Embeddings for **semantic file search** (`neoshell-search`). Pull the models: `ollama pull nomic-embed-text` and `ollama pull nomic-embed-vision`. |
+| `ollama` | Embeddings for **semantic file search** (`neoshell-search`). Pull the models: `ollama pull nomic-embed-text` (text/PDF + queries) and `ollama pull moondream` (captions images so they're searchable in the same vector space). |
 | `surrealdb` | Persistent BM25 + vector index for semantic file search. AUR/official installer (not in the official repos). |
 
 Without `ollama`/`surrealdb` the search daemon degrades gracefully: filename +
