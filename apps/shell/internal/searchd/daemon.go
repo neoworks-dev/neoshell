@@ -55,6 +55,8 @@ func (d *Daemon) Reconcile(ctx context.Context) {
 		d.progress.addTotal(1)
 		if err := d.indexer.IndexFile(ctx, path, info); err == nil {
 			reindexed++
+		} else {
+			log.Printf("index %s: %v", path, err)
 		}
 		d.progress.addDone(1)
 	})
