@@ -41,6 +41,26 @@ var imageExtensions = map[string]bool{
 	".bmp": true, ".tiff": true,
 }
 
+// proseExtensions are natural-language documents. Only these (and PDFs) get
+// vector embeddings — nomic-embed-text is weak on source code, where BM25's exact
+// term matching is the better tool. Code is still indexed as text for BM25.
+var proseExtensions = map[string]bool{
+	".md": true, ".markdown": true, ".txt": true, ".rst": true, ".org": true,
+	".tex": true, ".adoc": true,
+}
+
+// isProse reports whether a text/PDF file is natural language worth embedding.
+func isProse(path string, kind Kind) bool {
+	if kind == KindPDF {
+		return true
+	}
+	switch strings.ToLower(filepath.Base(path)) {
+	case "readme", "license", "changelog", "notes":
+		return true
+	}
+	return proseExtensions[strings.ToLower(filepath.Ext(path))]
+}
+
 // classify decides how a file is indexed, from its extension (and base name for
 // extension-less files like Makefile/Dockerfile).
 func classify(path string) Kind {

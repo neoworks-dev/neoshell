@@ -53,7 +53,7 @@ func (d *Daemon) watch(ctx context.Context) {
 }
 
 func (d *Daemon) onFSEvent(watcher *fsnotify.Watcher, pending *debouncer, event fsnotify.Event) {
-	if skipDirs[filepath.Base(event.Name)] {
+	if shouldSkipDir(filepath.Base(event.Name)) {
 		return
 	}
 	switch {

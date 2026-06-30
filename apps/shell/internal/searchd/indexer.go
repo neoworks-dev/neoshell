@@ -52,9 +52,10 @@ func (ix *Indexer) IndexFile(ctx context.Context, path string, info os.FileInfo)
 }
 
 func (ix *Indexer) buildChunks(ctx context.Context, path, name string) ([]ChunkRecord, error) {
-	switch classify(path) {
+	kind := classify(path)
+	switch kind {
 	case KindText, KindPDF:
-		return ix.textChunks(ctx, path, name)
+		return ix.textChunks(ctx, path, name, kind)
 	case KindImage:
 		return ix.imageChunk(ctx, path, name)
 	default:
@@ -63,8 +64,8 @@ func (ix *Indexer) buildChunks(ctx context.Context, path, name string) ([]ChunkR
 	}
 }
 
-func (ix *Indexer) textChunks(ctx context.Context, path, name string) ([]ChunkRecord, error) {
-	text, err := extractText(path, classify(path))
+func (ix *Indexer) textChunks(ctx context.Context, path, name string, kind Kind) ([]ChunkRecord, error) {
+	text, err := extractText(path, kind)
 	if err != nil || text == "" {
 		// Unreadable/binary: fall back to filename-only so it's still findable.
 		return []ChunkRecord{{Ord: 0, Text: name, Modality: "name"}}, nil
@@ -74,7 +75,11 @@ func (ix *Indexer) textChunks(ctx context.Context, path, name string) ([]ChunkRe
 	for i, piece := range pieces {
 		chunks[i] = ChunkRecord{Ord: i, Text: piece, Modality: "text"}
 	}
-	ix.attachTextEmbeddings(ctx, chunks, pieces)
+	// Embed prose only; code is left BM25-only (still searchable by exact terms),
+	// since nomic-embed-text adds little semantic value over code.
+	if isProse(path, kind) {
+		ix.attachTextEmbeddings(ctx, chunks, pieces)
+	}
 	return chunks, nil
 }
 
