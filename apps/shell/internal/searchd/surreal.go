@@ -56,16 +56,20 @@ type surrealStore struct {
 // `surreal` binary is missing or the server never comes up, so the caller can
 // fall back to the in-memory store.
 func openSurreal(ctx context.Context) (*surrealStore, error) {
+	// Reuse a surreal already listening at the address (a prior daemon's child or
+	// the user's own instance) instead of spawning a duplicate — spawning a second
+	// on the same port fails with EADDRINUSE.
+	if db, err := connectSurreal(ctx, 1*time.Second); err == nil {
+		return &surrealStore{db: db, child: nil}, nil
+	}
+
 	child, err := spawnSurreal()
 	if err != nil {
 		return nil, err
 	}
-
-	db, err := connectSurreal(ctx)
+	db, err := connectSurreal(ctx, 10*time.Second)
 	if err != nil {
-		if child != nil {
-			_ = stopProcessGroup(child)
-		}
+		_ = stopProcessGroup(child)
 		return nil, err
 	}
 	return &surrealStore{db: db, child: child}, nil
@@ -94,9 +98,9 @@ func spawnSurreal() (*exec.Cmd, error) {
 	return cmd, nil
 }
 
-func connectSurreal(ctx context.Context) (*surrealdb.DB, error) {
+func connectSurreal(ctx context.Context, timeout time.Duration) (*surrealdb.DB, error) {
 	url := "ws://" + surrealAddr() + "/rpc"
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(timeout)
 	for {
 		db, err := surrealdb.New(url)
 		if err == nil {

@@ -29,6 +29,13 @@ func main() {
 }
 
 func runDaemon() {
+	// Single instance: if a daemon already answers on the socket, don't start a
+	// second (it would fight over the socket and the surreal port).
+	if _, err := searchd.QuerySocket(searchd.SocketPath(), searchd.Request{Op: "ping"}); err == nil {
+		fmt.Fprintln(os.Stderr, "search daemon already running — exiting")
+		return
+	}
+
 	ctx, cancel := signalContext()
 	defer cancel()
 
