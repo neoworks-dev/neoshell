@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -17,15 +18,21 @@ const (
 	docPrefix   = "search_document: "
 	queryPrefix = "search_query: "
 
-	textModel  = "nomic-embed-text"
-	imageModel = "nomic-embed-vision"
+	textModel = "nomic-embed-text"
+	// Ollama has no image-embedding model, so images are captioned by a small
+	// vision model and the caption is embedded with the text model — keeping
+	// images in the SAME vector space as documents (true cross-modal search).
+	captionModel  = "moondream"
+	captionPrompt = "Describe this image for search in one or two sentences. Include any visible text, key objects, and overall context. Be concise and factual."
 )
 
 // Embedder turns text and images into vectors in the shared 768-d space.
 type Embedder interface {
 	EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error)
 	EmbedQuery(ctx context.Context, query string) ([]float32, error)
-	EmbedImage(ctx context.Context, path string) ([]float32, error)
+	// DescribeImage returns a text caption of an image (via a vision model) that
+	// can then be embedded with EmbedDocuments, so images land in the text space.
+	DescribeImage(ctx context.Context, path string) (string, error)
 	// Available reports whether the backend is reachable, so the daemon can
 	// degrade to filename-only indexing when it is not.
 	Available(ctx context.Context) bool
@@ -45,7 +52,9 @@ func NewOllamaEmbedder() *OllamaEmbedder {
 	}
 	return &OllamaEmbedder{
 		baseURL: base,
-		client:  &http.Client{Timeout: 60 * time.Second},
+		// Generous: a cold vision-model load for the first image caption can take
+		// well over a minute; text embeddings are fast regardless.
+		client: &http.Client{Timeout: 180 * time.Second},
 	}
 }
 
@@ -112,20 +121,53 @@ func (e *OllamaEmbedder) EmbedQuery(ctx context.Context, query string) ([]float3
 	return embeddings[0], nil
 }
 
-func (e *OllamaEmbedder) EmbedImage(ctx context.Context, path string) ([]float32, error) {
+type generateRequest struct {
+	Model  string   `json:"model"`
+	Prompt string   `json:"prompt"`
+	Images []string `json:"images"`
+	Stream bool     `json:"stream"`
+}
+
+type generateResponse struct {
+	Response string `json:"response"`
+	Error    string `json:"error,omitempty"`
+}
+
+func (e *OllamaEmbedder) DescribeImage(ctx context.Context, path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	encoded := base64.StdEncoding.EncodeToString(data)
-	embeddings, err := e.embed(ctx, embedRequest{Model: imageModel, Images: []string{encoded}})
+	body := generateRequest{
+		Model:  captionModel,
+		Prompt: captionPrompt,
+		Images: []string{base64.StdEncoding.EncodeToString(data)},
+		Stream: false,
+	}
+	raw, err := json.Marshal(body)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	if len(embeddings) == 0 {
-		return nil, fmt.Errorf("ollama returned no image embedding")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.baseURL+"/api/generate", bytes.NewReader(raw))
+	if err != nil {
+		return "", err
 	}
-	return embeddings[0], nil
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var decoded generateResponse
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return "", err
+	}
+	if decoded.Error != "" {
+		return "", fmt.Errorf("ollama: %s", decoded.Error)
+	}
+	return strings.TrimSpace(decoded.Response), nil
 }
 
 func (e *OllamaEmbedder) Available(ctx context.Context) bool {
