@@ -6,6 +6,7 @@ package searchd
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -50,8 +51,10 @@ func SocketPath() string {
 type Handler func(Request) Response
 
 // Serve listens on the control socket and dispatches each request to handler.
-// Blocks; returns on listener error. Replaces any stale socket file.
-func Serve(socketPath string, handler Handler) error {
+// Blocks until ctx is cancelled (then returns nil) or the listener errors, so the
+// caller can run deferred cleanup (e.g. a final index save). Replaces any stale
+// socket file.
+func Serve(ctx context.Context, socketPath string, handler Handler) error {
 	_ = os.Remove(socketPath)
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
@@ -59,9 +62,18 @@ func Serve(socketPath string, handler Handler) error {
 	}
 	defer listener.Close()
 
+	// Unblock Accept on shutdown by closing the listener.
+	go func() {
+		<-ctx.Done()
+		listener.Close()
+	}()
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil // graceful shutdown
+			}
 			return err
 		}
 		go serveConn(conn, handler)

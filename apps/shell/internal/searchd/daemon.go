@@ -38,28 +38,41 @@ func (d *Daemon) Run(ctx context.Context, socketPath string) error {
 		d.watch(ctx) // live updates after the initial reconcile
 	}()
 	log.Printf("search daemon listening on %s", socketPath)
-	return Serve(socketPath, d.handle)
+	return Serve(ctx, socketPath, d.handle)
 }
 
 // Reconcile walks the roots, (re)indexes new or changed files, and removes index
 // entries whose files are gone. The expensive embed step is gated by mtime+size.
 func (d *Daemon) Reconcile(ctx context.Context) {
+	// First pass: find files needing (re)index. Pre-counting gives a stable 0..N
+	// progress so the UI shows a steady "Indexing k/N" for the whole run, instead
+	// of a count that flickers because total and done climb together.
 	onDisk := map[string]bool{}
-	reindexed := 0
-	d.progress.setPhase("indexing")
+	type candidate struct {
+		path string
+		info fs.FileInfo
+	}
+	var todo []candidate
 	walkFiles(d.roots, func(path string, info fs.FileInfo) {
 		onDisk[path] = true
-		if d.indexer.Unchanged(ctx, path, info) {
-			return
+		if !d.indexer.Unchanged(ctx, path, info) {
+			todo = append(todo, candidate{path, info})
 		}
-		d.progress.addTotal(1)
-		if err := d.indexer.IndexFile(ctx, path, info); err == nil {
+	})
+
+	// Second pass: index, advancing progress toward the known total.
+	d.progress.setPhase("indexing")
+	d.progress.addTotal(len(todo))
+	reindexed := 0
+	for _, item := range todo {
+		if err := d.indexer.IndexFile(ctx, item.path, item.info); err == nil {
 			reindexed++
 		} else {
-			log.Printf("index %s: %v", path, err)
+			log.Printf("index %s: %v", item.path, err)
 		}
 		d.progress.addDone(1)
-	})
+	}
+
 	d.removeMissing(ctx, onDisk)
 	d.progress.setPhase("idle")
 	log.Printf("reconcile done: %d changed", reindexed)
