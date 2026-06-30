@@ -98,26 +98,17 @@ func (ix *Indexer) attachTextEmbeddings(ctx context.Context, chunks []ChunkRecor
 	}
 }
 
-// imageChunk captions the image with a vision model and embeds the caption with
-// the text model, so images live in the same vector space as documents. The
-// caption is also stored as the chunk text, making images BM25-searchable. Falls
-// back to filename-only when no embedder is available or captioning fails.
+// imageChunk embeds the image directly with the vision model (nomic-embed-vision)
+// into the shared text space, so a text query matches it. The filename stays as
+// the chunk text for BM25. Falls back to filename-only when no embedder is
+// available or the image can't be embedded.
 func (ix *Indexer) imageChunk(ctx context.Context, path, name string) ([]ChunkRecord, error) {
 	chunk := ChunkRecord{Ord: 0, Text: name, Modality: "image"}
 	if ix.embedder == nil || !ix.embedder.Available(ctx) {
 		return []ChunkRecord{chunk}, nil
 	}
-
-	caption, err := ix.embedder.DescribeImage(ctx, path)
-	if err != nil || caption == "" {
-		return []ChunkRecord{chunk}, nil
-	}
-	// Caption plus filename: the name often carries extra signal (e.g. a project).
-	chunk.Text = caption + " — " + name
-
-	vectors, err := ix.embedder.EmbedDocuments(ctx, []string{chunk.Text})
-	if err == nil && len(vectors) == 1 {
-		chunk.Embedding = vectors[0]
+	if vector, err := ix.embedder.EmbedImage(ctx, path); err == nil {
+		chunk.Embedding = vector
 	}
 	return []ChunkRecord{chunk}, nil
 }

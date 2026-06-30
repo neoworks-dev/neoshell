@@ -7,24 +7,20 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"syscall"
 	"time"
 
 	surrealdb "github.com/surrealdb/surrealdb.go"
 	"github.com/surrealdb/surrealdb.go/pkg/models"
 )
 
-// Surreal connection defaults. The daemon spawns its own `surreal` child bound to
-// a loopback port and a persistent surrealkv store, mirroring how it depends on a
-// local Ollama. Override via env for tests / shared instances.
+// Surreal connection defaults. SurrealDB runs as an external service (the Docker
+// backends container, or any reachable instance); the daemon connects to it
+// rather than spawning it. Override the address via env.
 const (
 	surrealNamespace = "neoshell"
 	surrealDatabase  = "search"
 	surrealUser      = "root"
 	surrealPass      = "root"
-	embeddingDim     = 768
 )
 
 func surrealAddr() string {
@@ -34,68 +30,20 @@ func surrealAddr() string {
 	return "127.0.0.1:18000"
 }
 
-func surrealDataDir() string {
-	if dir := os.Getenv("NEOSHELL_SEARCH_DATA"); dir != "" {
-		return dir
-	}
-	base := os.Getenv("XDG_DATA_HOME")
-	if base == "" {
-		base = filepath.Join(os.Getenv("HOME"), ".local", "share")
-	}
-	return filepath.Join(base, "neoshell", "search-db")
-}
-
 // surrealStore is the persistent index backend.
 type surrealStore struct {
-	db    *surrealdb.DB
-	child *exec.Cmd // the surreal server process we spawned (nil if external)
+	db *surrealdb.DB
 }
 
-// openSurreal spawns a surreal child (unless one is already reachable), connects,
-// authenticates, and selects the namespace/database. Returns an error if the
-// `surreal` binary is missing or the server never comes up, so the caller can
-// fall back to the in-memory store.
+// openSurreal connects to the external SurrealDB, authenticates, and selects the
+// namespace/database. Returns an error if it never comes up within the timeout,
+// so the caller can fall back to the in-memory store.
 func openSurreal(ctx context.Context) (*surrealStore, error) {
-	// Reuse a surreal already listening at the address (a prior daemon's child or
-	// the user's own instance) instead of spawning a duplicate — spawning a second
-	// on the same port fails with EADDRINUSE.
-	if db, err := connectSurreal(ctx, 1*time.Second); err == nil {
-		return &surrealStore{db: db, child: nil}, nil
-	}
-
-	child, err := spawnSurreal()
+	db, err := connectSurreal(ctx, 5*time.Second)
 	if err != nil {
 		return nil, err
 	}
-	db, err := connectSurreal(ctx, 10*time.Second)
-	if err != nil {
-		_ = stopProcessGroup(child)
-		return nil, err
-	}
-	return &surrealStore{db: db, child: child}, nil
-}
-
-func spawnSurreal() (*exec.Cmd, error) {
-	binary, err := exec.LookPath("surreal")
-	if err != nil {
-		return nil, fmt.Errorf("surreal binary not found: %w", err)
-	}
-	if err := os.MkdirAll(surrealDataDir(), 0o755); err != nil {
-		return nil, err
-	}
-	cmd := exec.Command(binary, "start",
-		"--bind", surrealAddr(),
-		"--user", surrealUser,
-		"--pass", surrealPass,
-		"surrealkv://"+surrealDataDir(),
-	)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-	return cmd, nil
+	return &surrealStore{db: db}, nil
 }
 
 func connectSurreal(ctx context.Context, timeout time.Duration) (*surrealdb.DB, error) {
@@ -132,22 +80,6 @@ func (s *surrealStore) Close() error {
 	if s.db != nil {
 		_ = s.db.Close(context.Background())
 	}
-	if s.child != nil {
-		return stopProcessGroup(s.child)
-	}
-	return nil
-}
-
-func stopProcessGroup(cmd *exec.Cmd) error {
-	if cmd.Process == nil {
-		return nil
-	}
-	if pgid, err := syscall.Getpgid(cmd.Process.Pid); err == nil {
-		_ = syscall.Kill(-pgid, syscall.SIGTERM)
-	} else {
-		_ = cmd.Process.Kill()
-	}
-	_, _ = cmd.Process.Wait()
 	return nil
 }
 

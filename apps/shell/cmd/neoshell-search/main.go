@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/neoworks/neoshell/internal/searchd"
+	"github.com/neoworks/neoshell/internal/searchd/onnx"
 )
 
 func main() {
@@ -46,9 +47,13 @@ func runDaemon() {
 	}
 	defer store.Close()
 
-	embedder := searchd.NewOllamaEmbedder()
-	if !embedder.Available(ctx) {
-		fmt.Fprintln(os.Stderr, "ollama not reachable — indexing filenames/text only, no embeddings")
+	// In-process ONNX embedder. A nil interface (model files absent) makes the
+	// daemon index filenames/BM25 only — handled by the indexer and search paths.
+	var embedder searchd.Embedder
+	if onnxEmbedder, err := onnx.New(onnx.ModelsDir()); err == nil {
+		embedder = onnxEmbedder
+	} else {
+		fmt.Fprintf(os.Stderr, "embeddings unavailable (%v) — indexing filenames/BM25 only\n", err)
 	}
 
 	daemon := searchd.NewDaemon(store, embedder, searchd.DefaultRoots())
