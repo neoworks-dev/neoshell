@@ -73,6 +73,9 @@ void surface_show(Surface*);
 void surface_hide(Surface*);
 void surface_destroy(Surface*);     // tears down; frees the Surface
 bool surface_configured(Surface*);
+// False after surface_hide until surface_show; callers must not present frames
+// to a hidden surface (it would re-map it).
+bool surface_visible(Surface*);
 void surface_size(Surface*, int* w, int* h);
 // Resolved output the surface landed on (connector name), for GPU selection.
 const char* surface_output_name(Surface*);
