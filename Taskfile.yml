@@ -69,6 +69,12 @@ tasks:
     cmds:
       - go build -o neoshell-search ./cmd/neoshell-search
 
+  cli:install:
+    desc: Install `neoshell` to $GOBIN (PATH) so Hyprland binds can call it in dev
+    dir: apps/shell
+    cmds:
+      - go install ./cmd/neoshell
+
   ui:build:
     desc: Build the UI to apps/ui/dist
     dir: "{{.UI_DIR}}"
@@ -87,7 +93,7 @@ tasks:
 
   core:dev:
     desc: Run the Go core (no --frontend, so the render host loads Vite on :5173)
-    deps: [render:build, search:build]
+    deps: [render:build, search:build, cli:install]
     dir: apps/shell
     cmds:
       - go run ./cmd/neoshell {{.MONITOR_FLAG}}
@@ -98,7 +104,7 @@ tasks:
 
   run:
     desc: Production-like — build the UI and serve it directly from the Go core
-    deps: [render:build, search:build, ui:build]
+    deps: [render:build, search:build, cli:install, ui:build]
     dir: apps/shell
     cmds:
       - go run ./cmd/neoshell --frontend "{{.ROOT_DIR}}/apps/ui/dist" {{.MONITOR_FLAG}}
