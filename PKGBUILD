@@ -46,6 +46,8 @@ makedepends=(
 optdepends=(
   'gst-plugins-good: <video>/<audio> playback in web surfaces'
   'gst-plugins-bad: extra media codecs in web surfaces'
+  'ollama: semantic file search embeddings (nomic-embed-text/vision)'
+  'surrealdb: persistent BM25 + vector index for semantic file search'
 )
 
 source=()
@@ -72,6 +74,7 @@ package() {
   install -Dm755 apps/render-host/neoshell-render           "$pkgdir/usr/lib/neoshell/neoshell-render"
   install -Dm755 apps/settings/target/release/neoshell-settings "$pkgdir/usr/lib/neoshell/neoshell-settings"
   install -Dm755 apps/bg/target/release/neoshell-bg         "$pkgdir/usr/lib/neoshell/neoshell-bg"
+  install -Dm755 apps/shell/neoshell-search                "$pkgdir/usr/lib/neoshell/neoshell-search"
 
   # Built frontend served by the core.
   install -d "$pkgdir/usr/share/neoshell/ui"
@@ -81,6 +84,7 @@ package() {
 #!/bin/sh
 export NEOSHELL_RENDER_BIN="${NEOSHELL_RENDER_BIN:-/usr/lib/neoshell/neoshell-render}"
 export NEOSHELL_SETTINGS_BIN="${NEOSHELL_SETTINGS_BIN:-/usr/lib/neoshell/neoshell-settings}"
+export NEOSHELL_SEARCH_BIN="${NEOSHELL_SEARCH_BIN:-/usr/lib/neoshell/neoshell-search}"
 exec /usr/lib/neoshell/neoshell --frontend /usr/share/neoshell/ui "$@"
 EOF
 

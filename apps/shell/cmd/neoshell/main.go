@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/neoworks/neoshell/internal/config"
+	"github.com/neoworks/neoshell/internal/fileindex"
 	"github.com/neoworks/neoshell/internal/hyprland"
 	"github.com/neoworks/neoshell/internal/notifications"
 	"github.com/neoworks/neoshell/internal/renderhost"
@@ -97,7 +98,19 @@ Environment:
 		log.Printf("notifications: %v", err)
 	}
 
-	srv := server.New(hub, hypr, sys, cfg, notifier, *frontend)
+	// File index for the apps overlay's universal search. Built asynchronously so
+	// the walk over $HOME never blocks startup; queries return empty until ready.
+	// This is also the fallback when the semantic search daemon is unavailable.
+	index := fileindex.New()
+	go index.Build(fileindex.DefaultRoots())
+
+	// Semantic search daemon (BM25 + vector over file contents). Spawned detached;
+	// the core proxies search:files to it and degrades to the filename index above
+	// when it (or its Ollama/Surreal deps) is absent.
+	startSearchDaemon()
+	go pollSearchProgress(hub)
+
+	srv := server.New(hub, hypr, sys, cfg, notifier, index, *frontend)
 
 	// Config is the shell's source of truth: broadcast every change so the bar and
 	// settings window react live, and drive the wallpaper daemon when it changes.
@@ -165,6 +178,11 @@ Environment:
 		hypr.Keyword("layerrule", "ignorealpha 0.1,"+namespace)
 	}
 	applyBlur()
+
+	// Win+Space toggles the apps overlay. The compositor can't call into the core
+	// directly, so the bind hits the local /toggle endpoint over HTTP (needs curl).
+	overlayBind := fmt.Sprintf("SUPER,space,exec,curl -s http://localhost:%d/toggle?surface=overlay", *port)
+	hypr.Keyword("bind", overlayBind)
 
 	// The frontend reads ?port to find the WebSocket regardless of where the page
 	// is served, so the render host's surface URL carries it too.

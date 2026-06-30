@@ -3,6 +3,7 @@
 *.test
 *.out
 /apps/shell/neoshell
+/apps/shell/neoshell-search
 /neoshell
 
 # Rust build artifacts
