@@ -1,15 +1,26 @@
 package searchd
 
-import "context"
+import (
+	"context"
+	"os"
+	"path/filepath"
+)
 
-// OpenStore returns the index backend: a persistent SurrealDB (spawned as a child
-// process) when the `surreal` binary is available, otherwise the in-memory store
-// so the daemon still runs (filename/text search, no persistence).
-func OpenStore(ctx context.Context) (Store, error) {
-	surreal, err := openSurreal(ctx)
-	if err == nil {
-		return surreal, nil
+// indexPath resolves the on-disk index file (gob). Override the directory via
+// NEOSHELL_SEARCH_DATA.
+func indexPath() string {
+	if dir := os.Getenv("NEOSHELL_SEARCH_DATA"); dir != "" {
+		return filepath.Join(dir, "index.gob")
 	}
-	logSurrealUnavailable(err)
-	return newMemStore(), nil
+	base := os.Getenv("XDG_DATA_HOME")
+	if base == "" {
+		base = filepath.Join(os.Getenv("HOME"), ".local", "share")
+	}
+	return filepath.Join(base, "neoshell", "search", "index.gob")
+}
+
+// OpenStore opens the in-process index (self-contained BM25 + vector, persisted
+// to a gob file). No external database.
+func OpenStore(_ context.Context) (Store, error) {
+	return openLocalStore(indexPath())
 }
