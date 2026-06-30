@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/neoworks/neoshell/internal/apps"
 	"github.com/neoworks/neoshell/internal/config"
+	"github.com/neoworks/neoshell/internal/fileindex"
 	"github.com/neoworks/neoshell/internal/hyprland"
 	"github.com/neoworks/neoshell/internal/notifications"
 	"github.com/neoworks/neoshell/internal/shell"
@@ -45,11 +46,12 @@ type Server struct {
 	sys      *system.System
 	cfg      *config.Store
 	notifier *notifications.Daemon // may be nil if the bus was unavailable
+	index    *fileindex.Index      // file search index (may still be building)
 	frontend string                // dir to serve static frontend from; empty = disabled
 }
 
-func New(hub *Hub, hypr *hyprland.Client, sys *system.System, cfg *config.Store, notifier *notifications.Daemon, frontend string) *Server {
-	return &Server{hub: hub, hypr: hypr, sys: sys, cfg: cfg, notifier: notifier, frontend: frontend}
+func New(hub *Hub, hypr *hyprland.Client, sys *system.System, cfg *config.Store, notifier *notifications.Daemon, index *fileindex.Index, frontend string) *Server {
+	return &Server{hub: hub, hypr: hypr, sys: sys, cfg: cfg, notifier: notifier, index: index, frontend: frontend}
 }
 
 func findAppIcon(class string) string {
@@ -86,59 +88,6 @@ func parseIconFromDesktop(path string) string {
 	return ""
 }
 
-func resolveIconPath(iconName string, size int) string {
-	if iconName == "" {
-		return ""
-	}
-
-	// if it's already an absolute path, use it directly
-	if filepath.IsAbs(iconName) {
-		return iconName
-	}
-
-	theme := "hicolor" // fallback theme, could read from GTK settings
-
-	baseDirs := []string{
-		os.ExpandEnv("$HOME/.local/share/icons"),
-		os.ExpandEnv("$HOME/.icons"),
-		"/usr/share/icons",
-		"/usr/local/share/icons",
-		"/usr/share/pixmaps",
-	}
-
-	exts := []string{".png", ".svg", ".xpm"}
-
-	// try themed icon first, then hicolor fallback, then pixmaps
-	for _, base := range baseDirs {
-		for _, t := range []string{theme, "hicolor"} {
-			// try closest size first, then scalable
-			for _, subdir := range []string{
-				fmt.Sprintf("%dx%d/apps", size, size),
-				"scalable/apps",
-				fmt.Sprintf("%dx%d/devices", size, size),
-				fmt.Sprintf("%dx%d/mimetypes", size, size),
-			} {
-				for _, ext := range exts {
-					path := filepath.Join(base, t, subdir, iconName+ext)
-					if _, err := os.Stat(path); err == nil {
-						return path
-					}
-				}
-			}
-		}
-	}
-
-	// last resort — pixmaps
-	for _, ext := range exts {
-		path := filepath.Join("/usr/share/pixmaps", iconName+ext)
-		if _, err := os.Stat(path); err == nil {
-			return path
-		}
-	}
-
-	return ""
-}
-
 func (s *Server) Listen(addr string) {
 	http.HandleFunc("/ws", s.handleWS)
 	http.HandleFunc("/icon/", func(w http.ResponseWriter, r *http.Request) {
@@ -172,6 +121,17 @@ func (s *Server) Listen(addr string) {
 		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		http.ServeFile(w, r, path)
+	})
+	// /toggle?surface=<role> flips a shell surface's visibility. Used by the
+	// injected Hyprland keybind (Win+Space) to open/close the apps overlay
+	// without a persistent IPC channel into the compositor.
+	http.HandleFunc("/toggle", func(w http.ResponseWriter, r *http.Request) {
+		surface := r.URL.Query().Get("surface")
+		if surface == "" {
+			surface = "overlay"
+		}
+		s.hub.SendWindowCommand(surface, "toggle")
+		w.WriteHeader(http.StatusNoContent)
 	})
 	// Serve the built frontend directly when configured. Registered last and at
 	// the root so the more specific /ws and /icon/ routes take precedence. CEF is
@@ -283,6 +243,18 @@ func (s *Server) route(c *Client, msg InMessage) {
 
 	case "apps:list":
 		data, _ := json.Marshal(OutMessage{Type: "apps", Data: apps.List()})
+		c.Send(data)
+
+	case "search:files":
+		// Echo the query back so the client can drop stale (out-of-order) results.
+		results := []fileindex.Entry{}
+		if s.index != nil {
+			results = s.index.Search(msg.Query, 30)
+		}
+		data, _ := json.Marshal(OutMessage{Type: "searchResults", Data: map[string]any{
+			"query":   msg.Query,
+			"results": results,
+		}})
 		c.Send(data)
 
 	case "launch":
