@@ -50,6 +50,10 @@ struct InputSink {
 // ---- connection ----
 WaylandConn* conn_new();
 void conn_set_input(WaylandConn*, InputSink);
+
+// Register a callback fired whenever an output is added, removed, or changes mode,
+// so the host can re-run its per-output checks (e.g. refresh-rate seeding).
+void conn_set_outputs_changed_cb(WaylandConn*, std::function<void()>);
 int  conn_fd(WaylandConn*);
 void conn_dispatch(WaylandConn*);   // non-blocking read + dispatch + flush
 void conn_flush(WaylandConn*);
@@ -60,6 +64,10 @@ bool conn_ok(WaylandConn*);
 // undetected (caller falls back to env/default).
 const char* conn_render_node(WaylandConn*);
 const char* conn_primary_node(WaylandConn*);
+
+// Current mode (pixels + refresh in mHz) of the named output, or the first output
+// when name is empty/NULL. Returns false if no output or no known refresh.
+bool conn_output_mode(WaylandConn*, const char* name, int* w, int* h, int* refresh);
 
 // Apply a named cursor (CSS cursor name, e.g. "pointer", "grab", "text") to the
 // seat pointer, from a wl_cursor theme. Driven by WebKit's set_cursor_from_name.

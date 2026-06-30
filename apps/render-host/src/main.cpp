@@ -74,8 +74,18 @@ GpuNodes compositor_gpu() {
 WPEDisplay* get_display(const GpuNodes& gpu) {
     auto it = g_host.displays.find(gpu.render);
     if (it != g_host.displays.end()) return it->second;
+    // Seed the WPE display with the compositor's real mode. A hardcoded refresh
+    // that doesn't match the monitor drives WPE's render cadence at the wrong rate
+    // and produces visible anomalies, so prefer the actual output mode.
+    int width = 1920, height = 1080, refresh = 144000;
+    if (conn_output_mode(g_host.conn, "", &width, &height, &refresh)) {
+        g_printerr("[neoshell-wpe] output mode %dx%d@%dmHz\n", width, height, refresh);
+    } else {
+        g_printerr("[neoshell-wpe] output mode unknown, using %dx%d@%dmHz\n",
+                   width, height, refresh);
+    }
     WPEDisplay* d = neoshell_display_new(gpu.primary.c_str(), gpu.render.c_str(),
-                                       1920, 1080, 144000);
+                                       width, height, refresh);
     GError* err = nullptr;
     if (!wpe_display_connect(d, &err)) {
         g_printerr("[neoshell-wpe] WPE connect failed for %s: %s\n", gpu.render.c_str(),
@@ -420,6 +430,18 @@ int main(int argc, char** argv) {
     }
     // WPE displays are created lazily per output GPU as surfaces are created.
     install_input();
+
+    // Re-seed every live display's mode when a monitor is plugged, unplugged, or
+    // switches resolution/refresh, so the render cadence keeps matching the screen.
+    conn_set_outputs_changed_cb(g_host.conn, []() {
+        int width = 0, height = 0, refresh = 0;
+        if (!conn_output_mode(g_host.conn, "", &width, &height, &refresh)) {
+            return;
+        }
+        for (auto& [node, display] : g_host.displays) {
+            neoshell_display_set_mode(display, width, height, refresh);
+        }
+    });
 
     ControlHandler handler;
     handler.on_create = handle_create;

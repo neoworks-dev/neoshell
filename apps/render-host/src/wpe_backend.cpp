@@ -293,3 +293,14 @@ bool neoshell_display_observer_active(WPEDisplay* display) {
     return obs->active;
 }
 
+void neoshell_display_set_mode(WPEDisplay* display, int width, int height, int refresh_mhz) {
+    auto* self = NEOSHELL_DISPLAY(display);
+    self->width = width;
+    self->height = height;
+    self->refresh_mhz = refresh_mhz;
+    if (!self->screen) return;
+    wpe_screen_set_size(WPE_SCREEN(self->screen), width, height);
+    wpe_screen_set_refresh_rate(WPE_SCREEN(self->screen), refresh_mhz);
+    g_printerr("[neoshell-wpe] display mode updated: %dx%d@%dmHz\n", width, height, refresh_mhz);
+}
+
