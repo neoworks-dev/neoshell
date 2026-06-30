@@ -42,8 +42,11 @@ func Defaults() map[string]any {
 			},
 		},
 		"bar": map[string]any{
-			"height":  36,
-			"monitor": "",
+			"height": 36,
+			// Optional Hyprland combo for the search overlay (e.g. "SUPER,slash").
+			// Empty = the core injects no bind; toggle via `neoshell toggle overlay`.
+			"overlayKeybind": "",
+			"monitor":        "",
 			"modules": map[string]any{
 				"workspaces":  true,
 				"windowTitle": true,

@@ -130,7 +130,15 @@ func (s *Server) Listen(addr string) {
 		if surface == "" {
 			surface = "overlay"
 		}
-		s.hub.SendWindowCommand(surface, "toggle")
+		// action is toggle (default), open, or close — driven by the `neoshell`
+		// surface-control subcommands.
+		action := r.URL.Query().Get("action")
+		switch action {
+		case "open", "close":
+		default:
+			action = "toggle"
+		}
+		s.hub.SendWindowCommand(surface, action)
 		w.WriteHeader(http.StatusNoContent)
 	})
 	// Serve the built frontend directly when configured. Registered last and at
