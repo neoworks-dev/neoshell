@@ -67,6 +67,11 @@ struct Surface {
     zwlr_layer_surface_v1* layer = nullptr;
     wl_callback* frame_cb = nullptr;
     bool configured = false;
+    // Sticky visibility. A hidden surface must not be re-mapped by an incoming
+    // frame: without this, the next WPE buffer re-attaches and re-maps a surface
+    // that surface_hide just unmapped — which for a keyboard-exclusive overlay
+    // means it silently grabs the keyboard screen-wide again.
+    bool visible = true;
     int width = 0, height = 0;
     std::string output_name;
     std::function<void()> vblank;
@@ -477,12 +482,19 @@ void surface_set_region(Surface* s, const std::vector<Rect>& rects) {
     wl_display_flush(s->conn->display);
 }
 
-void surface_show(Surface* s) { /* re-map handled by re-attaching a buffer */ }
+void surface_show(Surface* s) {
+    s->visible = true;
+    // The surface re-maps when the next buffer arrives; kick a frame so a quiescent
+    // page (no pending repaint) still re-appears instead of waiting for input.
+    if (s->vblank) s->vblank();
+}
 void surface_hide(Surface* s) {
+    s->visible = false;
     wl_surface_attach(s->wl, nullptr, 0, 0);
     wl_surface_commit(s->wl);
     wl_display_flush(s->conn->display);
 }
+bool surface_visible(Surface* s) { return s->visible; }
 void surface_destroy(Surface* s) {
     if (s->frame_cb) wl_callback_destroy(s->frame_cb);
     if (s->layer) zwlr_layer_surface_v1_destroy(s->layer);

@@ -301,7 +301,11 @@ void on_render(WPEView* view, WPEBuffer* buffer, const WPERectangle*, guint) {
     auto it = g_host.by_view.find(view);
     if (it == g_host.by_view.end()) { return; }
     Surf* s = it->second;
-    if (!surface_configured(s->surface) || !WPE_IS_BUFFER_DMA_BUF(buffer)) {
+    // Drop frames for unconfigured, non-dmabuf, or hidden surfaces. Presenting to a
+    // hidden surface would re-map it — e.g. the keyboard-exclusive overlay grabbing
+    // the keyboard again after surface_hide.
+    if (!surface_configured(s->surface) || !surface_visible(s->surface) ||
+        !WPE_IS_BUFFER_DMA_BUF(buffer)) {
         wpe_view_buffer_rendered(view, buffer);
         wpe_view_buffer_released(view, buffer);
         return;
