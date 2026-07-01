@@ -82,6 +82,30 @@ func Defaults() map[string]any {
 			"gap":      10,
 			"autoHide": true,
 		},
+		// Command-palette providers and the AI chat, each toggleable live from the
+		// settings menu. Absent keys default to enabled in the frontend registry.
+		"plugins": map[string]any{
+			"providers": map[string]any{
+				"apps": true, "files": true, "calculator": true, "color": true,
+				"windows": true, "system": true, "web": true, "emoji": true,
+				"ssh": true, "process": true, "clipboard": true, "timer": true,
+				"chat": true,
+			},
+		},
+		// AI chat backend. provider is "ollama" (local) or "external" (an
+		// OpenAI/Anthropic-compatible endpoint); apiKey/endpoint apply to external.
+		// ragTopK is how many search hits are injected as context.
+		"ai": map[string]any{
+			"provider": "ollama",
+			"model":    "llama3.1",
+			"endpoint": "",
+			"apiKey":   "",
+			"ragTopK":  6,
+		},
+		// Web search: %s is replaced with the URL-encoded query.
+		"web": map[string]any{
+			"engine": "https://www.google.com/search?q=%s",
+		},
 	}
 }
 
