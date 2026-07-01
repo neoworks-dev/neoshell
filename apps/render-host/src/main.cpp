@@ -316,15 +316,10 @@ void on_render(WPEView* view, WPEBuffer* buffer, const WPERectangle*, guint) {
     // the keyboard again after surface_hide.
     if (!surface_configured(s->surface) || !surface_visible(s->surface) ||
         !WPE_IS_BUFFER_DMA_BUF(buffer)) {
-        if (s->role == "overlay")
-            g_printerr("[overlay] drop frame configured=%d visible=%d dmabuf=%d\n",
-                       surface_configured(s->surface), surface_visible(s->surface),
-                       WPE_IS_BUFFER_DMA_BUF(buffer));
         wpe_view_buffer_rendered(view, buffer);
         wpe_view_buffer_released(view, buffer);
         return;
     }
-    if (s->role == "overlay") g_printerr("[overlay] PRESENT frame\n");
     wpe_view_buffer_rendered(view, buffer);
     g_host.last_present_us = g_get_monotonic_time();
     auto alive = s->alive;
@@ -399,7 +394,6 @@ void handle_show(const std::string& role) {
     // surface stays blank. Reload to force WebKit to produce fresh frames; for the
     // launcher/search overlay this also resets it to a clean state on each open.
     if (s->webview) webkit_web_view_reload(s->webview);
-    g_printerr("[overlay] show role=%s reload issued\n", role.c_str());
 }
 void handle_hide(const std::string& role) {
     Surf* s = find(role);

@@ -535,12 +535,20 @@ void surface_set_region(Surface* s, const std::vector<Rect>& rects) {
 
 void surface_show(Surface* s) {
     s->visible = true;
-    // The surface re-maps when the next buffer arrives; kick a frame so a quiescent
-    // page (no pending repaint) still re-appears instead of waiting for input.
+    // The surface was unmapped by surface_hide, so the compositor requires a
+    // fresh configure before any buffer may be attached. Commit with no buffer to
+    // elicit that configure; on_render only presents once `configured` is true
+    // again (set in ls_configure), so no buffer is attached prematurely.
+    wl_surface_commit(s->wl);
+    wl_display_flush(s->conn->display);
     if (s->vblank) s->vblank();
 }
 void surface_hide(Surface* s) {
     s->visible = false;
+    // Unmapping (null buffer) invalidates the layer surface's configured state:
+    // wlroots will send a new configure on re-map, and attaching before acking it
+    // is a protocol error. Clear the flag so on_render waits for the reconfigure.
+    s->configured = false;
     wl_surface_attach(s->wl, nullptr, 0, 0);
     wl_surface_commit(s->wl);
     wl_display_flush(s->conn->display);
