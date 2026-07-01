@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/neoworks/neoshell/internal/ai"
 	"github.com/neoworks/neoshell/internal/ipc"
 )
 
@@ -23,6 +24,9 @@ type InMessage struct {
 	// run / watch
 	ID  string `json:"id,omitempty"`
 	Cmd string `json:"cmd,omitempty"`
+
+	// search:files — fuzzy filename query against the file index.
+	Query string `json:"query,omitempty"`
 
 	// hyprland:dispatch
 	Dispatcher string `json:"dispatcher,omitempty"`
@@ -46,6 +50,14 @@ type InMessage struct {
 	NotifID   uint32 `json:"notifId,omitempty"`
 	ActionKey string `json:"actionKey,omitempty"`
 	Reason    int    `json:"reason,omitempty"`
+
+	// ai:chat — the new user prompt and prior conversation turns.
+	Prompt  string       `json:"prompt,omitempty"`
+	History []ai.Message `json:"history,omitempty"`
+
+	// timer:start / track:start
+	Label    string `json:"label,omitempty"`
+	Duration int    `json:"duration,omitempty"` // seconds (timer countdown)
 }
 
 // Hub manages WebSocket clients and topic subscriptions.
