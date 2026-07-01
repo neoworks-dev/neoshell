@@ -55,6 +55,7 @@ var skipDirs = map[string]bool{
 	"compatdata": true, "shadercache": true,
 	"steamworks_common_redistributables": true,
 	"Games": true, "lutris": true, "Heroic": true, "PrismLauncher": true,
+	"curseforge": true, "minecraft": true, ".minecraft": true,
 	// Generated caches from Chromium/Electron-style apps.
 	"GPUCache": true, "Code Cache": true, "CachedData": true,
 	"Crashpad": true, "ShaderCache": true,
@@ -111,13 +112,27 @@ func PathPriority(path string) float64 {
 	return 1.0
 }
 
-// DefaultRoots returns the roots to index: the user's home directory.
+// documentRoots are the home subdirectories worth indexing: the user's own
+// documents and media. Indexing all of $HOME drags in hundreds of thousands of
+// generated app-data/cache files (browser profiles, package caches) that are
+// never worth searching, so the index is scoped to these instead.
+var documentRoots = []string{"Documents", "Downloads", "Desktop", "Pictures"}
+
+// DefaultRoots returns the roots to index: the user's document and media folders
+// that actually exist.
 func DefaultRoots() []string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return nil
 	}
-	return []string{home}
+	var roots []string
+	for _, name := range documentRoots {
+		path := filepath.Join(home, name)
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			roots = append(roots, path)
+		}
+	}
+	return roots
 }
 
 // walkDirs visits every non-skipped directory under each root, calling fn. Used
