@@ -198,12 +198,17 @@ func (s *localStore) PutFile(_ context.Context, file FileRecord, chunks []ChunkR
 	}
 	stored := make([]storedChunk, len(chunks))
 	for i, chunk := range chunks {
+		terms := chunk.Terms
+		if terms == nil {
+			// No pre-tokenized terms (e.g. the single-file watch path): tokenize here.
+			terms = tokenize(chunk.Text)
+		}
 		stored[i] = storedChunk{
 			Ord:       chunk.Ord,
 			Text:      chunk.Text,
 			Modality:  chunk.Modality,
 			Embedding: chunk.Embedding,
-			Terms:     tokenize(chunk.Text),
+			Terms:     terms,
 		}
 		s.addPostings(chunkKey(file.Path, chunk.Ord), stored[i])
 	}
