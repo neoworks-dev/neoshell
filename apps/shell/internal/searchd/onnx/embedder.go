@@ -81,11 +81,10 @@ func New(dir string) (*Embedder, error) {
 		return nil, fmt.Errorf("load tokenizer: %w", err)
 	}
 
-	session, err := ort.NewDynamicAdvancedSession(
+	session, err := newSession(
 		filepath.Join(dir, "nomic-embed-text.onnx"),
 		[]string{"input_ids", "token_type_ids", "attention_mask"},
 		[]string{"last_hidden_state"},
-		nil,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("load text model: %w", err)
