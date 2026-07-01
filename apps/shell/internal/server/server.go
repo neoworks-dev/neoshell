@@ -18,6 +18,7 @@ import (
 	"github.com/neoworks/neoshell/internal/notifications"
 	"github.com/neoworks/neoshell/internal/shell"
 	"github.com/neoworks/neoshell/internal/system"
+	"github.com/neoworks/neoshell/internal/timers"
 )
 
 var upgrader = websocket.Upgrader{
@@ -47,11 +48,16 @@ type Server struct {
 	cfg      *config.Store
 	notifier *notifications.Daemon // may be nil if the bus was unavailable
 	index    *fileindex.Index      // file search index (may still be building)
+	timers   *timers.Service       // countdown timers + tracking sessions
 	frontend string                // dir to serve static frontend from; empty = disabled
 }
 
 func New(hub *Hub, hypr *hyprland.Client, sys *system.System, cfg *config.Store, notifier *notifications.Daemon, index *fileindex.Index, frontend string) *Server {
-	return &Server{hub: hub, hypr: hypr, sys: sys, cfg: cfg, notifier: notifier, index: index, frontend: frontend}
+	server := &Server{hub: hub, hypr: hypr, sys: sys, cfg: cfg, notifier: notifier, index: index, frontend: frontend}
+	server.timers = timers.New(func(state timers.State) {
+		hub.Broadcast("timer", state)
+	})
+	return server
 }
 
 func findAppIcon(class string) string {
@@ -218,6 +224,18 @@ func (s *Server) route(c *Client, msg InMessage) {
 
 	case "ai:chat":
 		go s.handleChat(c, msg)
+
+	case "timer:start":
+		s.timers.StartTimer(msg.Label, msg.Duration)
+	case "timer:stop":
+		s.timers.StopTimer(msg.ID)
+	case "track:start":
+		s.timers.StartTrack(msg.Label)
+	case "track:stop":
+		s.timers.StopTrack(msg.ID)
+	case "timer:list":
+		data, _ := json.Marshal(OutMessage{Type: "timer", Data: s.timers.Snapshot()})
+		c.Send(data)
 
 	case "hyprland:dispatch":
 		go s.hypr.Dispatch(msg.Dispatcher, msg.Arg)
