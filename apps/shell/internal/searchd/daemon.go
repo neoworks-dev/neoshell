@@ -5,8 +5,10 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -152,10 +154,27 @@ func (d *Daemon) removeMissing(ctx context.Context, onDisk map[string]bool) {
 		if onDisk[path] {
 			continue
 		}
-		if _, statErr := os.Stat(path); statErr != nil {
-			_ = d.store.DeleteFile(ctx, path)
+		// Out-of-scope entries (e.g. left over after the roots were narrowed) still
+		// exist on disk, so drop them by scope. In-scope paths not seen this walk
+		// are only dropped when the file is actually gone, guarding against a
+		// transient walk miss (e.g. an unreadable directory).
+		if d.withinRoots(path) {
+			if _, statErr := os.Stat(path); statErr == nil {
+				continue
+			}
+		}
+		_ = d.store.DeleteFile(ctx, path)
+	}
+}
+
+// withinRoots reports whether path lies under one of the indexed roots.
+func (d *Daemon) withinRoots(path string) bool {
+	for _, root := range d.roots {
+		if path == root || strings.HasPrefix(path, root+string(filepath.Separator)) {
+			return true
 		}
 	}
+	return false
 }
 
 func (d *Daemon) handle(request Request) Response {
