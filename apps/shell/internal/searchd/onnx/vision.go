@@ -36,8 +36,8 @@ func loadVision(dir string) *visionSession {
 	if _, err := os.Stat(path); err != nil {
 		return nil
 	}
-	session, err := ort.NewDynamicAdvancedSession(path,
-		[]string{"pixel_values"}, []string{"last_hidden_state"}, nil)
+	session, err := newSession(path,
+		[]string{"pixel_values"}, []string{"last_hidden_state"})
 	if err != nil {
 		return nil
 	}
