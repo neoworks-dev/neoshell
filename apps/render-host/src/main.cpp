@@ -392,19 +392,14 @@ void handle_show(const std::string& role) {
     Surf* s = find(role);
     if (!s) return;
     surface_show(s->surface);
-    // Force a fresh frame. While hidden the surface drops WebView frames
-    // (on_render), so a page that painted once and went quiescent has nothing to
-    // present on show. Re-mapping the WPE view makes WebKit treat it as newly
-    // visible and schedule a full repaint, which on_render then presents
-    // (surface_show already kicked a vblank to drive it).
-    if (s->wpe_view) {
-        wpe_view_set_visible(s->wpe_view, TRUE);
-        wpe_view_unmap(s->wpe_view);
-        wpe_view_map(s->wpe_view);
-    }
-    g_printerr("[overlay] show role=%s view=%p mapped=%d\n", role.c_str(),
-               (void*)s->wpe_view,
-               s->wpe_view ? wpe_view_get_mapped(s->wpe_view) : -1);
+    if (s->wpe_view) wpe_view_set_visible(s->wpe_view, TRUE);
+    // The overlay painted once while hidden (that frame was dropped by on_render)
+    // and then went idle, so neither set_visible nor a remap re-triggers a paint:
+    // WebKit has no damage, so the watchdog never gets a frame to present and the
+    // surface stays blank. Reload to force WebKit to produce fresh frames; for the
+    // launcher/search overlay this also resets it to a clean state on each open.
+    if (s->webview) webkit_web_view_reload(s->webview);
+    g_printerr("[overlay] show role=%s reload issued\n", role.c_str());
 }
 void handle_hide(const std::string& role) {
     Surf* s = find(role);
