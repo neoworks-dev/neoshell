@@ -46,6 +46,9 @@ var skipDirs = map[string]bool{
 	"Games":        true,
 	"lutris":       true,
 	"Heroic":       true,
+	"curseforge":   true,
+	"minecraft":    true,
+	".minecraft":   true,
 }
 
 // Index holds the indexed entries behind an RWMutex so Build can swap the slice
@@ -60,13 +63,26 @@ func New() *Index {
 	return &Index{}
 }
 
-// DefaultRoots returns the roots to index — the user's home directory.
+// documentRoots are the home subdirectories worth indexing: the user's own
+// documents and media. Indexing all of $HOME drags in hundreds of thousands of
+// generated app-data/cache files that are never worth searching.
+var documentRoots = []string{"Documents", "Downloads", "Desktop", "Pictures"}
+
+// DefaultRoots returns the roots to index — the user's document and media folders
+// that actually exist.
 func DefaultRoots() []string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return nil
 	}
-	return []string{home}
+	var roots []string
+	for _, name := range documentRoots {
+		path := filepath.Join(home, name)
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			roots = append(roots, path)
+		}
+	}
+	return roots
 }
 
 // Build walks the given roots and atomically replaces the index. Safe to run in
