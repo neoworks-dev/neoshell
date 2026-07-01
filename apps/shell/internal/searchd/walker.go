@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // shouldSkipDir reports whether a directory base name is noise to ignore during
@@ -49,10 +50,65 @@ var skipDirs = map[string]bool{
 	// Sandboxes / large app data
 	".var": true, "snap": true, ".wine": true, ".mozilla": true,
 	".steam": true,
+	// Games & their generated content — huge, binary, never worth searching.
+	"steamapps": true, "Steam": true, "SteamLibrary": true,
+	"compatdata": true, "shadercache": true,
+	"steamworks_common_redistributables": true,
+	"Games": true, "lutris": true, "Heroic": true, "PrismLauncher": true,
+	// Generated caches from Chromium/Electron-style apps.
+	"GPUCache": true, "Code Cache": true, "CachedData": true,
+	"Crashpad": true, "ShaderCache": true,
 	// Trash / OS
 	".Trash": true, "$RECYCLE.BIN": true, "System Volume Information": true,
 	// The user's Go workspace (built packages, module cache)
 	"go": true,
+}
+
+// highPriorityDirs are the home subdirectories whose files matter most in search
+// results — documents, downloads, and media the user actually reaches for.
+var highPriorityDirs = map[string]bool{
+	"Documents": true, "Desktop": true, "Downloads": true,
+	"Pictures": true, "Notes": true, "Projects": true,
+	"Code": true, "dev": true, "src": true, "Work": true,
+}
+
+var (
+	homeOnce sync.Once
+	homeDir  string
+)
+
+func userHome() string {
+	homeOnce.Do(func() {
+		if home, err := os.UserHomeDir(); err == nil {
+			homeDir = home
+		}
+	})
+	return homeDir
+}
+
+// PathPriority scores a path's importance for result ranking, returned as a score
+// multiplier applied during fusion (1.0 is neutral). Files in the user's
+// document-like folders rank above buried app-data/dotfile paths.
+func PathPriority(path string) float64 {
+	home := userHome()
+	if home == "" {
+		return 1.0
+	}
+	relative, err := filepath.Rel(home, path)
+	if err != nil || strings.HasPrefix(relative, "..") {
+		return 1.0 // outside the home directory
+	}
+	top := relative
+	if index := strings.IndexByte(relative, filepath.Separator); index >= 0 {
+		top = relative[:index]
+	}
+	if highPriorityDirs[top] {
+		return 1.6
+	}
+	if strings.HasPrefix(top, ".") {
+		return 0.6 // dotfiles / buried app data
+	}
+	return 1.0
 }
 
 // DefaultRoots returns the roots to index: the user's home directory.

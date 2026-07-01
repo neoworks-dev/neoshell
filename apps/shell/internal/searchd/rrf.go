@@ -45,6 +45,9 @@ func fuse(lists [][]Scored, limit int) []Hit {
 
 	fused := make([]*agg, 0, len(byPath))
 	for _, item := range byPath {
+		// Weight the fused score by path priority so files in the user's document
+		// folders outrank equally-relevant hits buried in app data.
+		item.score *= PathPriority(item.hit.Path)
 		item.hit.Score = item.score
 		fused = append(fused, item)
 	}

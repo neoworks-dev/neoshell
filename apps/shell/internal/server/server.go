@@ -142,8 +142,8 @@ func (s *Server) Listen(addr string) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	// Serve the built frontend directly when configured. Registered last and at
-	// the root so the more specific /ws and /icon/ routes take precedence. CEF is
-	// full Chromium, so no compatibility shim or CSS rewriting is needed.
+	// the root so the more specific /ws and /icon/ routes take precedence. WPE
+	// WebKit is a full modern engine, so no compatibility shim or CSS rewriting.
 	if s.frontend != "" {
 		http.Handle("/", http.FileServer(http.Dir(s.frontend)))
 		log.Printf("serving frontend from %s", s.frontend)

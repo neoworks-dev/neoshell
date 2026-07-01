@@ -18,6 +18,10 @@ type ChunkRecord struct {
 	Text      string
 	Modality  string // "text" | "image"
 	Embedding []float32
+	// Terms is the pre-tokenized text for BM25, filled during the parallel prepare
+	// stage so tokenization stays off the store's write lock. When nil, PutFile
+	// tokenizes Text itself.
+	Terms []string
 }
 
 // Scored is a ranked chunk hit from one retrieval method (BM25 or vector).
