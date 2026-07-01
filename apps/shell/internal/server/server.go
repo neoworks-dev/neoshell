@@ -216,6 +216,9 @@ func (s *Server) route(c *Client, msg InMessage) {
 			})
 		}()
 
+	case "ai:chat":
+		go s.handleChat(c, msg)
+
 	case "hyprland:dispatch":
 		go s.hypr.Dispatch(msg.Dispatcher, msg.Arg)
 
