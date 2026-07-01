@@ -383,8 +383,28 @@ void handle_exclusive(const std::string& role, EdgeKind edge, int size) {
 void handle_region(const std::string& role, const std::vector<Rect>& rects) {
     if (Surf* s = find(role)) surface_set_region(s->surface, rects);
 }
-void handle_show(const std::string& role) { if (Surf* s = find(role)) surface_show(s->surface); }
-void handle_hide(const std::string& role) { if (Surf* s = find(role)) surface_hide(s->surface); }
+void handle_show(const std::string& role) {
+    Surf* s = find(role);
+    if (!s) return;
+    surface_show(s->surface);
+    // Force a fresh frame. While hidden the surface drops WebView frames
+    // (on_render), so a page that painted once and went quiescent has nothing to
+    // present on show. Toggling WPE view visibility off->on makes WebKit treat
+    // the view as newly visible and schedule a full repaint, which on_render then
+    // presents (surface_show already kicked a vblank to drive it).
+    if (s->wpe_view) {
+        wpe_view_set_visible(s->wpe_view, FALSE);
+        wpe_view_set_visible(s->wpe_view, TRUE);
+    }
+}
+void handle_hide(const std::string& role) {
+    Surf* s = find(role);
+    if (!s) return;
+    surface_hide(s->surface);
+    // Tell WebKit the view is hidden so it pauses rendering updates instead of
+    // painting frames we would only drop.
+    if (s->wpe_view) wpe_view_set_visible(s->wpe_view, FALSE);
+}
 void handle_destroy(const std::string& role) {
     Surf* s = find(role);
     if (!s) return;
