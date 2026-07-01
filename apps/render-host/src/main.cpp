@@ -316,10 +316,15 @@ void on_render(WPEView* view, WPEBuffer* buffer, const WPERectangle*, guint) {
     // the keyboard again after surface_hide.
     if (!surface_configured(s->surface) || !surface_visible(s->surface) ||
         !WPE_IS_BUFFER_DMA_BUF(buffer)) {
+        if (s->role == "overlay")
+            g_printerr("[overlay] drop frame configured=%d visible=%d dmabuf=%d\n",
+                       surface_configured(s->surface), surface_visible(s->surface),
+                       WPE_IS_BUFFER_DMA_BUF(buffer));
         wpe_view_buffer_rendered(view, buffer);
         wpe_view_buffer_released(view, buffer);
         return;
     }
+    if (s->role == "overlay") g_printerr("[overlay] PRESENT frame\n");
     wpe_view_buffer_rendered(view, buffer);
     g_host.last_present_us = g_get_monotonic_time();
     auto alive = s->alive;
@@ -389,13 +394,17 @@ void handle_show(const std::string& role) {
     surface_show(s->surface);
     // Force a fresh frame. While hidden the surface drops WebView frames
     // (on_render), so a page that painted once and went quiescent has nothing to
-    // present on show. Toggling WPE view visibility off->on makes WebKit treat
-    // the view as newly visible and schedule a full repaint, which on_render then
-    // presents (surface_show already kicked a vblank to drive it).
+    // present on show. Re-mapping the WPE view makes WebKit treat it as newly
+    // visible and schedule a full repaint, which on_render then presents
+    // (surface_show already kicked a vblank to drive it).
     if (s->wpe_view) {
-        wpe_view_set_visible(s->wpe_view, FALSE);
         wpe_view_set_visible(s->wpe_view, TRUE);
+        wpe_view_unmap(s->wpe_view);
+        wpe_view_map(s->wpe_view);
     }
+    g_printerr("[overlay] show role=%s view=%p mapped=%d\n", role.c_str(),
+               (void*)s->wpe_view,
+               s->wpe_view ? wpe_view_get_mapped(s->wpe_view) : -1);
 }
 void handle_hide(const std::string& role) {
     Surf* s = find(role);
