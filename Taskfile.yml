@@ -69,6 +69,24 @@ tasks:
     cmds:
       - go build -o neoshell-search ./cmd/neoshell-search
 
+  search:gpu:
+    desc: >-
+      Fetch the CUDA 12 runtime libs onnxruntime-gpu needs into
+      <models>/cuda12, so embeddings run on the GPU. The daemon adds this dir to
+      LD_LIBRARY_PATH. Needs `uv` and the system cuDNN 9 (pacman -S cudnn).
+    vars:
+      MODELS:
+        sh: echo "${XDG_DATA_HOME:-$HOME/.local/share}/neoshell/models"
+    cmds:
+      - mkdir -p "{{.MODELS}}/cuda12"
+      - >-
+        uv pip install --target "{{.MODELS}}/.cuda-wheels"
+        nvidia-cuda-runtime-cu12 nvidia-cublas-cu12 nvidia-cufft-cu12
+        nvidia-cuda-nvrtc-cu12 nvidia-curand-cu12 nvidia-nvjitlink-cu12
+      - find "{{.MODELS}}/.cuda-wheels/nvidia" -name '*.so*' -exec cp -an {} "{{.MODELS}}/cuda12/" \;
+      - rm -rf "{{.MODELS}}/.cuda-wheels"
+      - echo "CUDA 12 libs installed. Restart the daemon; log should show 'on CUDA GPU'."
+
   cli:install:
     desc: Install `neoshell` to $GOBIN (PATH) so Hyprland binds can call it in dev
     dir: apps/shell
