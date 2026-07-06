@@ -31,3 +31,11 @@ node_modules/
 
 # Obsolete Ultralight SDK archive (pre-WPE)
 /ultralight-free-sdk-*.7z
+
+# Stray artifacts / local tooling (not project source)
+/tim-knauer-voice.mp3
+/history.txt
+/apps/shell/history.txt
+/apps/shell/searchbench
+/.agents/
+/skills-lock.json

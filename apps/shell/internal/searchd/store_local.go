@@ -25,11 +25,14 @@ const (
 )
 
 type storedChunk struct {
-	Ord       int
-	Text      string
-	Modality  string
+	Ord      int
+	Text     string
+	Modality string
+	Terms    []string // tokenized text, for BM25 (kept for incremental removal)
+	Slot     int      // index into the mmap vector file; -1 = no embedding
+	// Embedding is only populated when decoding a pre-mmap snapshot; it is
+	// migrated into the vector file on load and never written back.
 	Embedding []float32
-	Terms     []string // tokenized text, for BM25 (kept for incremental removal)
 }
 
 type posting struct {
@@ -39,6 +42,7 @@ type posting struct {
 
 type localStore struct {
 	path string
+	vec  *vecStore // memory-mapped embeddings (kept off the Go heap)
 
 	mu       sync.RWMutex
 	files    map[string]FileRecord
@@ -51,9 +55,17 @@ type localStore struct {
 	stop chan struct{}
 }
 
+// snapshotVersion 1 stores embeddings in the mmap vector file; version 0 (absent)
+// is the legacy format that inlined them in the gob and is migrated on load.
+const snapshotVersion = 1
+
 type snapshot struct {
-	Files  map[string]FileRecord
-	Chunks map[string][]storedChunk
+	Version  int
+	Files    map[string]FileRecord
+	Chunks   map[string][]storedChunk
+	VecDim   int
+	VecCount int
+	VecFree  []int
 }
 
 // openLocalStore loads the index from disk (or starts empty) and begins periodic
@@ -62,8 +74,13 @@ func openLocalStore(path string) (*localStore, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
+	vec, err := openVecStore(vectorsPath(path))
+	if err != nil {
+		return nil, err
+	}
 	s := &localStore{
 		path:     path,
+		vec:      vec,
 		files:    map[string]FileRecord{},
 		chunks:   map[string][]storedChunk{},
 		postings: map[string][]posting{},
@@ -76,6 +93,11 @@ func openLocalStore(path string) (*localStore, error) {
 	s.rebuildIndex()
 	go s.periodicSave()
 	return s, nil
+}
+
+// vectorsPath is the mmap embedding file, beside the gob index.
+func vectorsPath(indexPath string) string {
+	return filepath.Join(filepath.Dir(indexPath), "vectors.bin")
 }
 
 func (s *localStore) load() error {
@@ -98,7 +120,32 @@ func (s *localStore) load() error {
 	if snap.Chunks != nil {
 		s.chunks = snap.Chunks
 	}
+	s.vec.setMeta(snap.VecDim, snap.VecCount, snap.VecFree)
+	s.migrateEmbeddings(snap.Version < snapshotVersion)
 	return nil
+}
+
+// migrateEmbeddings moves any embeddings inlined by a legacy snapshot into the
+// vector file. For legacy chunks without an embedding it marks the slot -1 so
+// SearchVector never reads a stale slot 0.
+func (s *localStore) migrateEmbeddings(legacy bool) {
+	if !legacy {
+		return
+	}
+	for path, chunks := range s.chunks {
+		for i := range chunks {
+			if len(chunks[i].Embedding) > 0 {
+				slot := s.vec.alloc()
+				_ = s.vec.write(slot, chunks[i].Embedding)
+				chunks[i].Slot = slot
+				chunks[i].Embedding = nil
+			} else {
+				chunks[i].Slot = -1
+			}
+		}
+		s.chunks[path] = chunks
+	}
+	s.dirty = true // persist in the new format
 }
 
 // rebuildIndex reconstructs the BM25 postings from the loaded chunks.
@@ -195,6 +242,7 @@ func (s *localStore) PutFile(_ context.Context, file FileRecord, chunks []ChunkR
 
 	if old, ok := s.chunks[file.Path]; ok {
 		s.removePostings(file.Path, old)
+		s.releaseVectors(old)
 	}
 	stored := make([]storedChunk, len(chunks))
 	for i, chunk := range chunks {
@@ -203,12 +251,19 @@ func (s *localStore) PutFile(_ context.Context, file FileRecord, chunks []ChunkR
 			// No pre-tokenized terms (e.g. the single-file watch path): tokenize here.
 			terms = tokenize(chunk.Text)
 		}
+		slot := -1
+		if len(chunk.Embedding) > 0 {
+			slot = s.vec.alloc()
+			if err := s.vec.write(slot, chunk.Embedding); err != nil {
+				return err
+			}
+		}
 		stored[i] = storedChunk{
-			Ord:       chunk.Ord,
-			Text:      chunk.Text,
-			Modality:  chunk.Modality,
-			Embedding: chunk.Embedding,
-			Terms:     terms,
+			Ord:      chunk.Ord,
+			Text:     chunk.Text,
+			Modality: chunk.Modality,
+			Terms:    terms,
+			Slot:     slot,
 		}
 		s.addPostings(chunkKey(file.Path, chunk.Ord), stored[i])
 	}
@@ -218,11 +273,19 @@ func (s *localStore) PutFile(_ context.Context, file FileRecord, chunks []ChunkR
 	return nil
 }
 
+// releaseVectors frees the vector-file slots of chunks being replaced or deleted.
+func (s *localStore) releaseVectors(chunks []storedChunk) {
+	for _, chunk := range chunks {
+		s.vec.release(chunk.Slot)
+	}
+}
+
 func (s *localStore) DeleteFile(_ context.Context, path string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if old, ok := s.chunks[path]; ok {
 		s.removePostings(path, old)
+		s.releaseVectors(old)
 	}
 	delete(s.files, path)
 	delete(s.chunks, path)
@@ -270,10 +333,11 @@ func (s *localStore) SearchVector(_ context.Context, embedding []float32, limit 
 	for path, chunks := range s.chunks {
 		file := s.files[path]
 		for _, chunk := range chunks {
-			if len(chunk.Embedding) == 0 {
+			vector := s.vec.read(chunk.Slot)
+			if vector == nil {
 				continue
 			}
-			score := cosine(embedding, chunk.Embedding)
+			score := cosine(embedding, vector)
 			scored = append(scored, Scored{
 				Path: file.Path, Name: file.Name, IsDir: file.IsDir,
 				Snippet: snippet(chunk.Text), Modality: chunk.Modality, Score: float64(score),
@@ -323,7 +387,11 @@ func splitKey(key string) (string, int) {
 
 func (s *localStore) Close() error {
 	close(s.stop)
-	return s.save()
+	err := s.save()
+	if vecErr := s.vec.close(); err == nil {
+		err = vecErr
+	}
+	return err
 }
 
 func (s *localStore) periodicSave() {
@@ -346,7 +414,15 @@ func (s *localStore) save() error {
 		s.mu.Unlock()
 		return nil
 	}
-	snap := snapshot{Files: s.files, Chunks: s.chunks}
+	dim, count, free := s.vec.meta()
+	snap := snapshot{
+		Version:  snapshotVersion,
+		Files:    s.files,
+		Chunks:   s.chunks,
+		VecDim:   dim,
+		VecCount: count,
+		VecFree:  free,
+	}
 	s.dirty = false
 	s.mu.Unlock()
 

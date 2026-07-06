@@ -159,14 +159,57 @@ void install_input() {
                                            dx, dy, TRUE, FALSE, x, y);
         wpe_view_event(v, e); wpe_event_unref(e);
     };
-    sink.key = [](wl_surface* w, uint32_t keycode, uint32_t keysym, bool pressed) {
+    sink.key = [](wl_surface* w, uint32_t keycode, uint32_t keysym, uint32_t mods, bool pressed) {
         wake_for_input();
         WPEView* v = view_for_wl(w);
         if (!v) return;
+        uint32_t wpe_mods = 0;
+        if (mods & MOD_CTRL) wpe_mods |= WPE_MODIFIER_KEYBOARD_CONTROL;
+        if (mods & MOD_SHIFT) wpe_mods |= WPE_MODIFIER_KEYBOARD_SHIFT;
+        if (mods & MOD_ALT) wpe_mods |= WPE_MODIFIER_KEYBOARD_ALT;
+        if (mods & MOD_META) wpe_mods |= WPE_MODIFIER_KEYBOARD_META;
+        if (mods & MOD_CAPS) wpe_mods |= WPE_MODIFIER_KEYBOARD_CAPS_LOCK;
         WPEEvent* e = wpe_event_keyboard_new(
             pressed ? WPE_EVENT_KEYBOARD_KEY_DOWN : WPE_EVENT_KEYBOARD_KEY_UP, v,
-            WPE_INPUT_SOURCE_KEYBOARD, 0, (WPEModifiers)0, keycode, keysym);
+            WPE_INPUT_SOURCE_KEYBOARD, 0, (WPEModifiers)wpe_mods, keycode, keysym);
         wpe_view_event(v, e); wpe_event_unref(e);
+    };
+    sink.drop = [](wl_surface* w, double x, double y, const std::vector<std::string>& paths) {
+        auto it = g_host.by_wl.find(w);
+        if (it == g_host.by_wl.end()) return;
+        control_emit_drop(g_host.control, it->second->role, x, y, paths);
+    };
+    sink.drag_enter = [](wl_surface* w, double x, double y) {
+        auto it = g_host.by_wl.find(w);
+        if (it == g_host.by_wl.end()) return;
+        control_emit_drag(g_host.control, it->second->role, "enter", x, y);
+    };
+    sink.drag_motion = [](wl_surface* w, double x, double y) {
+        auto it = g_host.by_wl.find(w);
+        if (it == g_host.by_wl.end()) return;
+        control_emit_drag(g_host.control, it->second->role, "motion", x, y);
+    };
+    sink.drag_leave = [](wl_surface* w) {
+        auto it = g_host.by_wl.find(w);
+        if (it == g_host.by_wl.end()) return;
+        control_emit_drag(g_host.control, it->second->role, "leave", 0, 0);
+    };
+    sink.keyboard_focus = [](wl_surface* w, bool focused) {
+        auto it = g_host.by_wl.find(w);
+        if (it == g_host.by_wl.end()) return;
+        Surf* s = it->second;
+        if (!s->wpe_view) return;
+        // WebKit draws the caret and takes full input only for a focused view whose
+        // toplevel is active, so drive both together.
+        if (focused) {
+            if (s->toplevel)
+                wpe_toplevel_state_changed(s->toplevel, WPE_TOPLEVEL_STATE_ACTIVE);
+            wpe_view_focus_in(s->wpe_view);
+        } else {
+            wpe_view_focus_out(s->wpe_view);
+            if (s->toplevel)
+                wpe_toplevel_state_changed(s->toplevel, WPE_TOPLEVEL_STATE_NONE);
+        }
     };
     conn_set_input(g_host.conn, std::move(sink));
 }
@@ -296,7 +339,10 @@ void on_surface_configured(Surf* s, int w, int h) {
     wpe_toplevel_resized(s->toplevel, w, h);
     wpe_view_resized(s->wpe_view, w, h);
     if (!s->wired) {
-        wpe_view_set_visible(s->wpe_view, TRUE);
+        // Seed WebKit visibility from the surface state. A surface created hidden
+        // (the overlay) starts invisible, so the first surface_show is a real
+        // false->true transition that makes WebKit repaint — no reload needed.
+        wpe_view_set_visible(s->wpe_view, surface_visible(s->surface));
         wpe_view_map(s->wpe_view);
         webkit_web_view_load_uri(s->webview, s->url.c_str());
         s->wired = true;
@@ -387,21 +433,20 @@ void handle_show(const std::string& role) {
     Surf* s = find(role);
     if (!s) return;
     surface_show(s->surface);
+    // A false->true visibility transition makes WebKit repaint the already-loaded
+    // content (the view is seeded invisible while hidden), so the surface shows its
+    // current frame without a blank reload.
     if (s->wpe_view) wpe_view_set_visible(s->wpe_view, TRUE);
-    // The overlay painted once while hidden (that frame was dropped by on_render)
-    // and then went idle, so neither set_visible nor a remap re-triggers a paint:
-    // WebKit has no damage, so the watchdog never gets a frame to present and the
-    // surface stays blank. Reload to force WebKit to produce fresh frames; for the
-    // launcher/search overlay this also resets it to a clean state on each open.
-    if (s->webview) webkit_web_view_reload(s->webview);
 }
 void handle_hide(const std::string& role) {
     Surf* s = find(role);
     if (!s) return;
     surface_hide(s->surface);
-    // Tell WebKit the view is hidden so it pauses rendering updates instead of
-    // painting frames we would only drop.
+    // Pause WebKit rendering while hidden so it doesn't paint frames we'd drop.
     if (s->wpe_view) wpe_view_set_visible(s->wpe_view, FALSE);
+}
+void handle_keyboard(const std::string& role, KeyboardMode mode) {
+    if (Surf* s = find(role)) surface_set_keyboard(s->surface, mode);
 }
 void handle_destroy(const std::string& role) {
     Surf* s = find(role);
@@ -467,7 +512,11 @@ int main(int argc, char** argv) {
     handler.on_region = handle_region;
     handler.on_show = handle_show;
     handler.on_hide = handle_hide;
+    handler.on_keyboard = handle_keyboard;
     handler.on_destroy = handle_destroy;
+    handler.on_start_drag = [](const std::vector<std::string>& paths) {
+        present_start_drag(g_host.conn, paths);
+    };
     g_host.control = control_new(std::move(handler));
     if (control_listen_fd(g_host.control) < 0) return 1;
 

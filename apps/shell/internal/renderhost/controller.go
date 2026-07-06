@@ -6,27 +6,19 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/neoworks/neoshell/internal/ipc"
+	"github.com/neoworks/neoshell/internal/plugins"
 	"github.com/neoworks/neoshell/internal/server"
 )
 
-// barRole is the single overlay surface that hosts the shell frontend. It spans
-// the output; the frontend carves out interactive areas via window:region and
-// reserves space via window:exclusive, exactly as in the WebKitGTK build.
+// barRole is the default surface role: window commands with an empty name target
+// it, and it is the frontend's default view.
 const barRole = "bar"
-
-// desktopRole is the fullscreen desktop surface (icons and, later, widgets). It
-// sits on the bottom layer — above the wallpaper, below application windows.
-const desktopRole = "desktop"
-
-// dockRole is the macOS-style bottom dock surface. It sits on the Top layer,
-// anchored to the bottom edge, and is click-through except over the dock itself
-// (the frontend sends its interactive region and a bottom exclusive zone).
-const dockRole = "dock"
 
 // settingsRole names the standalone settings application. It is not a shell
 // surface — window:open/close spawn and kill the separate neoshell-settings
@@ -43,7 +35,7 @@ func surfaceRole(name string) string {
 }
 
 // Controller spawns the render host and bridges hub window/region/exclusive
-// commands to it. It replaces internal/bar in the Ultralight render path.
+// commands to it. It drives the WPE WebKit render host (apps/render-host).
 type Controller struct {
 	hub     *server.Hub
 	host    *Host
@@ -51,13 +43,22 @@ type Controller struct {
 	url     string
 	monitor string
 
+	// surfaces maps a role to its resolved plugin surface, for toggle lookups.
+	surfaces map[string]plugins.ResolvedSurface
+
 	mu          sync.Mutex
-	settingsCmd *exec.Cmd // the running settings app, if any
+	settingsCmd *exec.Cmd       // the running settings app, if any
+	openState   map[string]bool // whether each toggleable surface is currently mapped
 }
 
-// Run spawns the render host, creates the bar surface, and forwards hub commands
-// until the process exits. Blocks; run as the main render loop in Ultralight mode.
-func Run(hub *server.Hub, url, monitor, binPath string) error {
+// Run spawns the render host, creates every plugin surface, and forwards hub
+// commands until the process exits. Blocks; run as the main render loop. When
+// surfaces is empty it falls back to the built-in shell surfaces.
+func Run(hub *server.Hub, url, monitor, binPath string, surfaces []plugins.ResolvedSurface) error {
+	if len(surfaces) == 0 {
+		surfaces = defaultSurfaces()
+	}
+
 	host, err := SpawnHost(binPath)
 	if err != nil {
 		return err
@@ -70,29 +71,28 @@ func Run(hub *server.Hub, url, monitor, binPath string) error {
 	}
 
 	controller := &Controller{
-		hub:     hub,
-		host:    host,
-		client:  client,
-		url:     url,
-		monitor: monitor,
+		hub:       hub,
+		host:      host,
+		client:    client,
+		url:       url,
+		monitor:   monitor,
+		surfaces:  make(map[string]plugins.ResolvedSurface, len(surfaces)),
+		openState: make(map[string]bool),
 	}
 	defer controller.shutdown()
 
-	if err := controller.createBar(); err != nil {
-		return err
-	}
-	if err := controller.createDesktop(); err != nil {
-		return err
-	}
-	if err := controller.createDock(); err != nil {
-		return err
+	for _, resolved := range surfaces {
+		controller.surfaces[resolved.View] = resolved
+		if err := controller.createSurface(resolved); err != nil {
+			return err
+		}
 	}
 	go controller.drainEvents()
 	go controller.listen()
 
 	// Block until interrupted, then the deferred shutdown kills the render host
 	// group. Without this the process would run forever and Ctrl-C would never
-	// reach shutdown, orphaning CEF.
+	// reach shutdown, orphaning the render host.
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-sigCh
@@ -106,80 +106,55 @@ func (c *Controller) shutdown() {
 	c.host.Stop()
 }
 
-// createBar creates the fullscreen overlay surface and immediately makes it
-// click-through; the frontend then defines its interactive regions.
-func (c *Controller) createBar() error {
+// createSurface creates one layer-shell surface from its plugin spec. Every
+// surface starts click-through (empty input region) so the desktop is not
+// blocked during load; the frontend then defines its interactive regions.
+func (c *Controller) createSurface(surface plugins.ResolvedSurface) error {
 	spec := SurfaceSpec{
-		Role:    barRole,
-		URL:     c.url,
-		Monitor: c.monitor,
-		// Top, not Overlay: a fullscreen window covers the Top layer but would
-		// draw under an Overlay surface, so Overlay keeps the bar visible over
-		// fullscreen apps. Top hides it there, which is what we want.
-		Layer: LayerTop,
-		// Top+left+right, not all four edges: wlroots ignores the exclusive zone
-		// of a surface anchored to all four edges, so the frontend's
-		// window:exclusive reservation would do nothing. Dropping the bottom
-		// anchor still spans the screen (the render host sizes the height to the
-		// output) while letting the top exclusive zone take effect.
-		Anchors:  []Edge{EdgeTop, EdgeLeft, EdgeRight},
-		Keyboard: KeyboardOnDemand,
-	}
-	if err := c.client.CreateSurface(spec); err != nil {
-		return fmt.Errorf("create bar surface: %w", err)
-	}
-	// Empty region = whole overlay is click-through until the frontend sends
-	// its interactive rects, so the desktop is not blocked during load.
-	return c.client.SetInputRegion(barRole, nil)
-}
-
-// createDesktop creates the fullscreen desktop surface that hosts draggable
-// icons (and later widgets). It is anchored to all four edges on the bottom
-// layer, so it spans the output above the wallpaper and below windows. It starts
-// click-through; the frontend sends a full-screen interactive region once loaded
-// (the whole desktop must receive input so a drag is not lost over empty areas).
-func (c *Controller) createDesktop() error {
-	spec := SurfaceSpec{
-		Role:     desktopRole,
-		URL:      desktopURL(c.url),
+		Role:     surface.View,
+		URL:      c.surfaceURL(surface),
 		Monitor:  c.monitor,
-		Layer:    LayerBottom,
-		Anchors:  []Edge{EdgeTop, EdgeBottom, EdgeLeft, EdgeRight},
-		Keyboard: KeyboardNone,
+		Layer:    Layer(surface.Layer),
+		Anchors:  toEdges(surface.Anchors),
+		Keyboard: Keyboard(surface.Keyboard),
 	}
+	if surface.ExclusiveEdge != "" {
+		edge := Edge(surface.ExclusiveEdge)
+		spec.ExclusiveEdge = &edge
+		spec.ExclusiveSize = surface.ExclusiveSize
+	}
+
 	if err := c.client.CreateSurface(spec); err != nil {
-		return fmt.Errorf("create desktop surface: %w", err)
+		return fmt.Errorf("create %s surface: %w", surface.View, err)
 	}
-	return c.client.SetInputRegion(desktopRole, nil)
+	if err := c.client.SetInputRegion(surface.View, nil); err != nil {
+		return err
+	}
+	if surface.StartHidden {
+		c.setSurface(surface.View, false)
+	}
+	return nil
 }
 
-// desktopURL appends the desktop view selector to the shared frontend URL, which
-// already carries the WS port query (…?port=N).
-func desktopURL(base string) string {
-	return base + "&view=desktop"
+// surfaceURL is the page a surface loads: its plugin entry at /plugins/<id>/,
+// served by the Go core (prod) or the dev-Vite aggregator. c.url already ends
+// with ?port=N (the WS port), which the plugin page needs, so the query is
+// carried onto the plugin path.
+func (c *Controller) surfaceURL(surface plugins.ResolvedSurface) string {
+	origin, query := c.url, ""
+	if i := strings.IndexByte(c.url, '?'); i >= 0 {
+		origin, query = c.url[:i], c.url[i:]
+	}
+	return origin + "/plugins/" + surface.PluginID + "/" + query
 }
 
-// createDock creates the bottom dock surface: a full-width strip anchored to the
-// bottom edge on the Top layer. It starts click-through; the frontend sends an
-// interactive region over the dock pill and reserves a bottom exclusive zone.
-func (c *Controller) createDock() error {
-	spec := SurfaceSpec{
-		Role:     dockRole,
-		URL:      dockURL(c.url),
-		Monitor:  c.monitor,
-		Layer:    LayerTop,
-		Anchors:  []Edge{EdgeBottom, EdgeLeft, EdgeRight},
-		Keyboard: KeyboardNone,
+// toEdges converts manifest anchor strings to render-host edges.
+func toEdges(anchors []string) []Edge {
+	edges := make([]Edge, 0, len(anchors))
+	for _, anchor := range anchors {
+		edges = append(edges, Edge(anchor))
 	}
-	if err := c.client.CreateSurface(spec); err != nil {
-		return fmt.Errorf("create dock surface: %w", err)
-	}
-	return c.client.SetInputRegion(dockRole, nil)
-}
-
-// dockURL appends the dock view selector to the shared frontend URL.
-func dockURL(base string) string {
-	return base + "&view=dock"
+	return edges
 }
 
 // listen forwards hub window/region commands to the render host.
@@ -215,6 +190,19 @@ func (c *Controller) handle(msg ipc.WindowCommand) {
 		if err := c.client.SetInputRegion(role, msg.Rects); err != nil {
 			log.Printf("render host region: %v", err)
 		}
+	case "keyboard":
+		role := surfaceRole(msg.Name)
+		mode := msg.Mode
+		if mode == "" {
+			mode = "none"
+		}
+		if err := c.client.SetKeyboard(role, mode); err != nil {
+			log.Printf("render host keyboard: %v", err)
+		}
+	case "dragstart":
+		if err := c.client.StartDrag(msg.Paths); err != nil {
+			log.Printf("render host start drag: %v", err)
+		}
 	case "open":
 		c.openWindow(msg.Name)
 	case "close":
@@ -231,22 +219,28 @@ func (c *Controller) handle(msg ipc.WindowCommand) {
 }
 
 func (c *Controller) isOpen(name string) bool {
-	if name != settingsRole {
-		return false
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.settingsCmd != nil
+	if name == settingsRole {
+		return c.settingsCmd != nil
+	}
+	return c.openState[name]
 }
 
-// openWindow launches a shell application for a named role. Settings is a
-// separate process (neoshell-settings) that hosts its UI in its own window and
-// talks to the Go core over the WS bus — it is not a shell surface.
+// openWindow maps a toggleable surface or launches a shell application. Settings
+// is a separate process (neoshell-settings) that hosts its UI in its own window
+// and talks to the Go core over the WS bus — it is not a shell surface.
 func (c *Controller) openWindow(name string) {
-	if name != settingsRole {
+	if surface, ok := c.surfaces[name]; ok && surface.Toggleable {
+		c.setSurface(name, true)
 		return
 	}
+	if name == settingsRole {
+		c.launchSettings()
+	}
+}
 
+func (c *Controller) launchSettings() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.settingsCmd != nil {
@@ -280,7 +274,28 @@ func (c *Controller) reapSettings(cmd *exec.Cmd) {
 	c.mu.Unlock()
 }
 
+// setSurface maps or unmaps a surface and records its state so window:toggle
+// flips correctly.
+func (c *Controller) setSurface(role string, show bool) {
+	c.mu.Lock()
+	c.openState[role] = show
+	c.mu.Unlock()
+	var err error
+	if show {
+		err = c.client.Show(role)
+	} else {
+		err = c.client.Hide(role)
+	}
+	if err != nil {
+		log.Printf("render host %s: %v", role, err)
+	}
+}
+
 func (c *Controller) closeWindow(name string) {
+	if surface, ok := c.surfaces[name]; ok && surface.Toggleable {
+		c.setSurface(name, false)
+		return
+	}
 	if name != settingsRole {
 		return
 	}
@@ -310,7 +325,8 @@ func settingsBinPath() string {
 	return "neoshell-settings"
 }
 
-// drainEvents logs render-host events (ready/log) so they are not lost.
+// drainEvents logs render-host events (ready/log) and forwards native file
+// drops to the frontend so the surface under the drop can act on them.
 func (c *Controller) drainEvents() {
 	for event := range c.client.Events() {
 		switch event.Event {
@@ -318,6 +334,28 @@ func (c *Controller) drainEvents() {
 			log.Printf("render host: surface %q ready", event.Role)
 		case "log":
 			log.Printf("render host [%s]: %s", event.Level, event.Msg)
+		case "drop":
+			log.Printf("render host: DROP on %q at %.0f,%.0f — %d path(s): %v",
+				event.Role, event.X, event.Y, len(event.Paths), event.Paths)
+			c.hub.Broadcast("surface:drop", map[string]any{
+				"role":  event.Role,
+				"x":     event.X,
+				"y":     event.Y,
+				"paths": event.Paths,
+			})
+		case "drag":
+			if event.Phase != "motion" {
+				log.Printf("render host: DRAG %s on %q at %.0f,%.0f",
+					event.Phase, event.Role, event.X, event.Y)
+			}
+			c.hub.Broadcast("surface:drag", map[string]any{
+				"role":  event.Role,
+				"phase": event.Phase,
+				"x":     event.X,
+				"y":     event.Y,
+			})
+		default:
+			log.Printf("render host: event %q %+v", event.Event, event)
 		}
 	}
 }

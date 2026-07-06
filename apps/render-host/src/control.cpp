@@ -127,8 +127,17 @@ static void dispatch(Control* c, const json& msg) {
         if (h.on_show) h.on_show(role);
     } else if (cmd == "surface.hide") {
         if (h.on_hide) h.on_hide(role);
+    } else if (cmd == "surface.keyboard") {
+        if (h.on_keyboard)
+            h.on_keyboard(role, parse_keyboard(msg.value("keyboard", "none")));
     } else if (cmd == "surface.destroy") {
         if (h.on_destroy) h.on_destroy(role);
+    } else if (cmd == "surface.startdrag") {
+        std::vector<std::string> paths;
+        if (msg.contains("paths") && msg["paths"].is_array())
+            for (const auto& p : msg["paths"])
+                if (p.is_string()) paths.push_back(p.get<std::string>());
+        if (h.on_start_drag) h.on_start_drag(paths);
     } else {
         g_printerr("[control] unknown cmd '%s'\n", cmd.c_str());
     }
@@ -170,4 +179,12 @@ void control_emit_ready(Control* c, const std::string& role) {
 }
 void control_emit_log(Control* c, const std::string& level, const std::string& msg) {
     emit(c, json{{"event", "log"}, {"level", level}, {"msg", msg}});
+}
+void control_emit_drop(Control* c, const std::string& role, double x, double y,
+                       const std::vector<std::string>& paths) {
+    emit(c, json{{"event", "drop"}, {"role", role}, {"x", x}, {"y", y}, {"paths", paths}});
+}
+void control_emit_drag(Control* c, const std::string& role, const std::string& phase,
+                       double x, double y) {
+    emit(c, json{{"event", "drag"}, {"role", role}, {"phase", phase}, {"x", x}, {"y", y}});
 }

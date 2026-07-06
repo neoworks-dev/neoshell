@@ -42,6 +42,14 @@ type InMessage struct {
 	Edge string `json:"edge,omitempty"`
 	Size int    `json:"size,omitempty"`
 
+	// surface:keyboard — runtime keyboard interactivity ("none"|"ondemand"|"exclusive").
+	Mode string `json:"mode,omitempty"`
+
+	// relay — generic surface-to-surface pub/sub: the server rebroadcasts Data on
+	// Topic to every subscriber, so one webview can push state to another.
+	Topic string          `json:"topic,omitempty"`
+	Data  json.RawMessage `json:"data,omitempty"`
+
 	// config:set — dotted key and its new JSON value.
 	Key   string          `json:"key,omitempty"`
 	Value json.RawMessage `json:"value,omitempty"`
@@ -58,6 +66,9 @@ type InMessage struct {
 	// timer:start / track:start
 	Label    string `json:"label,omitempty"`
 	Duration int    `json:"duration,omitempty"` // seconds (timer countdown)
+
+	// surface:drag-start — local file paths to drag out to other apps.
+	Paths []string `json:"paths,omitempty"`
 }
 
 // Hub manages WebSocket clients and topic subscriptions.
@@ -183,6 +194,30 @@ func (h *Hub) SendWindowCommand(name, action string) {
 	chans := h.windowCmds["window"]
 	h.mu.RUnlock()
 	cmd := ipc.WindowCommand{Action: action, Name: name}
+	for _, ch := range chans {
+		ch <- cmd
+	}
+}
+
+// SendDragStart asks the render host to begin a shell-initiated drag carrying
+// the given local file paths. Routed through the "window" channel.
+func (h *Hub) SendDragStart(paths []string) {
+	h.mu.RLock()
+	chans := h.windowCmds["window"]
+	h.mu.RUnlock()
+	cmd := ipc.WindowCommand{Action: "dragstart", Paths: paths}
+	for _, ch := range chans {
+		ch <- cmd
+	}
+}
+
+// SendKeyboardMode changes the named surface's keyboard interactivity at runtime
+// ("none" | "ondemand" | "exclusive"). Routed through the "window" channel.
+func (h *Hub) SendKeyboardMode(name, mode string) {
+	h.mu.RLock()
+	chans := h.windowCmds["window"]
+	h.mu.RUnlock()
+	cmd := ipc.WindowCommand{Action: "keyboard", Name: name, Mode: mode}
 	for _, ch := range chans {
 		ch <- cmd
 	}

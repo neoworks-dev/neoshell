@@ -7,10 +7,13 @@ package onnx
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/sugarme/tokenizer"
 	"github.com/sugarme/tokenizer/pretrained"
@@ -40,16 +43,22 @@ func initRuntime(libPath string) error {
 	return ortErr
 }
 
-// Embedder runs the Nomic models in-process. Sessions are created once and reused
-// (the model is hundreds of MB — loading per call would be unusable).
+// Embedder runs the Nomic models in-process. Sessions are loaded lazily and, when
+// idle-unload is enabled, released after a period of inactivity to free GPU/RAM;
+// they rebuild transparently on the next embed. Reloading per call would be
+// unusable (the model is hundreds of MB), so we only unload after a long idle.
 type Embedder struct {
 	dir       string
 	tokenizer *tokenizer.Tokenizer
 
-	mu        sync.Mutex // onnxruntime sessions are not safe for concurrent Run
-	textSession  *ort.DynamicAdvancedSession
-	vision    *visionSession // nil until the vision model is loaded (Phase 3)
-	queryCache *embeddingCache    // caches query embeddings (lookups repeat constantly)
+	mu          sync.Mutex // onnxruntime sessions are not safe for concurrent Run
+	textSession *ort.DynamicAdvancedSession
+	vision      *visionSession  // nil until the vision model is loaded (Phase 3)
+	queryCache  *embeddingCache // caches query embeddings (lookups repeat constantly)
+
+	capable     bool          // model files present, so Available() stays true when unloaded
+	lastUsed    time.Time     // updated on every embed, for idle detection
+	idleTimeout time.Duration // 0 disables idle-unload (sessions stay resident)
 }
 
 // ModelsDir resolves where the libonnxruntime.so and *.onnx model files live.
@@ -81,23 +90,89 @@ func New(dir string) (*Embedder, error) {
 		return nil, fmt.Errorf("load tokenizer: %w", err)
 	}
 
+	embedder := &Embedder{
+		dir:         dir,
+		tokenizer:   tk,
+		queryCache:  newEmbeddingCache(queryCacheSize),
+		capable:     true,
+		idleTimeout: idleTimeout(),
+	}
+	embedder.mu.Lock()
+	err = embedder.ensureLoadedLocked()
+	embedder.mu.Unlock()
+	if err != nil {
+		return nil, fmt.Errorf("load text model: %w", err)
+	}
+	if embedder.idleTimeout > 0 {
+		go embedder.idleWatcher()
+	}
+	return embedder, nil
+}
+
+// Available reports capability, not load state: the daemon must keep using the
+// embedder even while its sessions are idle-unloaded (they rebuild on demand).
+func (e *Embedder) Available(context.Context) bool { return e != nil && e.capable }
+
+// ensureLoadedLocked rebuilds the text (and optional vision) sessions if they are
+// not resident. Caller holds e.mu.
+func (e *Embedder) ensureLoadedLocked() error {
+	if e.textSession != nil {
+		return nil
+	}
 	session, err := newSession(
-		filepath.Join(dir, "nomic-embed-text.onnx"),
+		filepath.Join(e.dir, "nomic-embed-text.onnx"),
 		[]string{"input_ids", "token_type_ids", "attention_mask"},
 		[]string{"last_hidden_state"},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("load text model: %w", err)
+		return err
 	}
+	e.textSession = session
 	// Vision model is optional: absent → images stay filename-only.
-	return &Embedder{
-		dir: dir, tokenizer: tk, textSession: session,
-		vision:    loadVision(dir),
-		queryCache: newEmbeddingCache(queryCacheSize),
-	}, nil
+	e.vision = loadVision(e.dir)
+	e.lastUsed = time.Now()
+	return nil
 }
 
-func (e *Embedder) Available(context.Context) bool { return e != nil && e.textSession != nil }
+// unloadLocked destroys the resident sessions, freeing GPU/RAM. Caller holds e.mu.
+func (e *Embedder) unloadLocked() {
+	if e.textSession != nil {
+		e.textSession.Destroy()
+		e.textSession = nil
+	}
+	if e.vision != nil {
+		e.vision.session.Destroy()
+		e.vision = nil
+	}
+}
+
+// idleWatcher unloads the sessions once they have gone unused for idleTimeout.
+func (e *Embedder) idleWatcher() {
+	ticker := time.NewTicker(e.idleTimeout)
+	defer ticker.Stop()
+	for range ticker.C {
+		e.mu.Lock()
+		if e.textSession != nil && time.Since(e.lastUsed) >= e.idleTimeout {
+			e.unloadLocked()
+			log.Printf("onnx: embedder idle for %s — unloaded, freed GPU/RAM", e.idleTimeout)
+		}
+		e.mu.Unlock()
+	}
+}
+
+// idleTimeout reads NEOSHELL_ONNX_IDLE_UNLOAD (seconds). Default 120s; a value of
+// 0 (or invalid) disables idle-unload, keeping sessions resident.
+func idleTimeout() time.Duration {
+	raw := os.Getenv("NEOSHELL_ONNX_IDLE_UNLOAD")
+	if raw == "" {
+		return 120 * time.Second
+	}
+	seconds, err := strconv.Atoi(raw)
+	if err != nil || seconds <= 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
+}
 
 func (e *Embedder) EmbedQuery(_ context.Context, query string) ([]float32, error) {
 	if e.queryCache != nil {
@@ -162,6 +237,11 @@ func (e *Embedder) embedText(text string) ([]float32, error) {
 	defer out.Destroy()
 
 	e.mu.Lock()
+	if err = e.ensureLoadedLocked(); err != nil {
+		e.mu.Unlock()
+		return nil, err
+	}
+	e.lastUsed = time.Now()
 	err = e.textSession.Run(
 		[]ort.ArbitraryTensor{idsT, typeT, maskT},
 		[]ort.ArbitraryTensor{out},

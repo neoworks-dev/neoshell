@@ -26,9 +26,11 @@ type Hit struct {
 
 // Request is a control-socket command. Newline-delimited JSON, one per line.
 type Request struct {
-	Op    string `json:"op"`    // "query" | "ping"
+	Op    string `json:"op"` // "query" | "rerank" | "ping" | "progress"
 	Text  string `json:"text,omitempty"`
 	Limit int    `json:"limit,omitempty"`
+	// Candidates are the file paths to reorder for the "rerank" op.
+	Candidates []string `json:"candidates,omitempty"`
 }
 
 // Response is the reply to a Request.

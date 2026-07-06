@@ -69,6 +69,13 @@ type Event struct {
 	Role  string `json:"role,omitempty"`
 	Level string `json:"level,omitempty"`
 	Msg   string `json:"msg,omitempty"`
+	// drop — a native file drag-and-drop landed on a surface. Coords are
+	// surface-local; Paths are absolute filesystem paths from the uri-list.
+	X     float64  `json:"x,omitempty"`
+	Y     float64  `json:"y,omitempty"`
+	Paths []string `json:"paths,omitempty"`
+	// drag — a file drag entered/left a surface ("enter"|"leave").
+	Phase string `json:"phase,omitempty"`
 }
 
 // Client is a connection to the render host control socket.
@@ -195,9 +202,24 @@ func (c *Client) Hide(role string) error {
 	return c.send(map[string]any{"cmd": "surface.hide", "role": role})
 }
 
+// SetKeyboard changes a surface's keyboard interactivity at runtime
+// ("none" | "ondemand" | "exclusive").
+func (c *Client) SetKeyboard(role, mode string) error {
+	return c.send(map[string]any{"cmd": "surface.keyboard", "role": role, "keyboard": mode})
+}
+
 // Destroy tears down a surface.
 func (c *Client) Destroy(role string) error {
 	return c.send(map[string]any{"cmd": "surface.destroy", "role": role})
+}
+
+// StartDrag begins a shell-initiated drag offering the given local file paths,
+// so they can be dropped into other applications.
+func (c *Client) StartDrag(paths []string) error {
+	if paths == nil {
+		paths = []string{}
+	}
+	return c.send(map[string]any{"cmd": "surface.startdrag", "paths": paths})
 }
 
 // Close releases the connection.

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -12,13 +13,16 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/neoworks/neoshell/internal/apps"
+	"github.com/neoworks/neoshell/internal/capability"
 	"github.com/neoworks/neoshell/internal/config"
+	"github.com/neoworks/neoshell/internal/eventbus"
 	"github.com/neoworks/neoshell/internal/fileindex"
 	"github.com/neoworks/neoshell/internal/hyprland"
 	"github.com/neoworks/neoshell/internal/notifications"
 	"github.com/neoworks/neoshell/internal/shell"
 	"github.com/neoworks/neoshell/internal/system"
 	"github.com/neoworks/neoshell/internal/timers"
+	"github.com/neoworks/neoshell/internal/voice"
 )
 
 var upgrader = websocket.Upgrader{
@@ -47,17 +51,88 @@ type Server struct {
 	sys      *system.System
 	cfg      *config.Store
 	notifier *notifications.Daemon // may be nil if the bus was unavailable
-	index    *fileindex.Index      // file search index (may still be building)
-	timers   *timers.Service       // countdown timers + tracking sessions
-	frontend string                // dir to serve static frontend from; empty = disabled
+	index      *fileindex.Index     // file search index (may still be building)
+	timers     *timers.Service      // countdown timers + tracking sessions
+	registry   *capability.Registry // shared action registry (AI tools + launcher commands)
+	voice      *voice.Manager       // local voice assistant pipeline (may be disabled)
+	frontend   string               // dir to serve static frontend from; empty = disabled
+	pluginsDir string               // dir of surface plugins (each with a dist/); empty = disabled
+
+	// Live chat streams, so an ai:cancel can stop one mid-flight, plus a count of
+	// active chats driving the notch's global "AI is thinking" indicator.
+	chatMu      sync.Mutex
+	chatCancels map[string]context.CancelFunc
+	chatActive  int
 }
 
-func New(hub *Hub, hypr *hyprland.Client, sys *system.System, cfg *config.Store, notifier *notifications.Daemon, index *fileindex.Index, frontend string) *Server {
-	server := &Server{hub: hub, hypr: hypr, sys: sys, cfg: cfg, notifier: notifier, index: index, frontend: frontend}
+func New(hub *Hub, bus *eventbus.Bus, hypr *hyprland.Client, sys *system.System, cfg *config.Store, notifier *notifications.Daemon, index *fileindex.Index, frontend, pluginsDir string) *Server {
+	server := &Server{hub: hub, hypr: hypr, sys: sys, cfg: cfg, notifier: notifier, index: index, frontend: frontend, pluginsDir: pluginsDir}
+	server.chatCancels = make(map[string]context.CancelFunc)
 	server.timers = timers.New(func(state timers.State) {
 		hub.Broadcast("timer", state)
 	})
+	server.registry = capability.NewRegistry()
+	server.registry.Register(server.timers.Capability())
+
+	// Local voice assistant. Constructed here so it shares the AI backend and
+	// capability tools; started in a goroutine since spawning the Python sidecars
+	// (and their model loads) is best-effort and must not block startup.
+	server.voice = voice.New(voice.Deps{
+		Broadcast: hub.Broadcast,
+		Responder: voiceResponder{s: server},
+		Config:    cfg,
+	})
+	go server.voice.Start()
+
+	server.subscribeControlEvents(bus)
 	return server
+}
+
+// subscribeControlEvents wires keybind-driven control events (from `neoshell
+// emit`, over the event socket) to the same handlers the WebSocket routes use.
+func (s *Server) subscribeControlEvents(bus *eventbus.Bus) {
+	if bus == nil {
+		return
+	}
+	bus.Subscribe("voice:listen", func(eventbus.Event) { s.handleVoiceControl("listen") })
+	bus.Subscribe("voice:stop", func(eventbus.Event) { s.handleVoiceControl("stop") })
+	bus.Subscribe("voice:cancel", func(eventbus.Event) { s.handleVoiceControl("cancel") })
+
+	bus.Subscribe("surface:toggle", func(e eventbus.Event) { s.handleSurface("toggle", e) })
+	bus.Subscribe("surface:open", func(e eventbus.Event) { s.handleSurface("open", e) })
+	bus.Subscribe("surface:close", func(e eventbus.Event) { s.handleSurface("close", e) })
+	bus.Subscribe("chat:new", func(eventbus.Event) { s.hub.Broadcast("chat:open", map[string]any{"prompt": ""}) })
+}
+
+// handleSurface forwards a surface:* control event to the frontend. Each UI
+// surface registers a class name and toggles itself when the broadcast class
+// matches, so the event must name a target class — there is no default.
+func (s *Server) handleSurface(action string, event eventbus.Event) {
+	class := surfaceClass(event)
+	if class == "" {
+		log.Printf("surface:%s ignored: no class", action)
+		return
+	}
+	s.hub.Broadcast("surface:toggle", map[string]any{"class": class, "action": action})
+}
+
+// surfaceClass reads the target class from the emit payload, accepting either a
+// bare JSON string ("spotlight") or an object {"class":"spotlight"}.
+func surfaceClass(event eventbus.Event) string {
+	if len(event.Payload) == 0 {
+		return ""
+	}
+	var class string
+	if json.Unmarshal(event.Payload, &class) == nil && class != "" {
+		return class
+	}
+	var obj struct {
+		Class string `json:"class"`
+	}
+	if json.Unmarshal(event.Payload, &obj) == nil {
+		return obj.Class
+	}
+	return ""
 }
 
 func findAppIcon(class string) string {
@@ -128,25 +203,33 @@ func (s *Server) Listen(addr string) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		http.ServeFile(w, r, path)
 	})
-	// /toggle?surface=<role> flips a shell surface's visibility. Used by the
-	// injected Hyprland keybind (Win+Space) to open/close the apps overlay
-	// without a persistent IPC channel into the compositor.
-	http.HandleFunc("/toggle", func(w http.ResponseWriter, r *http.Request) {
-		surface := r.URL.Query().Get("surface")
-		if surface == "" {
-			surface = "overlay"
+	// /file?path=<abs> serves a local file so the frontend can preview staged
+	// items (e.g. image thumbnails in the notch's temporary storage). Restricted
+	// to existing regular files by absolute path. CORS-open like /wallpaper.
+	http.HandleFunc("/file", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Query().Get("path")
+		if !filepath.IsAbs(path) {
+			http.Error(w, "absolute path required", http.StatusBadRequest)
+			return
 		}
-		// action is toggle (default), open, or close — driven by the `neoshell`
-		// surface-control subcommands.
-		action := r.URL.Query().Get("action")
-		switch action {
-		case "open", "close":
-		default:
-			action = "toggle"
+		info, err := os.Stat(path)
+		if err != nil || info.IsDir() {
+			http.NotFound(w, r)
+			return
 		}
-		s.hub.SendWindowCommand(surface, action)
-		w.WriteHeader(http.StatusNoContent)
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		http.ServeFile(w, r, path)
 	})
+	// Surface and voice control now arrive over the event socket (`neoshell emit`),
+	// not HTTP — see server.subscribeControlEvents and internal/eventbus.
+
+	// Serve each surface plugin's built dist at /plugins/<id>/. Registered before
+	// the root frontend handler so it takes precedence.
+	if s.pluginsDir != "" {
+		http.HandleFunc("/plugins/", s.handlePlugin)
+		log.Printf("serving plugins from %s", s.pluginsDir)
+	}
+
 	// Serve the built frontend directly when configured. Registered last and at
 	// the root so the more specific /ws and /icon/ routes take precedence. WPE
 	// WebKit is a full modern engine, so no compatibility shim or CSS rewriting.
@@ -156,6 +239,26 @@ func (s *Server) Listen(addr string) {
 	}
 	log.Printf("server listening on %s", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
+}
+
+// handlePlugin serves a surface plugin's built dist at /plugins/<id>/. The path
+// after the id is served from <pluginsDir>/<id>/dist, so /plugins/dock/ loads
+// that plugin's index.html and /plugins/dock/assets/… its bundled assets.
+func (s *Server) handlePlugin(w http.ResponseWriter, r *http.Request) {
+	rest := strings.TrimPrefix(r.URL.Path, "/plugins/")
+	id, _, _ := strings.Cut(rest, "/")
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+	// Reject ids that could escape the plugins directory.
+	if strings.Contains(id, "..") || strings.ContainsAny(id, `/\`) {
+		http.NotFound(w, r)
+		return
+	}
+	root := filepath.Join(s.pluginsDir, id, "dist")
+	prefix := "/plugins/" + id + "/"
+	http.StripPrefix(prefix, http.FileServer(http.Dir(root))).ServeHTTP(w, r)
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
@@ -225,6 +328,16 @@ func (s *Server) route(c *Client, msg InMessage) {
 	case "ai:chat":
 		go s.handleChat(c, msg)
 
+	case "ai:cancel":
+		s.cancelChat(msg.ID)
+
+	case "voice:listen":
+		s.handleVoiceControl("listen")
+	case "voice:stop":
+		s.handleVoiceControl("stop")
+	case "voice:cancel":
+		s.handleVoiceControl("cancel")
+
 	case "timer:start":
 		s.timers.StartTimer(msg.Label, msg.Duration)
 	case "timer:stop":
@@ -236,6 +349,15 @@ func (s *Server) route(c *Client, msg InMessage) {
 	case "timer:list":
 		data, _ := json.Marshal(OutMessage{Type: "timer", Data: s.timers.Snapshot()})
 		c.Send(data)
+
+	case "command:invoke":
+		// Launcher entry point into the shared action registry — the same
+		// actions the AI calls as tools. Name is the action; Data holds args.
+		s.handleCommandInvoke(c, msg)
+
+	case "surface:drag-start":
+		// A surface (the notch) begins dragging staged files out to other apps.
+		s.hub.SendDragStart(msg.Paths)
 
 	case "hyprland:dispatch":
 		go s.hypr.Dispatch(msg.Dispatcher, msg.Arg)
@@ -269,6 +391,21 @@ func (s *Server) route(c *Client, msg InMessage) {
 			name = "bar"
 		}
 		s.hub.SendRegionUpdate(name, msg.Rects)
+
+	case "surface:keyboard":
+		// Runtime keyboard grab/release for a surface (empty name = the bar).
+		name := msg.Name
+		if name == "" {
+			name = "bar"
+		}
+		s.hub.SendKeyboardMode(name, msg.Mode)
+
+	case "relay":
+		// Surface-to-surface pub/sub: rebroadcast the payload on its topic to
+		// every subscriber (e.g. minimized-window pills from overlay to notch).
+		if msg.Topic != "" {
+			s.hub.Broadcast(msg.Topic, msg.Data)
+		}
 
 	case "apps:list":
 		data, _ := json.Marshal(OutMessage{Type: "apps", Data: apps.List()})

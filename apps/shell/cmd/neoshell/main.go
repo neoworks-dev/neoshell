@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -9,9 +10,11 @@ import (
 	"sync"
 
 	"github.com/neoworks/neoshell/internal/config"
+	"github.com/neoworks/neoshell/internal/eventbus"
 	"github.com/neoworks/neoshell/internal/fileindex"
 	"github.com/neoworks/neoshell/internal/hyprland"
 	"github.com/neoworks/neoshell/internal/notifications"
+	"github.com/neoworks/neoshell/internal/plugins"
 	"github.com/neoworks/neoshell/internal/renderhost"
 	"github.com/neoworks/neoshell/internal/server"
 	"github.com/neoworks/neoshell/internal/system"
@@ -21,10 +24,10 @@ import (
 const defaultPort = 9876
 
 func main() {
-	// Surface control subcommands (e.g. `neoshell toggle overlay`) talk to a
-	// running core over HTTP and exit, so Hyprland binds don't need curl.
-	if len(os.Args) > 1 && controlActions[os.Args[1]] {
-		runControl(os.Args[1], os.Args[2:])
+	// `neoshell emit <topic>` sends one control event to the running core's event
+	// socket and exits, so a Hyprland keybind can drive voice/surface actions.
+	if len(os.Args) > 1 && os.Args[1] == "emit" {
+		runEmit(os.Args[2:])
 		return
 	}
 
@@ -65,6 +68,11 @@ Environment:
 		"path to a built frontend directory to serve directly")
 	fs.StringVar(frontend, "f", *frontend, "shorthand for --frontend")
 
+	// Directory of surface plugins (each a subdirectory with a manifest.json).
+	// Empty falls back to the built-in shell surfaces.
+	pluginsDir := fs.String("plugins", os.Getenv("NEOSHELL_PLUGINS"),
+		"path to the plugins directory; empty = built-in shell surfaces")
+
 	help := fs.Bool("help", false, "show this help and exit")
 	fs.BoolVar(help, "h", false, "shorthand for --help")
 
@@ -93,6 +101,7 @@ Environment:
 	}
 
 	hub := server.NewHub()
+	bus := eventbus.New()
 	sys := system.New()
 
 	// Notification daemon: own the freedesktop name (replacing any other daemon)
@@ -117,7 +126,7 @@ Environment:
 	startSearchDaemon()
 	go pollSearchProgress(hub)
 
-	srv := server.New(hub, hypr, sys, cfg, notifier, index, *frontend)
+	srv := server.New(hub, bus, hypr, sys, cfg, notifier, index, *frontend, *pluginsDir)
 
 	// Config is the shell's source of truth: broadcast every change so the bar and
 	// settings window react live, and drive the wallpaper daemon when it changes.
@@ -168,7 +177,20 @@ Environment:
 		uri = fmt.Sprintf("http://localhost:%d", *port)
 	}
 
+	manifests, err := plugins.Load(*pluginsDir)
+	if err != nil {
+		log.Fatalf("load plugins: %v", err)
+	}
+	surfaces := plugins.Resolve(manifests)
+
 	go hub.Run()
+	// Control-event socket: `neoshell emit <topic>` (bound to Hyprland keys)
+	// writes here; subscribers registered in server.New fan the events out.
+	go func() {
+		if err := eventbus.Serve(context.Background(), eventbus.SocketPath(), bus); err != nil {
+			log.Printf("event socket: %v", err)
+		}
+	}()
 	go srv.Listen(fmt.Sprintf(":%d", *port))
 	go hypr.EventLoop(hub)
 	go sys.Poll(hub)
@@ -176,31 +198,43 @@ Environment:
 	// the daemon being absent; reconnects when it appears.
 	go wallpaper.Watch(hub)
 
-	// Enable compositor blur behind the bar and dock layers. CSS backdrop-filter
-	// can't blur across surfaces, so the blur must come from Hyprland. These are
-	// fullscreen-transparent layers, so ignorealpha confines the blur to the
-	// painted regions. Best-effort; needs global blur (decoration:blur) enabled.
-	for _, namespace := range []string{"neoshell.bar", "neoshell.dock"} {
+	// Enable compositor blur behind surfaces that request it (bar, dock). CSS
+	// backdrop-filter can't blur across surfaces, so the blur must come from
+	// Hyprland. These are fullscreen-transparent layers, so ignorealpha confines
+	// the blur to the painted regions. Best-effort; needs global blur
+	// (decoration:blur) enabled.
+	for _, namespace := range blurNamespaces(surfaces) {
 		hypr.Keyword("layerrule", "blur,"+namespace)
 		hypr.Keyword("layerrule", "ignorealpha 0.1,"+namespace)
 	}
 	applyBlur()
 
-	// Optional built-in overlay keybind. Off by default so it never fights a bind
-	// the user already defined (e.g. a lua-managed Hyprland config); set
-	// bar.overlayKeybind (e.g. "SUPER,slash") to have the core inject it. Either
-	// way the overlay can be toggled with `neoshell toggle overlay`.
-	if combo := overlayKeybind(cfg); combo != "" {
-		bind := fmt.Sprintf("%s,exec,neoshell toggle overlay", combo)
-		hypr.Keyword("bind", bind)
-	}
+	// Keybinds are no longer injected by the core. The user declares them in their
+	// own Hyprland config, each running `neoshell emit <topic>` (e.g. voice:listen,
+	// surface:toggle, chat:new, surface:close). See the project README for the set.
 
 	// The frontend reads ?port to find the WebSocket regardless of where the page
 	// is served, so the render host's surface URL carries it too.
 	surfaceURL := fmt.Sprintf("%s?port=%d", uri, *port)
-	if err := renderhost.Run(hub, surfaceURL, *monitor, renderhost.DefaultBinPath()); err != nil {
+	if err := renderhost.Run(hub, surfaceURL, *monitor, renderhost.DefaultBinPath(), surfaces); err != nil {
 		log.Fatalf("render host: %v", err)
 	}
+}
+
+// blurNamespaces returns the layer-shell namespaces to blur, derived from the
+// plugin surfaces that request it. It falls back to the built-in bar and dock
+// when no plugins declare surfaces.
+func blurNamespaces(surfaces []plugins.ResolvedSurface) []string {
+	if len(surfaces) == 0 {
+		return []string{"neoshell.bar", "neoshell.dock"}
+	}
+	var namespaces []string
+	for _, surface := range surfaces {
+		if surface.Blur {
+			namespaces = append(namespaces, "neoshell."+surface.View)
+		}
+	}
+	return namespaces
 }
 
 // envPort returns the port from NEOSHELL_PORT, or defaultPort if unset/invalid.

@@ -16,4 +16,10 @@ type WindowCommand struct {
     // Edge is one of "top", "bottom", "left", "right".
     Edge string
     Size int
+
+    // Keyboard interactivity (Action == "keyboard"): "none" | "ondemand" | "exclusive".
+    Mode string
+
+    // Local file paths for a shell-initiated drag (Action == "dragstart").
+    Paths []string
 }

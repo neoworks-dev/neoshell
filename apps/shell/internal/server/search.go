@@ -32,6 +32,46 @@ func (s *Server) querySearchDaemon(query string) ([]searchd.Hit, bool) {
 	return response.Hits, true
 }
 
+// rerankFiles reorders search hits by semantic (Nomic embedding) similarity to
+// the query via the search daemon, then keeps the top-K. The daemon returns only
+// paths, so we map back to the original hits to preserve their names and
+// snippets. On any failure it falls back to the search order.
+func (s *Server) rerankFiles(query string, hits []searchd.Hit, topK int) []searchd.Hit {
+	paths := make([]string, len(hits))
+	for i, hit := range hits {
+		paths[i] = hit.Path
+	}
+	response, err := searchd.QuerySocket(searchd.SocketPath(), searchd.Request{
+		Op:         "rerank",
+		Text:       query,
+		Candidates: paths,
+		Limit:      len(paths),
+	})
+	if err != nil || response.Error != "" || len(response.Hits) == 0 {
+		return capHits(hits, topK)
+	}
+
+	byPath := make(map[string]searchd.Hit, len(hits))
+	for _, hit := range hits {
+		byPath[hit.Path] = hit
+	}
+	ranked := make([]searchd.Hit, 0, topK)
+	for _, rankedHit := range response.Hits {
+		original, ok := byPath[rankedHit.Path]
+		if !ok {
+			continue
+		}
+		ranked = append(ranked, original)
+		if len(ranked) >= topK {
+			break
+		}
+	}
+	if len(ranked) == 0 {
+		return capHits(hits, topK)
+	}
+	return ranked
+}
+
 func (s *Server) filenameFallback(query string) []searchd.Hit {
 	if s.index == nil {
 		return []searchd.Hit{}

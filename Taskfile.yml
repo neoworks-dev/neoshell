@@ -26,18 +26,26 @@ vars:
   SETTINGS_BIN: '{{.ROOT_DIR}}/apps/settings/target/release/neoshell-settings'
   # neoshell-search semantic file-search daemon. Spawned by the core at startup.
   SEARCH_BIN: '{{.ROOT_DIR}}/apps/shell/neoshell-search'
+  # Python interpreter for the voice sidecars (created by voice:setup).
+  VOICE_PYTHON: '{{.ROOT_DIR}}/apps/voice/.venv/bin/python'
   # Wallpaper image to set, e.g. `task wallpaper WALLPAPER=~/pic.png`.
   WALLPAPER: '{{.WALLPAPER | default ""}}'
 
 env:
   # HTTP/WebSocket port for the Go core.
   NEOSHELL_PORT: '{{.NEOSHELL_PORT | default "9876"}}'
+  # Surface plugins directory. The core reads each <id>/manifest.json to create
+  # surfaces and serves each <id>/dist at /plugins/<id>/.
+  NEOSHELL_PLUGINS: '{{.ROOT_DIR}}/apps/plugins'
   # Point the Go core at the render host built by render:build.
   NEOSHELL_RENDER_BIN: '{{.RENDER_BIN}}'
   # Let the core launch the settings app the gear button opens.
   NEOSHELL_SETTINGS_BIN: '{{.SETTINGS_BIN}}'
   # Let the core launch the semantic search daemon at startup.
   NEOSHELL_SEARCH_BIN: '{{.SEARCH_BIN}}'
+  # Point the core at the voice sidecars' Python interpreter (best-effort: voice
+  # stays disabled if the venv is absent). Modules run via `python -m`.
+  NEOSHELL_VOICE_PYTHON: '{{.VOICE_PYTHON}}'
 
 tasks:
   default:
@@ -93,11 +101,48 @@ tasks:
     cmds:
       - go install ./cmd/neoshell
 
+  voice:setup:
+    desc: Create the Python venv for the voice sidecars (uv). Needs `uv`.
+    dir: apps/voice
+    cmds:
+      - uv sync
+
+  voice:models:
+    desc: Pull the local Ollama models the voice fan-out uses (fast + slow tiers)
+    cmds:
+      - ollama pull gemma4:e4b
+
+  voice:stt:
+    desc: Run the Whisper STT sidecar alone (for manual socket testing)
+    deps: [voice:setup]
+    dir: apps/voice
+    cmds:
+      - uv run neoshell-voice-stt
+
+  voice:tts:
+    desc: Run the Chatterbox TTS sidecar alone (for manual socket testing)
+    deps: [voice:setup]
+    dir: apps/voice
+    cmds:
+      - uv run neoshell-voice-tts
+
   ui:build:
-    desc: Build the UI to apps/ui/dist
+    desc: Build the settings-host UI to apps/ui/dist
     dir: "{{.UI_DIR}}"
     cmds:
       - bun run build
+
+  plugins:build:
+    desc: Build every surface plugin to apps/plugins/<id>/dist
+    dir: apps/plugins
+    cmds:
+      - for d in bar dock desktop spotlight chat; do (cd "$d" && bun run build); done
+
+  plugins:dev:
+    desc: Single multi-page dev server for all plugin surfaces (HMR, port 5173)
+    dir: apps/plugins-dev
+    cmds:
+      - bun run dev
 
   build:
     desc: Build the render host, daemons, the settings app, and the Go core
@@ -117,12 +162,14 @@ tasks:
       - go run ./cmd/neoshell {{.MONITOR_FLAG}}
 
   dev:
-    desc: Hot-reload dev — Vite + Go core + wallpaper daemon. Live-reloads the UI.
-    deps: [settings:build, ui:dev, core:dev, bg]
+    desc: >-
+      Hot-reload dev — plugin surfaces via the multi-page aggregator (HMR) + Go
+      core + wallpaper daemon. The settings app (gear) uses the built UI.
+    deps: [settings:build, plugins:dev, core:dev, bg]
 
   run:
-    desc: Production-like — build the UI and serve it directly from the Go core
-    deps: [render:build, search:build, cli:install, ui:build]
+    desc: Production-like — build the UI + plugins and serve them from the Go core
+    deps: [render:build, search:build, cli:install, ui:build, plugins:build]
     dir: apps/shell
     cmds:
       - go run ./cmd/neoshell --frontend "{{.ROOT_DIR}}/apps/ui/dist" {{.MONITOR_FLAG}}
