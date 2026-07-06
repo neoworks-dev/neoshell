@@ -4,3 +4,24 @@
 [submodule "packages/sdk"]
 	path = packages/sdk
 	url = /home/moritz/Documents/neoworks/neoshell-sdk.git
+[submodule "packages/ui"]
+	path = packages/ui
+	url = /home/moritz/Documents/neoworks/neoshell-ui-kit.git
+[submodule "apps/plugins/bar"]
+	path = apps/plugins/bar
+	url = /home/moritz/Documents/neoworks/neoshell-plugin-bar.git
+[submodule "apps/plugins/dock"]
+	path = apps/plugins/dock
+	url = /home/moritz/Documents/neoworks/neoshell-plugin-dock.git
+[submodule "apps/plugins/desktop"]
+	path = apps/plugins/desktop
+	url = /home/moritz/Documents/neoworks/neoshell-plugin-desktop.git
+[submodule "apps/plugins/spotlight"]
+	path = apps/plugins/spotlight
+	url = /home/moritz/Documents/neoworks/neoshell-plugin-spotlight.git
+[submodule "apps/plugins/chat"]
+	path = apps/plugins/chat
+	url = /home/moritz/Documents/neoworks/neoshell-plugin-chat.git
+[submodule "apps/plugins-dev"]
+	path = apps/plugins-dev
+	url = /home/moritz/Documents/neoworks/neoshell-plugins-dev.git

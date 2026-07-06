@@ -9,10 +9,11 @@ import (
 	_ "image/png"
 	"os"
 	"path/filepath"
+	"time"
 
+	ort "github.com/yalue/onnxruntime_go"
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
-	ort "github.com/yalue/onnxruntime_go"
 )
 
 // nomic-embed-vision is a CLIP-style ViT: 224x224 RGB input, CLIP normalization,
@@ -46,9 +47,6 @@ func loadVision(dir string) *visionSession {
 
 // EmbedImage embeds an image into the shared text space via nomic-embed-vision.
 func (e *Embedder) EmbedImage(_ context.Context, path string) ([]float32, error) {
-	if e.vision == nil {
-		return nil, fmt.Errorf("vision model not loaded")
-	}
 	pixels, err := preprocessImage(path)
 	if err != nil {
 		return nil, err
@@ -66,6 +64,16 @@ func (e *Embedder) EmbedImage(_ context.Context, path string) ([]float32, error)
 	defer out.Destroy()
 
 	e.mu.Lock()
+	if err = e.ensureLoadedLocked(); err != nil {
+		e.mu.Unlock()
+		return nil, err
+	}
+	// Checked under the lock: the vision session can be idle-unloaded between calls.
+	if e.vision == nil {
+		e.mu.Unlock()
+		return nil, fmt.Errorf("vision model not loaded")
+	}
+	e.lastUsed = time.Now()
 	err = e.vision.session.Run([]ort.ArbitraryTensor{input}, []ort.ArbitraryTensor{out})
 	e.mu.Unlock()
 	if err != nil {

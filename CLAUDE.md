@@ -1,3 +1,7 @@
+## Style
+
+Neoworks uses a shared design system defined in the ui package. This package also contains some predefined components that can be reused throughout the applications. When creating new components, try to reuse existing ones as much as possible, and if you need to create new ones, follow the design system guidelines.
+
 ## Git
 
 You're allowed to use git. Every time you make a big change, commit the current worktree if it's dirty before changing anything, then write your changes, choose a short to-the-point commit message, and push to the remote repository. If you are unsure about what to write in the commit message, ask for help. Write an explanation of the change in the body of the commit message if it is not obvious from the title. Always mention that a commit was made by you and not an actual human.
@@ -9,8 +13,8 @@ When editing or generating code, prioritize readability and maintainability over
 Rules:
 
 - Preserve descriptive names. Do not shorten identifiers.
-  - Good: `recordId`, `customerAccount`, `paymentMethod`
-  - Bad: `rid`, `acct`, `pm`
+  - Good: `recordId`, `customerAccount`, `paymentMethod`, `textSession`, `queryCache`
+  - Bad: `rid`, `acct`, `pm`, `textSess`, `queryCach`
 
 - Use `camelCase` for variables, functions, parameters, and object fields unless the language, framework, or existing codebase requires another convention.
 - Prefer explicit control flow over shorthand.

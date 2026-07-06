@@ -4,6 +4,15 @@
   "workspaces": {
     "": {
       "name": "neoshell",
+      "dependencies": {
+        "dompurify": "^3.4.11",
+        "highlight.js": "^11.11.1",
+        "katex": "^0.17.0",
+        "marked": "^18.0.5",
+        "marked-highlight": "^2.2.4",
+        "phosphor-svelte": "^3.1.0",
+        "svelte": "^5.55.5",
+      },
       "devDependencies": {
         "@types/bun": "latest",
       },
@@ -11,11 +20,114 @@
         "typescript": "^5",
       },
     },
+    "apps/plugins-dev": {
+      "name": "@neoshell/plugins-dev",
+      "devDependencies": {
+        "@sveltejs/vite-plugin-svelte": "^7.0.0",
+        "@tailwindcss/vite": "^4.2.4",
+        "@types/bun": "latest",
+        "daisyui": "^5.6.3",
+        "tailwindcss": "^4.2.4",
+        "vite": "^8.0.10",
+      },
+    },
+    "apps/plugins/bar": {
+      "name": "@neoshell/plugin-bar",
+      "dependencies": {
+        "@neoshell/sdk": "workspace:*",
+        "@neoshell/ui": "workspace:*",
+        "phosphor-svelte": "^3.1.0",
+        "svelte": "^5.55.5",
+      },
+      "devDependencies": {
+        "@sveltejs/vite-plugin-svelte": "^7.0.0",
+        "@tailwindcss/vite": "^4.2.4",
+        "@types/bun": "latest",
+        "daisyui": "^5.6.3",
+        "tailwindcss": "^4.2.4",
+        "vite": "^8.0.10",
+      },
+    },
+    "apps/plugins/chat": {
+      "name": "@neoshell/plugin-chat",
+      "dependencies": {
+        "@neoshell/sdk": "workspace:*",
+        "@neoshell/ui": "workspace:*",
+        "dompurify": "^3.4.11",
+        "highlight.js": "^11.11.1",
+        "katex": "^0.17.0",
+        "marked": "^18.0.5",
+        "marked-highlight": "^2.2.4",
+        "phosphor-svelte": "^3.1.0",
+        "svelte": "^5.55.5",
+      },
+      "devDependencies": {
+        "@sveltejs/vite-plugin-svelte": "^7.0.0",
+        "@tailwindcss/vite": "^4.2.4",
+        "@types/bun": "latest",
+        "daisyui": "^5.6.3",
+        "tailwindcss": "^4.2.4",
+        "vite": "^8.0.10",
+      },
+    },
+    "apps/plugins/desktop": {
+      "name": "@neoshell/plugin-desktop",
+      "dependencies": {
+        "@neoshell/sdk": "workspace:*",
+        "@neoshell/ui": "workspace:*",
+        "phosphor-svelte": "^3.1.0",
+        "svelte": "^5.55.5",
+      },
+      "devDependencies": {
+        "@sveltejs/vite-plugin-svelte": "^7.0.0",
+        "@tailwindcss/vite": "^4.2.4",
+        "@types/bun": "latest",
+        "daisyui": "^5.6.3",
+        "tailwindcss": "^4.2.4",
+        "vite": "^8.0.10",
+      },
+    },
+    "apps/plugins/dock": {
+      "name": "@neoshell/plugin-dock",
+      "dependencies": {
+        "@neoshell/sdk": "workspace:*",
+        "@neoshell/ui": "workspace:*",
+        "phosphor-svelte": "^3.1.0",
+        "svelte": "^5.55.5",
+      },
+      "devDependencies": {
+        "@sveltejs/vite-plugin-svelte": "^7.0.0",
+        "@tailwindcss/vite": "^4.2.4",
+        "@types/bun": "latest",
+        "daisyui": "^5.6.3",
+        "tailwindcss": "^4.2.4",
+        "vite": "^8.0.10",
+      },
+    },
+    "apps/plugins/spotlight": {
+      "name": "@neoshell/plugin-spotlight",
+      "dependencies": {
+        "@neoshell/sdk": "workspace:*",
+        "@neoshell/ui": "workspace:*",
+        "phosphor-svelte": "^3.1.0",
+        "svelte": "^5.55.5",
+      },
+      "devDependencies": {
+        "@sveltejs/vite-plugin-svelte": "^7.0.0",
+        "@tailwindcss/vite": "^4.2.4",
+        "@types/bun": "latest",
+        "daisyui": "^5.6.3",
+        "tailwindcss": "^4.2.4",
+        "vite": "^8.0.10",
+      },
+    },
     "apps/ui": {
-      "name": "@neoshell/ui",
+      "name": "@neoshell/app",
       "dependencies": {
         "@fontsource/geist-mono": "^5.2.8",
         "@fontsource/geist-sans": "^5.2.5",
+        "@neoshell/sdk": "workspace:*",
+        "@neoshell/ui": "workspace:*",
         "@sveltejs/vite-plugin-svelte": "^7.0.0",
         "dompurify": "^3.4.11",
         "gsap": "^3.15.0",
@@ -43,6 +155,24 @@
         "@types/bun": "latest",
       },
       "peerDependencies": {
+        "svelte": "^5",
+        "typescript": "^5",
+      },
+    },
+    "packages/ui": {
+      "name": "@neoshell/ui",
+      "dependencies": {
+        "@fontsource/geist-mono": "^5.2.8",
+        "@fontsource/geist-sans": "^5.2.5",
+        "@neoshell/sdk": "workspace:*",
+        "daisyui": "^5.6.3",
+        "tailwindcss": "^4.2.4",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "svelte": "^5",
         "typescript": "^5",
       },
     },
@@ -70,9 +200,23 @@
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.1.6", "", { "dependencies": { "@tybys/wasm-util": "^0.10.3" }, "peerDependencies": { "@emnapi/core": "^1.7.1", "@emnapi/runtime": "^1.7.1" } }, "sha512-ZLv/JdUfkvOy9eCnnBaGfiO+XimbjebAeO+MRQqD/B+FR1tnRN0tpKSJHRbE8sFfS6aqsXZ67TQjfwfsxULVbg=="],
 
+    "@neoshell/app": ["@neoshell/app@workspace:apps/ui"],
+
+    "@neoshell/plugin-bar": ["@neoshell/plugin-bar@workspace:apps/plugins/bar"],
+
+    "@neoshell/plugin-chat": ["@neoshell/plugin-chat@workspace:apps/plugins/chat"],
+
+    "@neoshell/plugin-desktop": ["@neoshell/plugin-desktop@workspace:apps/plugins/desktop"],
+
+    "@neoshell/plugin-dock": ["@neoshell/plugin-dock@workspace:apps/plugins/dock"],
+
+    "@neoshell/plugin-spotlight": ["@neoshell/plugin-spotlight@workspace:apps/plugins/spotlight"],
+
+    "@neoshell/plugins-dev": ["@neoshell/plugins-dev@workspace:apps/plugins-dev"],
+
     "@neoshell/sdk": ["@neoshell/sdk@workspace:packages/sdk"],
 
-    "@neoshell/ui": ["@neoshell/ui@workspace:apps/ui"],
+    "@neoshell/ui": ["@neoshell/ui@workspace:packages/ui"],
 
     "@oxc-project/types": ["@oxc-project/types@0.137.0", "", {}, "sha512-WT+Gb24i8hmvo85AIv2oEYouEXkRlKAlT9WaCa3TfLgNCN+GhrJOGZuIlMouAh38Qe4QOx26eUOVsq70qXrywA=="],
 

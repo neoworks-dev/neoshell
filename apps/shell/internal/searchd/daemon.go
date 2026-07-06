@@ -191,6 +191,8 @@ func (d *Daemon) handle(request Request) Response {
 			return Response{Error: err.Error()}
 		}
 		return Response{Hits: hits}
+	case "rerank":
+		return Response{Hits: Rerank(ctx, d.store, d.embedder, request.Text, request.Candidates, request.Limit)}
 	default:
 		return Response{Error: "unknown op: " + request.Op}
 	}

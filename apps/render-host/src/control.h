@@ -17,7 +17,10 @@ struct ControlHandler {
     std::function<void(const std::string& role, const std::vector<Rect>&)> on_region;
     std::function<void(const std::string& role)> on_show;
     std::function<void(const std::string& role)> on_hide;
+    std::function<void(const std::string& role, KeyboardMode)> on_keyboard;
     std::function<void(const std::string& role)> on_destroy;
+    // Begin dragging the given local file paths out to other apps.
+    std::function<void(const std::vector<std::string>& paths)> on_start_drag;
 };
 
 // Create + bind + listen. Returns null on failure.
@@ -30,3 +33,11 @@ bool control_read(Control*);
 
 void control_emit_ready(Control*, const std::string& role);
 void control_emit_log(Control*, const std::string& level, const std::string& msg);
+// A native file drop landed on a surface; forward its paths + surface-local
+// coords to the core so the frontend can act on it.
+void control_emit_drop(Control*, const std::string& role, double x, double y,
+                       const std::vector<std::string>& paths);
+// A file drag entered or left a surface ("enter"/"leave"), so the frontend can
+// react before the drop (e.g. auto-expand the notch as a drag approaches).
+void control_emit_drag(Control*, const std::string& role, const std::string& phase,
+                       double x, double y);

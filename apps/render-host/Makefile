@@ -34,7 +34,7 @@ $(GEN)/%-protocol.c: $(PROTO)/%.xml | $(GEN)
 $(OBJS): $(PROTO_HDRS)
 
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) -I$(GEN) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -I$(GEN) -Ivendor -c $< -o $@
 
 neoshell-render: $(OBJS) $(PROTO_SRCS:.c=.o)
 	$(CXX) $(OBJS) $(PROTO_SRCS:.c=.o) $(LDFLAGS) -o $@

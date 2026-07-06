@@ -1,4 +1,4 @@
-// neobar render-host (C++/WPE). Multi-surface: one wlr-layer-shell surface per
+// neoshell render-host (C++/WPE). Multi-surface: one wlr-layer-shell surface per
 // role, each backed by an off-screen WebKitWebView whose frames arrive as
 // zero-copy dmabufs and are presented at the compositor's vblank. Driven by the
 // Go core over a unix-socket JSON protocol (control.h).
@@ -58,9 +58,9 @@ void wake_for_input() { g_input_active_until = g_get_monotonic_time() + 300000; 
 struct GpuNodes { std::string primary, render; };
 GpuNodes compositor_gpu() {
     GpuNodes g;
-    if (getenv("NEOBAR_RENDER_NODE")) {
-        g.render = getenv("NEOBAR_RENDER_NODE");
-        g.primary = getenv("NEOBAR_PRIMARY_NODE") ? getenv("NEOBAR_PRIMARY_NODE") : g.render;
+    if (getenv("NEOSHELL_RENDER_NODE")) {
+        g.render = getenv("NEOSHELL_RENDER_NODE");
+        g.primary = getenv("NEOSHELL_PRIMARY_NODE") ? getenv("NEOSHELL_PRIMARY_NODE") : g.render;
         return g;
     }
     g.render = conn_render_node(g_host.conn);
@@ -74,17 +74,21 @@ GpuNodes compositor_gpu() {
 WPEDisplay* get_display(const GpuNodes& gpu) {
     auto it = g_host.displays.find(gpu.render);
     if (it != g_host.displays.end()) return it->second;
-    WPEDisplay* d = neobar_display_new(gpu.primary.c_str(), gpu.render.c_str(),
+    WPEDisplay* d = neoshell_display_new(gpu.primary.c_str(), gpu.render.c_str(),
                                        1920, 1080, 144000);
     GError* err = nullptr;
     if (!wpe_display_connect(d, &err)) {
-        g_printerr("[neobar-wpe] WPE connect failed for %s: %s\n", gpu.render.c_str(),
+        g_printerr("[neoshell-wpe] WPE connect failed for %s: %s\n", gpu.render.c_str(),
                    err ? err->message : "?");
         return nullptr;
     }
-    neobar_display_set_render_callback(d, on_render);
+    neoshell_display_set_render_callback(d, on_render);
+    // Apply WebKit-requested cursors to the shared seat pointer.
+    neoshell_display_set_cursor_callback(d, [](WPEView*, const char* name) {
+        present_set_cursor(g_host.conn, name);
+    });
     g_host.displays[gpu.render] = d;
-    g_printerr("[neobar-wpe] created display for render node %s\n", gpu.render.c_str());
+    g_printerr("[neoshell-wpe] created display for render node %s\n", gpu.render.c_str());
     return d;
 }
 
@@ -111,7 +115,7 @@ void install_input() {
         wpe_view_event(v, e); wpe_event_unref(e);
     };
     sink.pointer_enter = [move](wl_surface* w, double x, double y) {
-        if (getenv("NEOBAR_INPUT_DEBUG"))
+        if (getenv("NEOSHELL_INPUT_DEBUG"))
             g_printerr("[input] pointer enter %.0f,%.0f\n", x, y);
         move(w, x, y, WPE_EVENT_POINTER_ENTER);
     };
@@ -120,7 +124,7 @@ void install_input() {
     };
     sink.pointer_button = [](wl_surface* w, double x, double y, uint32_t button, bool pressed) {
         wake_for_input();
-        if (getenv("NEOBAR_INPUT_DEBUG"))
+        if (getenv("NEOSHELL_INPUT_DEBUG"))
             g_printerr("[input] button %u %s at %.0f,%.0f\n", button,
                        pressed ? "down" : "up", x, y);
         WPEView* v = view_for_wl(w);
@@ -296,10 +300,10 @@ void handle_create(const SurfaceSpec& spec, const std::string& url) {
     // bar) show the desktop through; also makes WPE produce an ARGB (alpha) buffer.
     WebKitColor transparent = {0.0, 0.0, 0.0, 0.0};
     webkit_web_view_set_background_color(s->webview, &transparent);
-    bool cap60 = getenv("NEOBAR_60FPS") != nullptr;
+    bool cap60 = getenv("NEOSHELL_60FPS") != nullptr;
     set_60fps_feature(webkit_web_view_get_settings(s->webview), cap60);
     s->wpe_view = webkit_web_view_get_wpe_view(s->webview);
-    if (getenv("NEOBAR_LOG_TITLE"))
+    if (getenv("NEOSHELL_LOG_TITLE"))
         g_signal_connect(s->webview, "notify::title",
                          G_CALLBACK(+[](GObject* o, GParamSpec*, gpointer) {
                              const char* t = webkit_web_view_get_title(WEBKIT_WEB_VIEW(o));
@@ -311,12 +315,12 @@ void handle_create(const SurfaceSpec& spec, const std::string& url) {
 
     surface_set_configure_cb(s->surface, [s](int w, int h) { on_surface_configured(s, w, h); });
     WPEDisplay* d = s->display;
-    surface_set_vblank_cb(s->surface, [d]() { neobar_display_tick_vblank(d); });
+    surface_set_vblank_cb(s->surface, [d]() { neoshell_display_tick_vblank(d); });
 
     g_host.by_role[spec.role] = s;
     g_host.by_view[s->wpe_view] = s;
     g_host.by_wl[surface_wl(s->surface)] = s;
-    g_printerr("[neobar-wpe] surface.create role=%s url=%s\n", spec.role.c_str(), url.c_str());
+    g_printerr("[neoshell-wpe] surface.create role=%s url=%s\n", spec.role.c_str(), url.c_str());
 }
 Surf* find(const std::string& role) {
     auto it = g_host.by_role.find(role);
@@ -361,8 +365,8 @@ gboolean on_listen_readable(gint, GIOCondition, gpointer) {
 gboolean watchdog(gpointer) {
     bool input_window = g_get_monotonic_time() < g_input_active_until;
     for (auto& [node, d] : g_host.displays)
-        if (input_window || neobar_display_observer_active(d))
-            neobar_display_tick_vblank(d);
+        if (input_window || neoshell_display_observer_active(d))
+            neoshell_display_tick_vblank(d);
     return G_SOURCE_CONTINUE;
 }
 }  // namespace
@@ -370,7 +374,7 @@ gboolean watchdog(gpointer) {
 int main(int argc, char** argv) {
     g_host.conn = conn_new();
     if (!conn_ok(g_host.conn)) {
-        g_printerr("[neobar-wpe] wayland connection failed\n");
+        g_printerr("[neoshell-wpe] wayland connection failed\n");
         return 1;
     }
     // WPE displays are created lazily per output GPU as surfaces are created.
@@ -391,7 +395,7 @@ int main(int argc, char** argv) {
     g_timeout_add(16, watchdog, nullptr);
 
     GMainLoop* loop = g_main_loop_new(nullptr, FALSE);
-    g_printerr("[neobar-wpe] ready (per-output GPU selection)\n");
+    g_printerr("[neoshell-wpe] ready (per-output GPU selection)\n");
     g_main_loop_run(loop);
     return 0;
 }

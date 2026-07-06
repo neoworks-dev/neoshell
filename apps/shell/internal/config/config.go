@@ -42,11 +42,8 @@ func Defaults() map[string]any {
 			},
 		},
 		"bar": map[string]any{
-			"height": 36,
-			// Optional Hyprland combo for the search overlay (e.g. "SUPER,slash").
-			// Empty = the core injects no bind; toggle via `neoshell toggle overlay`.
-			"overlayKeybind": "",
-			"monitor":        "",
+			"height":  36,
+			"monitor": "",
 			"modules": map[string]any{
 				"workspaces":  true,
 				"windowTitle": true,
@@ -89,7 +86,7 @@ func Defaults() map[string]any {
 				"apps": true, "files": true, "calculator": true, "color": true,
 				"windows": true, "system": true, "web": true, "emoji": true,
 				"ssh": true, "process": true, "clipboard": true, "timer": true,
-				"chat": true,
+				"chat": true, "voice": true,
 			},
 		},
 		// AI chat backend. provider is "ollama" (local) or "external" (an
@@ -101,6 +98,55 @@ func Defaults() map[string]any {
 			"endpoint": "",
 			"apiKey":   "",
 			"ragTopK":  6,
+			// tools lets the model call safe read-only actions (search/read/open
+			// files); rerank reorders RAG hits by Nomic-embedding similarity (via
+			// the search daemon) before grounding the answer.
+			"tools":  true,
+			"rerank": true,
+			// Voice fan-out models. fastModel gives the instant spoken reply (no
+			// tools); slowModel produces the detailed answer and may call tools.
+			// Both fall back to `model` when unset.
+			"fastModel": "gemma4:e4b",
+			"slowModel": "gemma4:e4b",
+			// Expert escalation. The local model may call the ask_expert tool to
+			// delegate a genuinely complex task to a more capable backend; its
+			// answer replaces the local one. Not the default path — opt-in per
+			// turn by the model. backend is "claude-code" (the Claude Code CLI in
+			// print mode) or "external" (an OpenAI/Anthropic-compatible endpoint;
+			// unset keys fall back to the ai.* external settings).
+			"escalate": map[string]any{
+				"enabled":  true,
+				"backend":  "claude-code",
+				"command":  "claude",
+				"model":    "",
+				"endpoint": "",
+				"apiKey":   "",
+			},
+		},
+		// Local voice assistant: Whisper STT → two-tier LLM fan-out → Chatterbox
+		// TTS, driven by the Python sidecars in apps/voice. Disabled by default;
+		// enable once the sidecar venv is set up (task voice:setup). mode is how
+		// listening is triggered: "always" (always-on with an addressivity gate),
+		// "wake" (wake word), or "ptt" (push-to-talk keybind).
+		"voice": map[string]any{
+			"enabled":  true,
+			"device":   "cuda",
+			"language": "de",
+			"sttModel": "distil-large-v3",
+			"mode":     "ptt",
+			"vad": map[string]any{
+				"threshold":   0.5,
+				"silenceMs":   700,
+				"minSpeechMs": 200,
+			},
+			"wakeWord": "neo",
+			"bargeIn":  true,
+			// Reconciliation between the fast and slow tiers: "speculative" lets the
+			// fast tier attempt a real answer that the slow tier overrides.
+			"fanoutMode":        "speculative",
+			"ttsVoice":          "default",
+			"ttsRefAudio":       "tim-knauer.wav",
+			"fastFillerEnabled": true,
 		},
 		// Web search: %s is replaced with the URL-encoded query.
 		"web": map[string]any{

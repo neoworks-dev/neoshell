@@ -8,7 +8,9 @@
 #include "linux-dmabuf-v1-client.h"
 
 #include <glib.h>
+#include <glib-unix.h>
 #include <xkbcommon/xkbcommon.h>
+#include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -16,6 +18,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <string>
 
 struct Output {
     WaylandConn* conn = nullptr;
@@ -38,6 +41,22 @@ struct WaylandConn {
     wl_pointer* pointer = nullptr;
     wl_keyboard* keyboard = nullptr;
     InputSink sink;
+
+    // Drag-and-drop: a data device on the seat delivers file drops. dnd_offer is
+    // the offer currently hovering a surface; coords are surface-local.
+    wl_data_device_manager* data_device_manager = nullptr;
+    wl_data_device* data_device = nullptr;
+    wl_data_offer* dnd_offer = nullptr;
+    wl_surface* dnd_surface = nullptr;
+    double dnd_x = 0, dnd_y = 0;
+    uint32_t dnd_enter_serial = 0;
+    bool dnd_accepted = false;     // whether we accepted a mime for the drag
+    gint64 last_drag_us = 0;       // throttle for forwarded motion
+
+    // Drag source (dragging staged files out to other apps).
+    uint32_t last_button_serial = 0;
+    wl_data_source* drag_source = nullptr;
+    std::vector<std::string> drag_source_paths;
     // Fired after any output add/remove/mode change so the host re-checks the mode.
     std::function<void()> on_outputs_changed;
     wl_surface* pointer_focus = nullptr;
@@ -59,6 +78,14 @@ struct WaylandConn {
     xkb_context* xkb_ctx = nullptr;
     xkb_keymap* keymap = nullptr;
     xkb_state* kbstate = nullptr;
+
+    // Key repeat: Wayland delivers a single key event; the client repeats it. The
+    // compositor advertises rate (keys/sec) and delay (ms) via wl_keyboard.repeat_info.
+    int32_t repeat_rate = 25;
+    int32_t repeat_delay = 600;
+    guint repeat_timer = 0;      // glib source for the active repeat, 0 = none
+    uint32_t repeat_keycode = 0; // xkb keycode currently repeating
+    xkb_keysym_t repeat_sym = 0;
 
     dev_t main_device = 0;
     std::string render_node, primary_node;
@@ -184,9 +211,10 @@ static void ptr_motion(void* data, wl_pointer*, uint32_t, wl_fixed_t sx, wl_fixe
     if (c->pointer_focus && c->sink.pointer_motion)
         c->sink.pointer_motion(c->pointer_focus, c->px, c->py);
 }
-static void ptr_button(void* data, wl_pointer*, uint32_t, uint32_t, uint32_t button,
+static void ptr_button(void* data, wl_pointer*, uint32_t serial, uint32_t, uint32_t button,
                        uint32_t state) {
     auto* c = static_cast<WaylandConn*>(data);
+    c->last_button_serial = serial;   // implicit-grab serial for start_drag
     if (c->pointer_focus && c->sink.pointer_button)
         c->sink.pointer_button(c->pointer_focus, c->px, c->py, button,
                                state == WL_POINTER_BUTTON_STATE_PRESSED);
@@ -243,25 +271,88 @@ static void kb_keymap(void* data, wl_keyboard*, uint32_t format, int fd, uint32_
     munmap(map, size); close(fd);
     if (c->keymap) c->kbstate = xkb_state_new(c->keymap);
 }
-static void kb_enter(void* data, wl_keyboard*, uint32_t, wl_surface* surface, wl_array*) {
-    static_cast<WaylandConn*>(data)->keyboard_focus = surface;
+// current_mods reads the live modifier state from xkb into the portable KeyMod
+// bitmask so key events carry Ctrl/Shift/Alt/Meta to the WPE layer.
+static uint32_t current_mods(WaylandConn* c) {
+    if (!c->kbstate) return 0;
+    auto active = [&](const char* name) {
+        return xkb_state_mod_name_is_active(c->kbstate, name, XKB_STATE_MODS_EFFECTIVE) > 0;
+    };
+    uint32_t mods = 0;
+    if (active(XKB_MOD_NAME_CTRL)) mods |= MOD_CTRL;
+    if (active(XKB_MOD_NAME_SHIFT)) mods |= MOD_SHIFT;
+    if (active(XKB_MOD_NAME_ALT)) mods |= MOD_ALT;
+    if (active(XKB_MOD_NAME_LOGO)) mods |= MOD_META;
+    if (active(XKB_MOD_NAME_CAPS)) mods |= MOD_CAPS;
+    return mods;
 }
-static void kb_leave(void* data, wl_keyboard*, uint32_t, wl_surface*) {
-    static_cast<WaylandConn*>(data)->keyboard_focus = nullptr;
+
+static void cancel_repeat(WaylandConn* c) {
+    if (c->repeat_timer) {
+        g_source_remove(c->repeat_timer);
+        c->repeat_timer = 0;
+    }
+}
+
+static gboolean repeat_tick(gpointer data) {
+    auto* c = static_cast<WaylandConn*>(data);
+    if (c->keyboard_focus && c->sink.key) {
+        c->sink.key(c->keyboard_focus, c->repeat_keycode, c->repeat_sym, current_mods(c), true);
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+// After the initial delay, emit one repeat and switch to the steady interval.
+static gboolean repeat_begin(gpointer data) {
+    auto* c = static_cast<WaylandConn*>(data);
+    repeat_tick(data);
+    int interval = c->repeat_rate > 0 ? 1000 / c->repeat_rate : 40;
+    c->repeat_timer = g_timeout_add(interval, repeat_tick, c);
+    return G_SOURCE_REMOVE;
+}
+
+static void kb_enter(void* data, wl_keyboard*, uint32_t, wl_surface* surface, wl_array*) {
+    auto* c = static_cast<WaylandConn*>(data);
+    c->keyboard_focus = surface;
+    if (c->sink.keyboard_focus) c->sink.keyboard_focus(surface, true);
+}
+static void kb_leave(void* data, wl_keyboard*, uint32_t, wl_surface* surface) {
+    auto* c = static_cast<WaylandConn*>(data);
+    cancel_repeat(c);
+    if (c->sink.keyboard_focus) c->sink.keyboard_focus(surface, false);
+    c->keyboard_focus = nullptr;
 }
 static void kb_key(void* data, wl_keyboard*, uint32_t, uint32_t, uint32_t key, uint32_t state) {
     auto* c = static_cast<WaylandConn*>(data);
     if (!c->keyboard_focus || !c->sink.key || !c->kbstate) return;
     uint32_t keycode = key + 8;   // evdev -> xkb keycode
     xkb_keysym_t sym = xkb_state_key_get_one_sym(c->kbstate, keycode);
-    c->sink.key(c->keyboard_focus, keycode, sym, state == WL_KEYBOARD_KEY_STATE_PRESSED);
+    bool pressed = state == WL_KEYBOARD_KEY_STATE_PRESSED;
+    c->sink.key(c->keyboard_focus, keycode, sym, current_mods(c), pressed);
+
+    if (!pressed) {
+        if (keycode == c->repeat_keycode) cancel_repeat(c);
+        return;
+    }
+    // Arm auto-repeat for the pressed key (if the keymap marks it repeatable).
+    cancel_repeat(c);
+    if (c->repeat_rate > 0 && c->keymap && xkb_keymap_key_repeats(c->keymap, keycode)) {
+        c->repeat_keycode = keycode;
+        c->repeat_sym = sym;
+        c->repeat_timer = g_timeout_add(c->repeat_delay > 0 ? c->repeat_delay : 600,
+                                        repeat_begin, c);
+    }
 }
 static void kb_mods(void* data, wl_keyboard*, uint32_t, uint32_t dep, uint32_t lat,
                     uint32_t lck, uint32_t grp) {
     auto* c = static_cast<WaylandConn*>(data);
     if (c->kbstate) xkb_state_update_mask(c->kbstate, dep, lat, lck, 0, 0, grp);
 }
-static void kb_repeat(void*, wl_keyboard*, int32_t, int32_t) {}
+static void kb_repeat(void* data, wl_keyboard*, int32_t rate, int32_t delay) {
+    auto* c = static_cast<WaylandConn*>(data);
+    c->repeat_rate = rate;
+    c->repeat_delay = delay;
+}
 static const wl_keyboard_listener keyboard_listener = {
     kb_keymap, kb_enter, kb_leave, kb_key, kb_mods, kb_repeat};
 
@@ -282,6 +373,375 @@ static const wl_seat_listener seat_listener = {seat_caps, seat_name};
 static void seat_setup(WaylandConn* c) {
     if (!c->xkb_ctx) c->xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     wl_seat_add_listener(c->seat, &seat_listener, c);
+}
+
+// ------------------------------------------------------------- drag & drop ----
+// Per-offer scratch: which text-ish mimes the offer advertises. Kept on the
+// wl_data_offer's user data so a clipboard offer never contaminates a drag.
+// text/uri-list carries file paths (local drags) or URLs (browser drags);
+// text/plain is a fallback that also carries a URL for browser image drags.
+struct OfferData {
+    WaylandConn* conn = nullptr;
+    std::vector<std::string> mimes;
+};
+
+static void destroy_offer(wl_data_offer* offer) {
+    if (!offer) return;
+    delete static_cast<OfferData*>(wl_data_offer_get_user_data(offer));
+    wl_data_offer_destroy(offer);
+}
+
+static bool has_mime(OfferData* od, const char* m) {
+    for (const auto& s : od->mimes)
+        if (s == m) return true;
+    return false;
+}
+
+// The mime to request for a drop. Image flavors first (browser image drags give
+// the actual bytes, which we save locally), then uri-list (file paths or a URL),
+// then plain text. Null if nothing usable is offered.
+static const char* offer_best_mime(OfferData* od) {
+    if (!od) return nullptr;
+    static const char* PRIORITY[] = {
+        "image/png",       "image/jpeg", "image/jpg",
+        "image/gif",       "image/webp", "image/bmp",
+        "text/uri-list",   "text/plain;charset=utf-8", "text/plain",
+    };
+    for (const char* m : PRIORITY)
+        if (has_mime(od, m)) return m;
+    return nullptr;
+}
+
+static void try_accept(WaylandConn* c);
+
+static void offer_mime(void*, wl_data_offer* offer, const char* mime) {
+    // Read our per-offer data from the proxy (set after add_listener so it isn't
+    // clobbered). The listener `data` arg is unreliable for the same reason.
+    auto* od = static_cast<OfferData*>(wl_data_offer_get_user_data(offer));
+    if (mime) {
+        g_printerr("[dnd] offer mime: %s\n", mime);
+        if (od) od->mimes.push_back(mime);
+    }
+    // Mimes stream in before OR after enter. Once this offer is the active drag
+    // and advertises something usable, accept it (needed for the drop to fire).
+    if (od && od->conn && offer == od->conn->dnd_offer) try_accept(od->conn);
+}
+static void offer_source_actions(void*, wl_data_offer*, uint32_t) {}
+static void offer_action(void*, wl_data_offer*, uint32_t) {}
+static const wl_data_offer_listener offer_listener = {
+    offer_mime, offer_source_actions, offer_action};
+
+static std::string url_decode(const std::string& s) {
+    auto hex = [](char ch) -> int {
+        if (ch >= '0' && ch <= '9') return ch - '0';
+        if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+        if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+        return -1;
+    };
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); i++) {
+        if (s[i] == '%' && i + 2 < s.size()) {
+            int hi = hex(s[i + 1]), lo = hex(s[i + 2]);
+            if (hi >= 0 && lo >= 0) {
+                out.push_back(static_cast<char>(hi * 16 + lo));
+                i += 2;
+                continue;
+            }
+        }
+        out.push_back(s[i]);
+    }
+    return out;
+}
+
+// Parse a text/uri-list payload into absolute filesystem paths, stripping the
+// file:// scheme (and optional host) and percent-decoding.
+static std::vector<std::string> parse_uri_list(const std::string& text) {
+    std::vector<std::string> paths;
+    size_t start = 0;
+    while (start <= text.size()) {
+        size_t nl = text.find('\n', start);
+        std::string line = (nl == std::string::npos) ? text.substr(start)
+                                                      : text.substr(start, nl - start);
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' '))
+            line.pop_back();
+        size_t first = line.find_first_not_of(" \t");
+        if (first != std::string::npos) line.erase(0, first);
+
+        if (!line.empty() && line[0] != '#') {
+            if (line.rfind("file://", 0) == 0) {
+                std::string rest = line.substr(7);            // strip "file://"
+                size_t slash = rest.find('/');                // skip optional host
+                std::string path = (slash == std::string::npos) ? rest : rest.substr(slash);
+                paths.push_back(url_decode(path));
+            } else {
+                paths.push_back(line);
+            }
+        }
+        if (nl == std::string::npos) break;
+        start = nl + 1;
+    }
+    return paths;
+}
+
+// Save raw image bytes from a browser drag to a temp file under XDG_RUNTIME_DIR
+// (tmpfs — cleared on logout, fitting "temporary storage"). Returns the path.
+static std::string save_dropped_image(const std::string& bytes, const std::string& mime) {
+    const char* runtime = getenv("XDG_RUNTIME_DIR");
+    std::string dir = (runtime && *runtime) ? std::string(runtime) : std::string("/tmp");
+    dir += "/neoshell-drops";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+
+    const char* ext = "png";
+    if (mime.find("jpeg") != std::string::npos || mime.find("jpg") != std::string::npos)
+        ext = "jpg";
+    else if (mime.find("gif") != std::string::npos) ext = "gif";
+    else if (mime.find("webp") != std::string::npos) ext = "webp";
+    else if (mime.find("bmp") != std::string::npos) ext = "bmp";
+
+    static int counter = 0;
+    std::string path = dir + "/drop-" + std::to_string(g_get_real_time()) + "-" +
+                       std::to_string(counter++) + "." + ext;
+    FILE* file = fopen(path.c_str(), "wb");
+    if (!file) return "";
+    if (!bytes.empty()) fwrite(bytes.data(), 1, bytes.size(), file);
+    fclose(file);
+    return path;
+}
+
+// Async read of the drop payload: the source writes into a pipe we drain off the
+// GLib loop, so the compositor thread never blocks on it. Image mimes are saved
+// to a temp file; text mimes (uri-list/plain) are parsed into paths or URLs.
+struct DndRead {
+    WaylandConn* conn;
+    wl_data_offer* offer;
+    wl_surface* surface;
+    double x, y;
+    std::string mime;
+    std::string buf;
+};
+
+static gboolean dnd_read_cb(gint fd, GIOCondition, gpointer data) {
+    auto* rd = static_cast<DndRead*>(data);
+    char tmp[4096];
+    ssize_t n = read(fd, tmp, sizeof(tmp));
+    if (n > 0) {
+        rd->buf.append(tmp, static_cast<size_t>(n));
+        return G_SOURCE_CONTINUE;
+    }
+    close(fd);
+    // Note: intentionally not calling wl_data_offer_finish(). With XWayland-
+    // bridged drags the DnD action often isn't cleanly negotiated, and finish()
+    // then raises a fatal invalid_finish protocol error that aborts the client.
+    // The payload is already read, so finish is only a courtesy to the source.
+    if (rd->offer) destroy_offer(rd->offer);
+
+    std::vector<std::string> paths;
+    if (rd->mime.rfind("image/", 0) == 0) {
+        std::string path = save_dropped_image(rd->buf, rd->mime);
+        g_printerr("[dnd] saved image: %zu bytes -> %s\n", rd->buf.size(), path.c_str());
+        if (!path.empty()) paths.push_back(path);
+    } else {
+        paths = parse_uri_list(rd->buf);
+        g_printerr("[dnd] read done: %zu bytes, %zu path(s)\n", rd->buf.size(), paths.size());
+    }
+    if (!paths.empty() && rd->conn->sink.drop)
+        rd->conn->sink.drop(rd->surface, rd->x, rd->y, paths);
+    delete rd;
+    return G_SOURCE_REMOVE;
+}
+
+static void start_uri_read(WaylandConn* c, const char* mime) {
+    int fds[2];
+    if (pipe2(fds, O_CLOEXEC) < 0) {
+        destroy_offer(c->dnd_offer);
+        c->dnd_offer = nullptr;
+        c->dnd_surface = nullptr;
+        return;
+    }
+    wl_data_offer_receive(c->dnd_offer, mime, fds[1]);
+    close(fds[1]);
+    wl_display_flush(c->display);
+
+    auto* rd = new DndRead{c, c->dnd_offer, c->dnd_surface, c->dnd_x, c->dnd_y, mime, ""};
+    c->dnd_offer = nullptr;       // ownership moves to the async reader
+    c->dnd_surface = nullptr;
+    g_unix_fd_add(fds[0], static_cast<GIOCondition>(G_IO_IN | G_IO_HUP), dnd_read_cb, rd);
+}
+
+// accept_offer tells the compositor we take `mime` (COPY). Accepting a mime
+// during the drag is required for the compositor to send the drop event.
+static void accept_offer(WaylandConn* c, wl_data_offer* offer, const char* mime) {
+    wl_data_offer_accept(offer, c->dnd_enter_serial, mime);
+    if (mime && wl_proxy_get_version(reinterpret_cast<wl_proxy*>(offer)) >= 3)
+        wl_data_offer_set_actions(offer, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY,
+                                  WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY);
+    c->dnd_accepted = mime != nullptr;
+}
+
+// Accept the active drag's best mime if we haven't yet and one is now known,
+// then signal enter so the surface can expand. Never rejects (a null accept
+// would make the compositor cancel the drop), so this is safe to call anytime.
+static void try_accept(WaylandConn* c) {
+    if (!c->dnd_offer || c->dnd_accepted) return;
+    auto* od = static_cast<OfferData*>(wl_data_offer_get_user_data(c->dnd_offer));
+    const char* mime = offer_best_mime(od);
+    if (!mime) return;
+    accept_offer(c, c->dnd_offer, mime);
+    g_printerr("[dnd] accepted mime=%s\n", mime);
+    if (c->sink.drag_enter) c->sink.drag_enter(c->dnd_surface, c->dnd_x, c->dnd_y);
+}
+
+static void dd_data_offer(void* data, wl_data_device*, wl_data_offer* offer) {
+    auto* od = new OfferData();
+    od->conn = static_cast<WaylandConn*>(data);   // device listener data = WaylandConn*
+    // add_listener overwrites the proxy's user_data, so set ours AFTERWARD; the
+    // callbacks then read our OfferData back via wl_data_offer_get_user_data.
+    wl_data_offer_add_listener(offer, &offer_listener, nullptr);
+    wl_data_offer_set_user_data(offer, od);
+}
+static void dd_enter(void* data, wl_data_device*, uint32_t serial, wl_surface* surface,
+                     wl_fixed_t x, wl_fixed_t y, wl_data_offer* offer) {
+    auto* c = static_cast<WaylandConn*>(data);
+    c->dnd_offer = offer;
+    c->dnd_surface = surface;
+    c->dnd_enter_serial = serial;
+    c->dnd_accepted = false;
+    c->dnd_x = wl_fixed_to_double(x);
+    c->dnd_y = wl_fixed_to_double(y);
+    g_printerr("[dnd] enter surface=%p at %.0f,%.0f\n", (void*)surface, c->dnd_x, c->dnd_y);
+    // Accept now if the mimes already arrived; otherwise offer_mime will, once
+    // this offer advertises a usable type.
+    if (offer) try_accept(c);
+}
+static void dd_leave(void* data, wl_data_device*) {
+    auto* c = static_cast<WaylandConn*>(data);
+    if (c->dnd_surface && c->sink.drag_leave) c->sink.drag_leave(c->dnd_surface);
+    destroy_offer(c->dnd_offer);
+    c->dnd_offer = nullptr;
+    c->dnd_surface = nullptr;
+}
+static void dd_motion(void* data, wl_data_device*, uint32_t, wl_fixed_t x, wl_fixed_t y) {
+    auto* c = static_cast<WaylandConn*>(data);
+    c->dnd_x = wl_fixed_to_double(x);
+    c->dnd_y = wl_fixed_to_double(y);
+    if (!c->dnd_offer) return;
+    try_accept(c);   // covers offers whose mimes arrived between enter and now
+    // Forward live position (throttled) so the surface can track the drag.
+    if (c->dnd_accepted && c->sink.drag_motion) {
+        gint64 now = g_get_monotonic_time();
+        if (now - c->last_drag_us >= 33000) {
+            c->last_drag_us = now;
+            c->sink.drag_motion(c->dnd_surface, c->dnd_x, c->dnd_y);
+        }
+    }
+}
+static void dd_drop(void* data, wl_data_device*) {
+    auto* c = static_cast<WaylandConn*>(data);
+    if (!c->dnd_offer) {
+        g_printerr("[dnd] drop with no offer\n");
+        return;
+    }
+    auto* od = static_cast<OfferData*>(wl_data_offer_get_user_data(c->dnd_offer));
+    const char* mime = offer_best_mime(od);
+    g_printerr("[dnd] drop mime=%s\n", mime ? mime : "(none)");
+    if (!mime) {
+        destroy_offer(c->dnd_offer);
+        c->dnd_offer = nullptr;
+        c->dnd_surface = nullptr;
+        return;
+    }
+    start_uri_read(c, mime);
+}
+static void dd_selection(void*, wl_data_device*, wl_data_offer* offer) {
+    // Clipboard selection; unused by the render host. Release the offer.
+    destroy_offer(offer);
+}
+static const wl_data_device_listener data_device_listener = {
+    dd_data_offer, dd_enter, dd_leave, dd_motion, dd_drop, dd_selection};
+
+static void setup_data_device(WaylandConn* c) {
+    if (c->data_device) return;
+    if (!c->seat || !c->data_device_manager) {
+        g_printerr("[dnd] not set up: seat=%p data_device_manager=%p\n",
+                   (void*)c->seat, (void*)c->data_device_manager);
+        return;
+    }
+    c->data_device =
+        wl_data_device_manager_get_data_device(c->data_device_manager, c->seat);
+    wl_data_device_add_listener(c->data_device, &data_device_listener, c);
+    g_printerr("[dnd] data device ready\n");
+}
+
+// ---- drag source (dragging staged files out to other apps) ----
+static void src_target(void*, wl_data_source*, const char*) {}
+static void src_send(void* data, wl_data_source*, const char* mime, int fd) {
+    auto* c = static_cast<WaylandConn*>(data);
+    std::string payload;
+    if (mime && strcmp(mime, "text/uri-list") == 0) {
+        for (const auto& path : c->drag_source_paths)
+            payload += "file://" + path + "\r\n";
+    } else {  // text/plain
+        for (size_t i = 0; i < c->drag_source_paths.size(); i++) {
+            if (i) payload += "\n";
+            payload += c->drag_source_paths[i];
+        }
+    }
+    size_t off = 0;
+    while (off < payload.size()) {
+        ssize_t n = write(fd, payload.data() + off, payload.size() - off);
+        if (n <= 0) break;
+        off += static_cast<size_t>(n);
+    }
+    close(fd);
+}
+static void src_clear(WaylandConn* c, wl_data_source* src) {
+    wl_data_source_destroy(src);
+    if (c->drag_source == src) c->drag_source = nullptr;
+}
+static void src_cancelled(void* data, wl_data_source* src) {
+    src_clear(static_cast<WaylandConn*>(data), src);
+}
+static void src_dnd_drop_performed(void*, wl_data_source*) {}
+static void src_dnd_finished(void* data, wl_data_source* src) {
+    src_clear(static_cast<WaylandConn*>(data), src);
+}
+static void src_action(void*, wl_data_source*, uint32_t) {}
+static const wl_data_source_listener source_listener = {
+    src_target, src_send, src_cancelled, src_dnd_drop_performed,
+    src_dnd_finished, src_action};
+
+void present_start_drag(WaylandConn* c, const std::vector<std::string>& paths) {
+    if (!c->data_device || !c->data_device_manager) {
+        g_printerr("[dnd] start_drag: no data device\n");
+        return;
+    }
+    if (!c->pointer_focus) {
+        g_printerr("[dnd] start_drag: no pointer focus (need a held button)\n");
+        return;
+    }
+    if (paths.empty()) return;
+
+    if (c->drag_source) {
+        wl_data_source_destroy(c->drag_source);
+        c->drag_source = nullptr;
+    }
+    c->drag_source_paths = paths;
+
+    wl_data_source* src = wl_data_device_manager_create_data_source(c->data_device_manager);
+    wl_data_source_add_listener(src, &source_listener, c);
+    wl_data_source_offer(src, "text/uri-list");
+    wl_data_source_offer(src, "text/plain");
+    if (wl_proxy_get_version(reinterpret_cast<wl_proxy*>(src)) >= 3)
+        wl_data_source_set_actions(src, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY);
+
+    wl_data_device_start_drag(c->data_device, src, c->pointer_focus, nullptr,
+                              c->last_button_serial);
+    c->drag_source = src;
+    wl_display_flush(c->display);
+    g_printerr("[dnd] start_drag: %zu path(s), serial=%u\n", paths.size(),
+               c->last_button_serial);
 }
 
 // --------------------------------------------------------------- registry ----
@@ -312,6 +772,11 @@ static void reg_global(void* data, wl_registry* r, uint32_t name, const char* if
     } else if (!strcmp(iface, wl_shm_interface.name)) {
         c->shm = static_cast<wl_shm*>(
             wl_registry_bind(r, name, &wl_shm_interface, std::min(ver, 1u)));
+    } else if (!strcmp(iface, wl_data_device_manager_interface.name)) {
+        // Version 3 for the DnD actions + finish handshake.
+        c->data_device_manager = static_cast<wl_data_device_manager*>(
+            wl_registry_bind(r, name, &wl_data_device_manager_interface, std::min(ver, 3u)));
+        g_printerr("[dnd] bound wl_data_device_manager v%u\n", std::min(ver, 3u));
     }
 }
 // A removed global is an unplugged output (or other interface). Drop the matching
@@ -381,6 +846,7 @@ WaylandConn* conn_new() {
     wl_registry_add_listener(c->registry, &registry_listener, c);
     wl_display_roundtrip(c->display);   // globals
     wl_display_roundtrip(c->display);   // output names/modes
+    setup_data_device(c);               // needs both seat + data_device_manager bound
     if (!c->compositor || !c->layer_shell || !c->dmabuf)
         g_printerr("[present] missing globals: compositor=%p layer_shell=%p dmabuf=%p\n",
                    (void*)c->compositor, (void*)c->layer_shell, (void*)c->dmabuf);
@@ -511,6 +977,12 @@ Surface* surface_create(WaylandConn* c, const SurfaceSpec& spec) {
     return s;
 }
 
+void surface_set_keyboard(Surface* s, KeyboardMode mode) {
+    zwlr_layer_surface_v1_set_keyboard_interactivity(s->layer, to_sctk_kb(mode));
+    wl_surface_commit(s->wl);
+    wl_display_flush(s->conn->display);
+}
+
 void surface_set_exclusive(Surface* s, EdgeKind edge, int size) {
     zwlr_layer_surface_v1_set_exclusive_zone(s->layer, size > 0 ? size : 0);
     wl_surface_commit(s->wl);
@@ -535,10 +1007,10 @@ void surface_set_region(Surface* s, const std::vector<Rect>& rects) {
 
 void surface_show(Surface* s) {
     s->visible = true;
-    // The surface was unmapped by surface_hide, so the compositor requires a
-    // fresh configure before any buffer may be attached. Commit with no buffer to
-    // elicit that configure; on_render only presents once `configured` is true
-    // again (set in ls_configure), so no buffer is attached prematurely.
+    // The surface was unmapped by surface_hide, which invalidates its configured
+    // state. Commit with no buffer to elicit a fresh configure; on_render only
+    // presents once `configured` is true again (set in ls_configure), so no buffer
+    // is attached before the compositor reconfigures.
     wl_surface_commit(s->wl);
     wl_display_flush(s->conn->display);
     if (s->vblank) s->vblank();
@@ -546,8 +1018,8 @@ void surface_show(Surface* s) {
 void surface_hide(Surface* s) {
     s->visible = false;
     // Unmapping (null buffer) invalidates the layer surface's configured state:
-    // wlroots will send a new configure on re-map, and attaching before acking it
-    // is a protocol error. Clear the flag so on_render waits for the reconfigure.
+    // wlroots sends a new configure on re-map and attaching before acking it is a
+    // protocol error, so clear the flag and let on_render wait for the reconfigure.
     s->configured = false;
     wl_surface_attach(s->wl, nullptr, 0, 0);
     wl_surface_commit(s->wl);

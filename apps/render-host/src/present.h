@@ -22,6 +22,15 @@ enum Anchor : uint32_t { ANCHOR_TOP = 1, ANCHOR_BOTTOM = 2, ANCHOR_LEFT = 4, ANC
 enum LayerKind { LAYER_BACKGROUND = 0, LAYER_BOTTOM, LAYER_TOP, LAYER_OVERLAY };
 enum KeyboardMode { KB_NONE = 0, KB_ONDEMAND, KB_EXCLUSIVE };
 enum EdgeKind { EDGE_NONE = -1, EDGE_TOP = 0, EDGE_BOTTOM, EDGE_LEFT, EDGE_RIGHT };
+// Portable keyboard modifier bitmask emitted with each key event, so the WPE
+// layer (main.cpp) can map it to WPEModifiers without present.cpp knowing WPE.
+enum KeyMod : uint32_t {
+    MOD_CTRL = 1 << 0,
+    MOD_SHIFT = 1 << 1,
+    MOD_ALT = 1 << 2,
+    MOD_META = 1 << 3,
+    MOD_CAPS = 1 << 4,
+};
 
 struct Rect { int x, y, w, h; };
 
@@ -44,7 +53,20 @@ struct InputSink {
     std::function<void(wl_surface*, double x, double y)> pointer_motion;
     std::function<void(wl_surface*, double x, double y, uint32_t button, bool pressed)> pointer_button;
     std::function<void(wl_surface*, double x, double y, double dx, double dy)> pointer_axis;
-    std::function<void(wl_surface*, uint32_t keycode, uint32_t keysym, bool pressed)> key;
+    std::function<void(wl_surface*, uint32_t keycode, uint32_t keysym, uint32_t modifiers, bool pressed)> key;
+    // Keyboard focus enter/leave, so the host can focus/unfocus the WPE view
+    // (WebKit only shows the text caret and full input state for a focused view).
+    std::function<void(wl_surface*, bool focused)> keyboard_focus;
+    // A file drag-and-drop landed on a surface. Paths are absolute filesystem
+    // paths decoded from the drop's text/uri-list. Handled natively (WPE's
+    // off-screen backend has no DOM drag path), forwarded to the core.
+    std::function<void(wl_surface*, double x, double y, const std::vector<std::string>& paths)> drop;
+    // A file drag entered/left a surface's input region (fired only for drags
+    // carrying files), so the surface can react before the drop — e.g. the notch
+    // expanding as a drag approaches.
+    std::function<void(wl_surface*, double x, double y)> drag_enter;
+    std::function<void(wl_surface*, double x, double y)> drag_motion;
+    std::function<void(wl_surface*)> drag_leave;
 };
 
 // ---- connection ----
@@ -73,12 +95,21 @@ bool conn_output_mode(WaylandConn*, const char* name, int* w, int* h, int* refre
 // seat pointer, from a wl_cursor theme. Driven by WebKit's set_cursor_from_name.
 void present_set_cursor(WaylandConn*, const char* css_name);
 
+// Begin a Wayland drag as the source, offering the given local file paths (as
+// text/uri-list + text/plain) so they can be dropped into other apps. Uses the
+// last pointer-button serial as the implicit grab; the drag originates from the
+// surface currently under the pointer.
+void present_start_drag(WaylandConn*, const std::vector<std::string>& paths);
+
 // ---- surfaces ----
 Surface* surface_create(WaylandConn*, const SurfaceSpec&);
 void surface_set_exclusive(Surface*, EdgeKind, int size);
 void surface_set_region(Surface*, const std::vector<Rect>&);
 void surface_show(Surface*);
 void surface_hide(Surface*);
+// Change keyboard interactivity at runtime (e.g. grab while a palette is open,
+// release otherwise).
+void surface_set_keyboard(Surface*, KeyboardMode);
 void surface_destroy(Surface*);     // tears down; frees the Surface
 bool surface_configured(Surface*);
 // False after surface_hide until surface_show; callers must not present frames

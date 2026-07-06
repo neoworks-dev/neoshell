@@ -1,0 +1,34 @@
+[project]
+name = "neoshell-voice"
+version = "0.1.0"
+description = "neoshell voice assistant sidecars: Whisper STT and MOSS-TTS-Nano TTS"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "faster-whisper>=1.0",
+    "silero-vad>=5.1",
+    "sounddevice>=0.4",
+    "numpy>=1.26",
+    "soxr>=0.5",
+    # MOSS-TTS-Nano: 100M ONNX TTS with zero-shot voice cloning + multilingual
+    # (incl. German). Tiny VRAM (~0.3-0.5 GB on GPU), sub-realtime. Git-only.
+    # Pulls plain `onnxruntime` (CPU). For GPU, overlay the CUDA build after sync:
+    #   uv pip install onnxruntime-gpu    (replaces onnxruntime, adds CUDA EP)
+    # `onnxruntime-gpu` is a separate package providing the same import, so it
+    # can't be co-declared here without the resolver dropping one.
+    "moss-tts-nano",
+    # torch/torchaudio are pulled in by moss-tts-nano and faster-whisper.
+]
+
+[tool.uv.sources]
+moss-tts-nano = { git = "https://github.com/OpenMOSS/MOSS-TTS-Nano.git" }
+
+[project.scripts]
+neoshell-voice-stt = "neoshell_voice.stt:main"
+neoshell-voice-tts = "neoshell_voice.tts:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["neoshell_voice"]

@@ -5,12 +5,25 @@
   "description": "neoshell — a Wayland desktop shell (bar, desktop, widgets) rendered via a C++/WPE host, driven by a Go core.",
   "workspaces": [
     "apps/ui",
-    "packages/sdk"
+    "apps/plugins/*",
+    "apps/plugins-dev",
+    "packages/sdk",
+    "packages/ui"
   ],
   "devDependencies": {
     "@types/bun": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "//": "Hoisted so the multi-page plugin dev aggregator (root apps/plugins) can pre-bundle plugin runtime deps.",
+  "dependencies": {
+    "dompurify": "^3.4.11",
+    "highlight.js": "^11.11.1",
+    "katex": "^0.17.0",
+    "marked": "^18.0.5",
+    "marked-highlight": "^2.2.4",
+    "phosphor-svelte": "^3.1.0",
+    "svelte": "^5.55.5"
   }
 }
