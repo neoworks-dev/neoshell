@@ -1,23 +1,20 @@
-"""Moonshine streaming STT sidecar.
+"""Whisper STT sidecar.
 
-Captures the microphone and streams it into Moonshine v2 (ONNX, CPU), which does
-its own VAD segmentation and emits transcript lines incrementally. The sidecar
-relays those as partial/final transcripts, speech-start events (for barge-in),
-and state changes to the Go core.
+Captures the microphone, segments speech with Silero VAD, and transcribes each
+segment with faster-whisper (CTranslate2, int8, CPU). Whisper has no streaming
+decoder, so live partials come from re-decoding the in-progress segment on a
+fixed cadence; the authoritative final decode runs when the VAD closes the
+segment.
 
-Streaming (rather than one-shot) is required by the accurate models: the larger
-English models (small/medium-streaming) only produce output through the streaming
-API; the tiny one-shot models (tiny/base-en) are fast but noticeably less
-accurate. Moonshine's internal VAD replaces the Silero segmentation the Whisper
-sidecar used.
-
-Moonshine is language-specific (English, Spanish, Mandarin, Japanese, Korean,
-Vietnamese, Ukrainian, Arabic). German is not supported — that was the Whisper
-era. `model` is a Moonshine model name (e.g. "medium-streaming-en").
+Whisper is multilingual (German included). `language` is an ISO code passed to
+the decoder; the special value "auto" enables per-utterance detection. `model`
+is a faster-whisper size name (e.g. "small", "large-v3-turbo").
 """
 
 import queue
 import threading
+import time
+from collections import deque
 
 import numpy as np
 import soxr
@@ -27,8 +24,24 @@ from . import config
 from .common import SidecarServer, stt_socket_path
 
 SAMPLE_RATE = 16000
-# Partial-transcript cadence for the streaming session (seconds).
-UPDATE_INTERVAL = 0.3
+# Silero VAD operates on fixed 512-sample frames at 16 kHz.
+FRAME = 512
+# Partial-transcript cadence (seconds). Each partial re-decodes the whole
+# in-progress segment, so this bounds the wasted compute per second of speech.
+PARTIAL_INTERVAL = 1.0
+# Stop re-decoding partials for segments longer than this; the final still
+# covers the full audio. Keeps long monologues from pinning the CPU.
+PARTIAL_MAX_SECONDS = 20.0
+# Force-close a segment after this long even if the VAD still sees speech.
+SEGMENT_MAX_SECONDS = 30.0
+# Audio kept from before the VAD onset so word starts are not clipped.
+PRE_ROLL_SECONDS = 0.3
+
+DEFAULT_MODEL = "small"
+WHISPER_MODELS = {
+    "tiny", "tiny.en", "base", "base.en", "small", "small.en",
+    "medium", "medium.en", "large-v3", "large-v3-turbo", "distil-large-v3",
+}
 
 
 class STTEngine:
@@ -38,15 +51,15 @@ class STTEngine:
         # Settings, overridden by the core's `config` op.
         self.mode = "wake"
         self.language = "en"
-        self.model_name = "medium-streaming-en"
+        self.model_name = DEFAULT_MODEL
         self.wake_word = ""
-        # VAD thresholds are accepted for protocol compatibility but Moonshine's
-        # internal VAD owns segmentation now, so they are advisory only.
         self.vad_threshold = 0.5
         self.silence_ms = 700
         self.min_speech_ms = 200
 
         self._model = None
+        self._vad = None
+        self._torch = None
         self._ready = False
         self._want_listen = False
 
@@ -56,60 +69,45 @@ class STTEngine:
         self._running = False
         self._capture_rate = SAMPLE_RATE
 
-        # Streaming state. `_speaking` dedupes the speech_start event across the
-        # many LineStarted callbacks of one utterance. `_ptt_lines` accumulates
-        # completed lines so a push-to-talk hold finalizes as a single utterance.
-        self._speaking = False
+        # Segment state, owned by the feed thread while it runs and by stop()
+        # after the thread is joined.
+        self._pre_roll: deque = deque(maxlen=int(PRE_ROLL_SECONDS * SAMPLE_RATE / FRAME))
+        self._segment: list[np.ndarray] = []
+        self._leftover = np.empty(0, dtype=np.float32)
+        self._in_speech = False
+        self._silent_frames = 0
+        self._last_partial = 0.0
         self._ptt_lines: list[str] = []
-        # Moonshine event classes, bound in load() to avoid a top-level import.
-        self._ev_started = None
-        self._ev_completed = None
-        self._ev_partial = ()
 
     # --- lifecycle ---------------------------------------------------------
 
     def load(self) -> None:
-        import moonshine_voice as moonshine
-        from moonshine_voice import (
-            LineCompleted,
-            LineStarted,
-            LineTextChanged,
-            LineUpdated,
-        )
+        import torch
+        from faster_whisper import WhisperModel
+        from silero_vad import load_silero_vad
 
-        model_path, model_arch = self._resolve_model(moonshine)
-        arch_name = moonshine.model_arch_to_string(model_arch)
-        self.server.log(f"loading Moonshine {self.model_name} ({arch_name})")
-        self._model = moonshine.Transcriber(
-            model_path=model_path,
-            model_arch=model_arch,
-            update_interval=UPDATE_INTERVAL,
+        self._torch = torch
+        self._vad = load_silero_vad()
+        model_name = self._resolve_model_name()
+        self.server.log(f"loading Whisper {model_name} (int8, cpu)")
+        self._model = WhisperModel(
+            model_name,
+            device="cpu",
+            compute_type="int8",
+            download_root=str(config.models_dir() / "whisper"),
         )
-        self._ev_started = LineStarted
-        self._ev_completed = LineCompleted
-        self._ev_partial = (LineUpdated, LineTextChanged)
-        self._model.add_listener(self._on_event)
         self._ready = True
         self.server.log("STT ready")
         if self._want_listen:
             self.start()
 
-    def _resolve_model(self, moonshine):
-        """Resolve the configured model name to a Moonshine model path + arch,
-        downloading it on first use. An unknown name falls back to the language
-        default. Streaming archs (small/medium) are the accurate choice for a
-        continuous mic feed, so that is the default when the name is unknown."""
-        from moonshine_voice import ModelArch
-
-        language = self.language or "en"
-        wanted_arch = ModelArch.MEDIUM_STREAMING
-        for info in moonshine.download.MODEL_INFO.get(language, {}).get("models", []):
-            if info["model_name"] == self.model_name:
-                wanted_arch = info["model_arch"]
-                break
-        model_name, model_arch = moonshine.get_model_for_language(language, wanted_arch)
-        self.model_name = model_name
-        return moonshine.get_model_path(model_name), model_arch
+    def _resolve_model_name(self) -> str:
+        """Model changes from the `config` op take effect on the next process
+        start; reloading a live CTranslate2 session is avoided for simplicity."""
+        if self.model_name in WHISPER_MODELS:
+            return self.model_name
+        self.server.log(f"unknown STT model {self.model_name!r}, using {DEFAULT_MODEL}")
+        return DEFAULT_MODEL
 
     def handle(self, command: dict) -> None:
         op = command.get("op")
@@ -133,17 +131,15 @@ class STTEngine:
             self.silence_ms = int(command["vadSilenceMs"])
         if command.get("vadMinSpeechMs"):
             self.min_speech_ms = int(command["vadMinSpeechMs"])
-        # A model change takes effect on the next process start; reloading a live
-        # Moonshine ONNX session mid-session is avoided for simplicity.
         self.model_name = command.get("model", self.model_name)
 
     def start(self) -> None:
         if not self._ready or self._running:
             return
         self._running = True
-        self._speaking = False
+        self._reset_segment()
         self._ptt_lines = []
-        self._model.start()  # open the streaming session (internal VAD)
+        self._vad.reset_states()
         self._feed_worker = threading.Thread(target=self._feed_loop, daemon=True)
         self._feed_worker.start()
         try:
@@ -197,28 +193,29 @@ class STTEngine:
         return candidates
 
     def stop(self, discard: bool = False) -> None:
-        """Stop capture and close the streaming session. A push-to-talk release
-        finalizes the held audio as one utterance; `discard` (cancel) drops it."""
+        """Stop capture and finalize. A push-to-talk release finalizes the held
+        audio as one utterance; `discard` (cancel) drops it."""
+        self._want_listen = False
         if not self._running:
             return
-        # Stop capturing first so no new audio enters, then flush the session.
+        # Stop capturing first so no new audio enters, then join the feed
+        # thread so segment state is safe to touch from this thread.
         if self._stream is not None:
             self._stream.stop()
             self._stream.close()
             self._stream = None
         self._running = False
-        # Any in-flight line completes synchronously here, landing in _ptt_lines
-        # (ptt) or emitting its own final (wake/always) via the listener.
-        try:
-            self._model.stop()
-        except Exception:
-            pass
-        self._speaking = False
+        if self._feed_worker is not None:
+            self._feed_worker.join(timeout=15)
+            self._feed_worker = None
 
         if discard:
+            self._reset_segment()
             self._ptt_lines = []
             self.server.emit(event="state", value="idle")
             return
+        if self._in_speech:
+            self._close_segment()
         if self.mode == "ptt":
             combined = " ".join(self._ptt_lines).strip()
             self._ptt_lines = []
@@ -233,49 +230,115 @@ class STTEngine:
         self._audio_queue.put(mono.astype(np.float32).copy())
 
     def _feed_loop(self) -> None:
-        """Drain captured audio into the streaming model. Runs off the PortAudio
-        callback so transcription work never blocks capture."""
+        """Drain captured audio, frame it for the VAD, and drive segmentation.
+        Runs off the PortAudio callback so decoding never blocks capture."""
         while self._running:
             try:
                 chunk = self._audio_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
-            try:
-                self._model.add_audio(chunk.tolist(), SAMPLE_RATE)
-            except Exception as error:
-                self.server.emit(event="error", message=str(error))
+            self._leftover = np.concatenate([self._leftover, chunk])
+            while len(self._leftover) >= FRAME:
+                frame = self._leftover[:FRAME]
+                self._leftover = self._leftover[FRAME:]
+                self._process_frame(frame)
 
-    # --- transcript events -------------------------------------------------
+    # --- segmentation ------------------------------------------------------
 
-    def _on_event(self, event) -> None:
-        """Listener for Moonshine transcript events (fires on the feed thread).
-        LineStarted marks speech onset, partial events stream text as it firms
-        up, and LineCompleted finalizes an utterance."""
-        line = event.line
-        if isinstance(event, self._ev_started):
-            if not self._speaking:
-                self._speaking = True
-                self.server.emit(event="speech_start")
+    def _process_frame(self, frame: np.ndarray) -> None:
+        speech = self._vad_probability(frame) >= self.vad_threshold
+        if not self._in_speech and not speech:
+            self._pre_roll.append(frame)
             return
-        if isinstance(event, self._ev_partial):
-            text = line.text.strip()
-            if text:
-                self.server.emit(event="partial", text=text)
+        if not self._in_speech:
+            self._begin_segment(frame)
             return
-        if isinstance(event, self._ev_completed):
-            self._speaking = False
-            self._complete_line(line)
+        self._segment.append(frame)
+        if speech:
+            self._silent_frames = 0
+        else:
+            self._silent_frames += 1
+        if self._silent_frames >= self._silence_limit():
+            self._close_segment()
+            return
+        if self._segment_seconds() >= SEGMENT_MAX_SECONDS:
+            self._close_segment()
+            return
+        if speech:
+            self._maybe_emit_partial()
 
-    def _complete_line(self, line) -> None:
-        if line.duration * 1000 < self.min_speech_ms:
+    def _vad_probability(self, frame: np.ndarray) -> float:
+        tensor = self._torch.from_numpy(frame)
+        return float(self._vad(tensor, SAMPLE_RATE))
+
+    def _begin_segment(self, frame: np.ndarray) -> None:
+        self._segment = list(self._pre_roll) + [frame]
+        self._pre_roll.clear()
+        self._in_speech = True
+        self._silent_frames = 0
+        self._last_partial = time.monotonic()
+        self.server.emit(event="speech_start")
+
+    def _silence_limit(self) -> int:
+        frame_ms = FRAME / SAMPLE_RATE * 1000
+        return max(1, int(self.silence_ms / frame_ms))
+
+    def _segment_seconds(self) -> float:
+        return len(self._segment) * FRAME / SAMPLE_RATE
+
+    def _reset_segment(self) -> None:
+        self._segment = []
+        self._leftover = np.empty(0, dtype=np.float32)
+        self._pre_roll.clear()
+        self._in_speech = False
+        self._silent_frames = 0
+
+    def _maybe_emit_partial(self) -> None:
+        if time.monotonic() - self._last_partial < PARTIAL_INTERVAL:
             return
-        text = line.text.strip()
-        # Push-to-talk finalizes on key release, so hold completed lines until then.
+        if self._segment_seconds() > PARTIAL_MAX_SECONDS:
+            return
+        text = self._decode(np.concatenate(self._segment))
+        # Stamp after the decode: a decode slower than the interval must not
+        # trigger again on the very next frame.
+        self._last_partial = time.monotonic()
+        if text:
+            self.server.emit(event="partial", text=text)
+
+    def _close_segment(self) -> None:
+        audio = np.concatenate(self._segment)
+        speech_frames = len(self._segment) - self._silent_frames
+        speech_ms = speech_frames * FRAME / SAMPLE_RATE * 1000
+        self._reset_segment()
+        self._vad.reset_states()
+        if speech_ms < self.min_speech_ms:
+            return
+        text = self._decode(audio)
         if self.mode == "ptt":
             if text:
                 self._ptt_lines.append(text)
             return
         self._emit_final(text)
+
+    # --- transcription -----------------------------------------------------
+
+    def _decode(self, audio: np.ndarray) -> str:
+        language = self.language or "en"
+        if language == "auto":
+            language = None
+        try:
+            segments, _info = self._model.transcribe(
+                audio,
+                language=language,
+                beam_size=1,
+                condition_on_previous_text=False,
+                vad_filter=False,
+            )
+            parts = [segment.text.strip() for segment in segments]
+        except Exception as error:
+            self.server.emit(event="error", message=str(error))
+            return ""
+        return " ".join(part for part in parts if part).strip()
 
     def _emit_final(self, text: str) -> None:
         text = (text or "").strip()

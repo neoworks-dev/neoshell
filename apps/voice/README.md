@@ -3,9 +3,12 @@
 Local voice-assistant sidecars for neoshell. Two Python processes the Go core
 spawns and supervises (like the search daemon):
 
-- **STT** (`neoshell_voice.stt`) — mic capture → Moonshine v2 streaming
-  transcription (ONNX, CPU) with its own VAD segmentation, emitting live partials
-  and finals. Default `medium-streaming-en`. English-only; German unsupported.
+- **STT** (`neoshell_voice.stt`) — mic capture → Silero VAD segmentation →
+  faster-whisper transcription (CTranslate2, int8, CPU). Default `small`.
+  Multilingual (German included); `voice.language: auto` enables per-utterance
+  detection. Whisper has no streaming decoder, so live partials come from
+  re-decoding the in-progress segment about once a second; the final decode
+  runs when the VAD closes the segment (~0.5-1.5s after speech ends).
 - **TTS** (`neoshell_voice.tts`) — Supertonic 3 synthesis (ONNX, CPU) → speaker
   playback. Preset voices F1-F5 / M1-M5, 31 languages, no voice cloning.
 
@@ -18,21 +21,21 @@ here talks to Ollama or the LLM directly.
 
 ```sh
 task voice:setup          # uv sync → apps/voice/.venv
-task voice:models         # ollama pull gemma4:e2b gemma4:e4b
 ```
 
-The sidecars default to **CPU** (`voice.device: cpu`). Supertonic 3 runs well
-under realtime there (RTF ~0.16-0.30, ~0.4-1.5s per sentence), and CPU keeps the
-GPU's VRAM free for the LLM. `voice.device` only affects TTS — Moonshine STT is
-CPU-only regardless. For a GPU box, set `voice.device: cuda` and overlay the
-matching CUDA ONNX runtime after setup:
+The sidecars default to **CPU** (`voice.device: cpu`). Whisper `small` (int8)
+decodes at RTF ~0.2-0.4 and Supertonic 3 runs well under realtime (RTF
+~0.16-0.30, ~0.4-1.5s per sentence), and CPU keeps the GPU's VRAM free for the
+LLM. `voice.device` only affects TTS — the STT sidecar is CPU-only. For a GPU
+box, set `voice.device: cuda` and overlay the matching CUDA ONNX runtime after
+setup:
 
 ```sh
 cd apps/voice
 uv pip install "onnxruntime-gpu==$(uv pip show onnxruntime | awk '/^Version:/{print $2}')"
 ```
 
-Moonshine and Supertonic weights download to `$XDG_DATA_HOME/neoshell/models` on
+Whisper and Supertonic weights download to `$XDG_DATA_HOME/neoshell/models` on
 first run. Enable the feature by setting `voice.enabled: true` in
 `~/.config/neoshell/config.json` (or via the settings UI).
 
@@ -47,11 +50,16 @@ object per line. The Go core dials; the sidecar serves. Sockets:
 Core → sidecar:
 
 ```json
-{"op":"config","mode":"wake","language":"en","model":"medium-streaming-en","vadThreshold":0.5,"vadSilenceMs":700,"vadMinSpeechMs":200,"wakeWord":""}
+{"op":"config","mode":"wake","language":"en","model":"small","vadThreshold":0.5,"vadSilenceMs":700,"vadMinSpeechMs":200,"wakeWord":""}
 {"op":"listen"}
 {"op":"stop"}
 {"op":"cancel"}
 ```
+
+`vadThreshold`, `vadSilenceMs`, and `vadMinSpeechMs` drive the Silero VAD
+segmentation. `model` is a faster-whisper size name (`tiny`...`large-v3-turbo`);
+a change takes effect on the next sidecar start. `language` is an ISO code, or
+`auto` for per-utterance detection.
 
 Sidecar → core:
 

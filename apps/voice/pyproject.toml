@@ -1,12 +1,13 @@
 [project]
 name = "neoshell-voice"
 version = "0.1.0"
-description = "neoshell voice assistant sidecars: Moonshine STT and Supertonic 3 TTS"
+description = "neoshell voice assistant sidecars: Whisper STT and Supertonic 3 TTS"
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    # Moonshine v2: streaming ONNX STT, sub-realtime on CPU (RTF ~0.5 for the
-    # accurate medium-streaming-en). English-only in our config; no German.
-    "moonshine-voice>=0.0.65",
+    # faster-whisper: CTranslate2 Whisper, int8 on CPU (RTF ~0.2-0.4 for
+    # `small`). Multilingual, German included. Silero VAD segments the mic
+    # stream; Whisper decodes per segment (no streaming decoder).
+    "faster-whisper>=1.0",
     "silero-vad>=5.1",
     "sounddevice>=0.4",
     "numpy>=1.26",

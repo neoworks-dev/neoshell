@@ -65,5 +65,4 @@ def setup_caches() -> None:
     cache = hf_cache_dir()
     cache.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("HF_HOME", str(cache))
-    os.environ.setdefault("MOONSHINE_VOICE_CACHE", str(models_dir() / "moonshine"))
     os.environ.setdefault("SUPERTONIC_CACHE_DIR", str(models_dir() / "supertonic"))

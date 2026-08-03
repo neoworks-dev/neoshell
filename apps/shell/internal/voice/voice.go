@@ -143,7 +143,7 @@ func (m *Manager) configureSidecars() {
 	_ = m.stt.Configure(sttCommand{
 		Mode:         m.mode(),
 		Language:     m.cfgString("voice.language", "en"),
-		Model:        m.cfgString("voice.sttModel", "medium-streaming-en"),
+		Model:        m.cfgString("voice.sttModel", "small"),
 		WakeWord:     m.cfgString("voice.wakeWord", ""),
 		VADThreshold: m.cfgFloat("voice.vad.threshold", 0.5),
 		VADSilenceMs: m.cfgInt("voice.vad.silenceMs", 700),
