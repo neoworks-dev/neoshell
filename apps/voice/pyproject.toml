@@ -1,26 +1,24 @@
 [project]
 name = "neoshell-voice"
 version = "0.1.0"
-description = "neoshell voice assistant sidecars: Whisper STT and MOSS-TTS-Nano TTS"
+description = "neoshell voice assistant sidecars: Moonshine STT and Supertonic 3 TTS"
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "faster-whisper>=1.0",
+    # Moonshine v2: streaming ONNX STT, sub-realtime on CPU (RTF ~0.5 for the
+    # accurate medium-streaming-en). English-only in our config; no German.
+    "moonshine-voice>=0.0.65",
     "silero-vad>=5.1",
     "sounddevice>=0.4",
     "numpy>=1.26",
     "soxr>=0.5",
-    # MOSS-TTS-Nano: 100M ONNX TTS with zero-shot voice cloning + multilingual
-    # (incl. German). Tiny VRAM (~0.3-0.5 GB on GPU), sub-realtime. Git-only.
-    # Pulls plain `onnxruntime` (CPU). For GPU, overlay the CUDA build after sync:
-    #   uv pip install onnxruntime-gpu    (replaces onnxruntime, adds CUDA EP)
-    # `onnxruntime-gpu` is a separate package providing the same import, so it
-    # can't be co-declared here without the resolver dropping one.
-    "moss-tts-nano",
-    # torch/torchaudio are pulled in by moss-tts-nano and faster-whisper.
+    # Supertonic 3: ONNX TTS, 31 languages, preset voices F1-F5/M1-M5 (no voice
+    # cloning). Fast enough on CPU (RTF ~0.16-0.30) that the sidecars need no GPU;
+    # pulls plain `onnxruntime` (CPU). For GPU, overlay the CUDA build after sync:
+    # `uv pip install onnxruntime-gpu` (separate package, same import, so it can't
+    # be co-declared here without the resolver dropping one).
+    "supertonic>=1.3.1",
+    # torch/torchaudio are pulled in by silero-vad.
 ]
-
-[tool.uv.sources]
-moss-tts-nano = { git = "https://github.com/OpenMOSS/MOSS-TTS-Nano.git" }
 
 [project.scripts]
 neoshell-voice-stt = "neoshell_voice.stt:main"

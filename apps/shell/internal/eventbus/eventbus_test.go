@@ -78,6 +78,83 @@ func TestEmitServeRoundTrip(t *testing.T) {
 	}
 }
 
+// TestSubscribeReceivesEmittedEvents covers the bidirectional path: an external
+// process subscribes over the socket and receives events emitted by another
+// connection. This is the transport the AI sidecar uses for activation events.
+func TestSubscribeReceivesEmittedEvents(t *testing.T) {
+	socketPath := filepath.Join(t.TempDir(), "control.sock")
+	bus := New()
+
+	serveCtx, cancelServe := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- Serve(serveCtx, socketPath, bus) }()
+	waitForSocket(t, socketPath)
+
+	received := make(chan Event, 1)
+	subCtx, cancelSub := context.WithCancel(context.Background())
+	subDone := make(chan error, 1)
+	go func() {
+		subDone <- Subscribe(subCtx, socketPath, []string{"ai:activate"}, func(e Event) {
+			received <- e
+		})
+	}()
+
+	// Let the subscription register before emitting.
+	waitForSubscriber(t, bus, "ai:activate")
+
+	payload := `{"prompt":"hello"}`
+	if err := Emit(socketPath, Event{Topic: "ai:activate", Payload: []byte(payload)}); err != nil {
+		t.Fatalf("emit: %v", err)
+	}
+
+	select {
+	case e := <-received:
+		if e.Topic != "ai:activate" || string(e.Payload) != payload {
+			t.Fatalf("unexpected event: %+v", e)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("subscriber did not receive event within 1s")
+	}
+
+	cancelSub()
+	<-subDone
+	// The subscriber's bus handler must be gone after it disconnects.
+	waitForNoSubscriber(t, bus, "ai:activate")
+
+	cancelServe()
+	if err := <-served; err != nil {
+		t.Fatalf("serve returned error: %v", err)
+	}
+}
+
+func waitForSubscriber(t *testing.T, bus *Bus, topic string) {
+	t.Helper()
+	for range 100 {
+		bus.mu.RLock()
+		count := len(bus.subs[topic])
+		bus.mu.RUnlock()
+		if count > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("no subscriber registered for %q", topic)
+}
+
+func waitForNoSubscriber(t *testing.T, bus *Bus, topic string) {
+	t.Helper()
+	for range 100 {
+		bus.mu.RLock()
+		count := len(bus.subs[topic])
+		bus.mu.RUnlock()
+		if count == 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("subscriber for %q leaked after disconnect", topic)
+}
+
 func waitTimeout(wg *sync.WaitGroup, d time.Duration) bool {
 	done := make(chan struct{})
 	go func() { wg.Wait(); close(done) }()

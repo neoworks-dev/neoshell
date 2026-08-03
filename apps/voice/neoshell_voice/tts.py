@@ -1,14 +1,14 @@
-"""MOSS-TTS-Nano sidecar.
+"""Supertonic 3 sidecar.
 
-Loads MOSS-TTS-Nano (100M ONNX) once and synthesizes queued sentences (fed by
-the Go orchestrator one sentence at a time), playing them through the default
-output device. On GPU it is ~1s per sentence (RTF ~0.2) at ~0.3-0.5 GB VRAM, so
-it barely competes with the LLM/STT for memory. A flush drops the queue and
-stops playback for barge-in / interrupts.
+Loads Supertonic 3 (ONNX) once and synthesizes queued sentences (fed by the Go
+orchestrator one sentence at a time), playing them through the default output
+device. On CPU it is ~0.4-1.5s per sentence (RTF ~0.16-0.30), so it needs no GPU
+at all. A flush drops the queue and stops playback for barge-in / interrupts.
 
-Voice cloning is zero-shot from a reference clip (voice.ttsRefAudio → the
-prompt-audio path); with no clip it falls back to a built-in preset. Language is
-auto-detected from the text, so no explicit language selection is needed.
+Voices are the built-in presets F1-F5 (female) and M1-M5 (male); Supertonic has
+no voice cloning, so there is no reference-audio path. Language is explicit
+(voice.language) because the model takes a language code rather than detecting
+one; anything outside LANGUAGES falls back to English.
 """
 
 import queue
@@ -21,17 +21,26 @@ import sounddevice as sd
 from . import config
 from .common import SidecarServer, tts_socket_path
 
-# MOSS output is 48 kHz; wetext/tts-text normalization is Chinese/English focused
-# and pulls the optional `tn` dependency, so it stays off (the ONNX CLI does the
-# same). It is not needed for German/English playback.
-SAMPLE_RATE = 48000
+# Supertonic 3 renders at 44.1 kHz. Used only until the model reports its own
+# rate in load(); playback resamples to whatever the output device wants.
+SAMPLE_RATE = 44100
+
+DEFAULT_VOICE = "M1"
+
+# The 31 languages Supertonic 3 ships. Text in anything else is still spoken,
+# but with English phonemization, so an unknown code maps to "en" explicitly.
+LANGUAGES = {
+    "en", "ko", "ja", "ar", "bg", "cs", "da", "de", "el", "es", "et", "fi",
+    "fr", "hi", "hr", "hu", "id", "it", "lt", "lv", "nl", "pl", "pt", "ro",
+    "ru", "sk", "sl", "sv", "tr", "uk", "vi",
+}
 
 
 class TTSEngine:
     def __init__(self, server: SidecarServer):
         self.server = server
-        self.ref_audio = ""
-        self.voice = ""
+        self.voice = DEFAULT_VOICE
+        self.language = "en"
 
         self._model = None
         self._sample_rate = SAMPLE_RATE
@@ -39,22 +48,27 @@ class TTSEngine:
         self._output_device = config.output_device()
         self._queue: "queue.Queue[tuple[str, str]]" = queue.Queue()
         self._flushed: set[str] = set()
+        self._styles: dict = {}
         self._worker = None
         self._running = False
 
     # --- lifecycle ---------------------------------------------------------
 
     def load(self) -> None:
-        from onnx_tts_runtime import OnnxTtsRuntime
+        # Provider selection is a module global read when a session is built, so
+        # it has to be set before `supertonic.TTS` is imported and constructed.
+        import supertonic.loader as loader
 
-        provider = "cuda" if config.device() == "cuda" else "cpu"
-        self.server.log(f"loading MOSS-TTS-Nano (ONNX, {provider})")
-        self._model = OnnxTtsRuntime(
-            model_dir=None,
-            thread_count=8,
-            execution_provider=provider,
-        )
-        self._sample_rate = SAMPLE_RATE
+        if config.device() == "cuda":
+            loader.DEFAULT_ONNX_PROVIDERS = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        else:
+            loader.DEFAULT_ONNX_PROVIDERS = ["CPUExecutionProvider"]
+
+        from supertonic import TTS
+
+        self.server.log(f"loading Supertonic 3 (ONNX, {config.device()})")
+        self._model = TTS(auto_download=True, intra_op_num_threads=8)
+        self._sample_rate = int(self._model.sample_rate)
         self._resolve_output()
         self._running = True
         self._worker = threading.Thread(target=self._play_loop, daemon=True)
@@ -90,8 +104,8 @@ class TTSEngine:
     def handle(self, command: dict) -> None:
         op = command.get("op")
         if op == "config":
-            self.ref_audio = command.get("refAudio", self.ref_audio)
             self.voice = command.get("voice", self.voice)
+            self.language = command.get("language", self.language)
         elif op == "speak":
             self._queue.put((command.get("gen", ""), command.get("text", "")))
         elif op == "flush":
@@ -129,23 +143,36 @@ class TTSEngine:
         if self._queue.empty():
             self.server.emit(event="idle", gen=gen)
 
+    def _voice_style(self):
+        """Look up (and cache) the preset style. Styles are per-voice tensors the
+        model loads from disk, so resolving one per utterance would be wasteful."""
+        name = self.voice or DEFAULT_VOICE
+        if name in self._styles:
+            return self._styles[name]
+        try:
+            style = self._model.get_voice_style(voice_name=name)
+        except FileNotFoundError as error:
+            self.server.log(f"unknown voice {name!r}, using {DEFAULT_VOICE}: {error}")
+            style = self._model.get_voice_style(voice_name=DEFAULT_VOICE)
+        self._styles[name] = style
+        return style
+
+    def _language(self) -> str:
+        if self.language in LANGUAGES:
+            return self.language
+        return "en"
+
     def _synth(self, text: str) -> np.ndarray:
-        prompt = config.resolve_voice(self.ref_audio)
-        result = self._model.synthesize(
+        waveform, _duration = self._model.synthesize(
             text=text,
-            voice=self.voice or None,
-            prompt_audio_path=prompt or None,
-            output_audio_path=None,
-            streaming=True,
-            enable_wetext=False,
-            enable_normalize_tts_text=False,
+            voice_style=self._voice_style(),
+            lang=self._language(),
         )
-        waveform = np.asarray(result["waveform"], dtype=np.float32)
-        self._sample_rate = int(result["sample_rate"])
-        # MOSS returns (samples, channels); play mono.
-        if waveform.ndim == 2:
-            waveform = waveform[:, 0]
-        return waveform
+        audio = np.asarray(waveform, dtype=np.float32)
+        # Supertonic returns a batch dimension; play the single mono item.
+        if audio.ndim == 2:
+            audio = audio[0]
+        return audio
 
 
 def main() -> None:

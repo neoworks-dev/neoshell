@@ -14,4 +14,3 @@ func (s *System) Poll(hub Broadcaster) {
 	go pollVolume(hub)
 	go watchVolume(hub)
 }
-

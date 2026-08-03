@@ -54,7 +54,7 @@ var skipDirs = map[string]bool{
 	"steamapps": true, "Steam": true, "SteamLibrary": true,
 	"compatdata": true, "shadercache": true,
 	"steamworks_common_redistributables": true,
-	"Games": true, "lutris": true, "Heroic": true, "PrismLauncher": true,
+	"Games":                              true, "lutris": true, "Heroic": true, "PrismLauncher": true,
 	"curseforge": true, "minecraft": true, ".minecraft": true,
 	// Generated caches from Chromium/Electron-style apps.
 	"GPUCache": true, "Code Cache": true, "CachedData": true,

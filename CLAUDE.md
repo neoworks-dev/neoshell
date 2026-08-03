@@ -1,42 +1,86 @@
 ## Style
 
-Neoworks uses a shared design system defined in the ui package. This package also contains some predefined components that can be reused throughout the applications. When creating new components, try to reuse existing ones as much as possible, and if you need to create new ones, follow the design system guidelines.
+Neoworks uses a shared design system defined in the `@neoworks-dev/ui`
+package. It is a local package symlinked into projects via `bun link` — the
+copy under `node_modules/@neoworks-dev/ui` is the real package source, not a
+vendored dependency.
 
-## Git
-
-You're allowed to use git. Every time you make a big change, commit the current worktree if it's dirty before changing anything, then write your changes, choose a short to-the-point commit message, and push to the remote repository. If you are unsure about what to write in the commit message, ask for help. Write an explanation of the change in the body of the commit message if it is not obvious from the title. Always mention that a commit was made by you and not an actual human.
+- Before creating a new component, check `@neoworks-dev/ui` for an existing
+  one that fits. If you create a new one, follow the design system
+  guidelines and briefly note which existing components you considered and
+  why they didn't fit.
+- Never edit anything under `node_modules/`, including
+  `node_modules/@neoworks-dev/ui`. Changes to the design system happen in
+  the ui package's own repository, and only when explicitly asked.
+- If `@neoworks-dev/ui` is missing or unresolved, restore it with
+  `bun link @neoworks-dev/ui`. Do not install it from a registry, remove
+  the dependency, or copy components into the app as a workaround. If
+  linking fails, report it and stop.
 
 ## Code Style
 
-When editing or generating code, prioritize readability and maintainability over cleverness.
-
-Rules:
+Prioritize readability and maintainability over cleverness.
 
 - Preserve descriptive names. Do not shorten identifiers.
-  - Good: `recordId`, `customerAccount`, `paymentMethod`, `textSession`, `queryCache`
-  - Bad: `rid`, `acct`, `pm`, `textSess`, `queryCach`
-
-- Use `camelCase` for variables, functions, parameters, and object fields unless the language, framework, or existing codebase requires another convention.
-- Prefer explicit control flow over shorthand.
-- Avoid `??`, ternary `?:`, and compact conditional expressions unless they clearly prevent a large amount of repetitive code without reducing readability.
-- Do not deeply nest logic.
-  - More than 2 indentation levels is too much.
-  - Use guard clauses, early returns, helper functions, or extracted validation steps instead.
-
-- Keep functions short and focused.
-  - Split large functions into smaller functions instead of writing one huge function.
-  - Each function should have one clear responsibility.
-
-- Add comments only when the code is not immediately readable when skimming.
-- Comments must be technical, concise, and useful.
-  - Good: `// Normalize external IDs before database lookup.`
-  - Bad: `// Now we loop through the items and do the thing.`
-
-- Do not add obvious comments that restate the code.
-- Prefer clearly named helper functions over long inline logic with comments.
-- Do not change behavior, public APIs, data shapes, validation rules, or side effects unless explicitly asked.
-- Match the surrounding code style when it conflicts with these rules.
+  - Good: `recordId`, `customerAccount`, `paymentMethod`
+  - Bad: `rid`, `acct`, `pm`
+- Use `camelCase` for variables, functions, parameters, and object fields
+  unless the language, framework, or existing codebase requires otherwise.
+- Prefer explicit control flow. Avoid `??`, ternary `?:`, and compact
+  conditionals; the only exception is when the explicit form would require
+  duplicating a non-trivial expression — a preference for brevity alone is
+  not an exception.
+- Maximum 2 indentation levels inside a function body. Use guard clauses,
+  early returns, or helper functions instead. Extracted helpers must be
+  self-contained and meaningfully named — do not split a function into
+  arbitrary fragments just to satisfy the indent limit.
+- Keep functions short, with one clear responsibility each.
+- Comments: only where the code is not readable when skimming. Comments must
+  be technical and concise. Never write comments that restate the code, and
+  never write historical comments — these are dev projects, so do not
+  document old decisions, previous implementations, or what changed
+  (no "previously...", "changed from...", "used to...").
+- Do not change behavior, public APIs, data shapes, validation rules, or
+  side effects unless explicitly asked. If a required refactor (e.g. for the
+  indent rule) would change behavior, stop and ask instead.
+- Matching surrounding code style applies only to surface conventions
+  (naming casing, quoting, import order, formatting). Existing code that
+  violates the structural rules above is not a license to violate them in
+  new code — these rules take precedence.
 
 ## Tests
 
-After having written all your changes, think about if any of these changes require writing a test, if so, create a test in the tests/ directory and run the `bun test` command to see if any of the tests are failing, if they do, investigate further, otherwise everything is fine and you're done.
+After completing your changes, and before committing:
+
+1. Decide whether any change needs a new test. Behavior changes and bug
+   fixes need one; pure refactors and comment/style edits do not. If you
+   decide no new test is needed, say so in one sentence.
+2. Run the project's test suite regardless of whether you wrote a new test.
+   Determine the command in this order:
+   - a repo-specific instruction file (CLAUDE.md / AGENTS.md) or README
+     that names a test command
+   - a task runner target: `Makefile`, `justfile`, `Taskfile`, or package
+     scripts (`test` target/script)
+   - the ecosystem default: `bun test` / `npm test` for JS/TS, `go test
+./...` for Go, `ctest` or the configured test target for C++/CMake
+3. If no test setup exists, do not invent one and do not silently skip:
+   state that the project has no tests, and at minimum verify the project
+   still builds/compiles (or runs, for interpreted projects).
+4. If tests fail, fix the code until they pass. Never delete, skip, weaken,
+   or rewrite a test to make it pass unless the test itself is wrong — and
+   if so, say so explicitly and explain why.
+
+## Git
+
+You may use git. Work in this order: change → test → commit → push.
+
+- If the worktree is dirty before you start, commit the existing state
+  separately with the message `wip: pre-existing changes`. Never mix pre-existing changes into your own commits.
+- Commit at each logically complete step (a step that builds and passes
+  tests), not one giant commit at the end.
+- Commit messages: short, to-the-point title; add a body only when the
+  change is not obvious from the title. If a change spans unrelated
+  concerns, split it into multiple commits.
+- No commit you author may include the trailer
+  `Co-Authored-By: Claude <noreply@anthropic.com>`.
+- Push only after tests pass. Never force-push.
