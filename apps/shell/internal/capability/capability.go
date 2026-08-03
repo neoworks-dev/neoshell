@@ -18,10 +18,26 @@ import (
 // ParamSpec describes one action parameter. It drives both the launcher input
 // and the AI tool's JSON Schema, so a single description reaches both.
 type ParamSpec struct {
-	Type        string // JSON Schema type: "string", "number", "boolean"
+	Type        string // JSON Schema type: "string", "number", "integer", "boolean", "array"
 	Description string
 	Required    bool
 }
+
+// Policy is how an agent host should gate an action before running it. It is
+// advice from the capability, not enforcement: the host decides what "ask"
+// means (a prompt, a keybind, a standing approval) and the user has the last
+// word. Actions that only read state declare PolicyAllow so the agent can
+// orient itself without interrupting anyone.
+type Policy string
+
+const (
+	// PolicyAsk requires a human yes before the handler runs. It is the zero
+	// value's meaning, so a capability that forgets to declare a policy gets
+	// the safe one.
+	PolicyAsk Policy = "ask"
+	// PolicyAllow runs without confirmation.
+	PolicyAllow Policy = "allow"
+)
 
 // Source is an optional file citation attached to a result.
 type Source struct {
@@ -46,7 +62,18 @@ type Action struct {
 	Name        string
 	Description string
 	Params      map[string]ParamSpec
-	Handler     Handler
+	// Policy defaults to PolicyAsk when empty; read EffectivePolicy, not this.
+	Policy  Policy
+	Handler Handler
+}
+
+// EffectivePolicy resolves the declared policy, defaulting an unset one to
+// PolicyAsk so an action is never silently auto-approved by omission.
+func (a Action) EffectivePolicy() Policy {
+	if a.Policy == PolicyAllow {
+		return PolicyAllow
+	}
+	return PolicyAsk
 }
 
 // JSONSchema renders the action's parameters as a JSON Schema object for use in
