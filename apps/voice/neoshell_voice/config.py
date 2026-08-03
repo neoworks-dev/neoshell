@@ -47,7 +47,7 @@ def resolve_voice(ref: str) -> str:
 
 
 def device() -> str:
-    return os.environ.get("NEOSHELL_VOICE_DEVICE", "cuda")
+    return os.environ.get("NEOSHELL_VOICE_DEVICE", "cpu")
 
 
 def input_device():
@@ -61,7 +61,9 @@ def output_device():
 
 
 def setup_caches() -> None:
-    """Point HuggingFace downloads at the shared neoshell models dir."""
+    """Point HuggingFace and Moonshine downloads at the shared neoshell models dir."""
     cache = hf_cache_dir()
     cache.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("HF_HOME", str(cache))
+    os.environ.setdefault("MOONSHINE_VOICE_CACHE", str(models_dir() / "moonshine"))
+    os.environ.setdefault("SUPERTONIC_CACHE_DIR", str(models_dir() / "supertonic"))

@@ -190,4 +190,3 @@ func (c *Client) handleEvent(hub Broadcaster, event, data string) {
 		})
 	}
 }
-

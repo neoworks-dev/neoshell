@@ -89,13 +89,13 @@ func TestMemStoreUnchangedGate(t *testing.T) {
 
 func TestClassify(t *testing.T) {
 	cases := map[string]Kind{
-		"/a/readme.md":   KindText,
-		"/a/main.go":     KindText,
-		"/a/photo.png":   KindImage,
-		"/a/doc.pdf":     KindPDF,
-		"/a/Makefile":    KindText,
-		"/a/binary.bin":  KindSkip,
-		"/a/video.mp4":   KindSkip,
+		"/a/readme.md":  KindText,
+		"/a/main.go":    KindText,
+		"/a/photo.png":  KindImage,
+		"/a/doc.pdf":    KindPDF,
+		"/a/Makefile":   KindText,
+		"/a/binary.bin": KindSkip,
+		"/a/video.mp4":  KindSkip,
 	}
 	for path, want := range cases {
 		if got := classify(path); got != want {

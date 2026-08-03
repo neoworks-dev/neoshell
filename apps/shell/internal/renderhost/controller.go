@@ -139,11 +139,19 @@ func (c *Controller) createSurface(surface plugins.ResolvedSurface) error {
 // surfaceURL is the page a surface loads: its plugin entry at /plugins/<id>/,
 // served by the Go core (prod) or the dev-Vite aggregator. c.url already ends
 // with ?port=N (the WS port), which the plugin page needs, so the query is
-// carried onto the plugin path.
+// carried onto the plugin path. The surface's view is appended as ?view= so the
+// SDK's surfaceName() tags region/keyboard/exclusive updates with this surface's
+// role; without it every plugin would default to "bar" and mis-route its input
+// region (leaving overlays like chat click-through).
 func (c *Controller) surfaceURL(surface plugins.ResolvedSurface) string {
 	origin, query := c.url, ""
 	if i := strings.IndexByte(c.url, '?'); i >= 0 {
 		origin, query = c.url[:i], c.url[i:]
+	}
+	if query == "" {
+		query = "?view=" + surface.View
+	} else {
+		query += "&view=" + surface.View
 	}
 	return origin + "/plugins/" + surface.PluginID + "/" + query
 }

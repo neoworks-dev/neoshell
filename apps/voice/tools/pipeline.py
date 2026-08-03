@@ -1,13 +1,13 @@
 """Standalone STT -> LLM -> TTS pipeline tester.
 
 Exercises the three model stages end to end WITHOUT the Go core, sockets, or the
-shell: capture mic -> faster-whisper -> Ollama (gemma4:e4b) -> MOSS-TTS-Nano ->
+shell: capture mic -> Moonshine -> Ollama (gemma4:e4b) -> Supertonic 3 ->
 speaker. Prints per-stage timing so you can see where latency goes.
 
 Run from apps/voice:
     .venv/bin/python -m tools.pipeline
     .venv/bin/python -m tools.pipeline --seconds 6      # fixed-length capture
-    .venv/bin/python -m tools.pipeline --text "Wie spät ist es?"   # skip mic
+    .venv/bin/python -m tools.pipeline --text "What time is it?"   # skip mic
 
 Env: NEOSHELL_VOICE_DEVICE=cuda|cpu, OLLAMA_HOST (default 127.0.0.1:11434).
 """
@@ -98,14 +98,26 @@ def open_input():
 
 
 def transcribe(audio: np.ndarray, model_name: str, language: str) -> str:
-    from faster_whisper import WhisperModel
+    """Stream the captured utterance through Moonshine, mirroring the sidecar.
+    Streaming archs (small/medium) only produce output this way."""
+    import moonshine_voice as moonshine
+    from moonshine_voice import LineCompleted, ModelArch
 
-    dev = config.device()
-    compute = "float16" if dev == "cuda" else "int8"
-    model = WhisperModel(model_name, device=dev, compute_type=compute,
-                         download_root=str(config.models_dir() / "whisper"))
-    segments, _ = model.transcribe(audio, language=language, beam_size=1)
-    return " ".join(segment.text for segment in segments).strip()
+    wanted_arch = ModelArch.MEDIUM_STREAMING
+    for info in moonshine.download.MODEL_INFO.get(language, {}).get("models", []):
+        if info["model_name"] == model_name:
+            wanted_arch = info["model_arch"]
+            break
+    name, arch = moonshine.get_model_for_language(language, wanted_arch)
+    model = moonshine.Transcriber(model_path=moonshine.get_model_path(name), model_arch=arch)
+
+    lines: list[str] = []
+    model.add_listener(lambda ev: lines.append(ev.line.text) if isinstance(ev, LineCompleted) else None)
+    model.start()
+    for start in range(0, len(audio), STT_RATE // 2):
+        model.add_audio(audio[start:start + STT_RATE // 2].tolist(), STT_RATE)
+    model.stop()
+    return " ".join(lines).strip()
 
 
 def ask_llm(prompt: str, model: str) -> str:
@@ -124,7 +136,7 @@ def ask_llm(prompt: str, model: str) -> str:
     return payload["message"]["content"].strip()
 
 
-def speak(text: str, ref_audio: str) -> None:
+def speak(text: str, voice: str, language: str) -> None:
     from neoshell_voice import tts
 
     class Stub:
@@ -136,7 +148,8 @@ def speak(text: str, ref_audio: str) -> None:
 
     engine = tts.TTSEngine(Stub())
     engine.load()
-    engine.ref_audio = ref_audio
+    engine.voice = voice
+    engine.language = language
     wav = engine._synth(text)
     rate = engine._sample_rate
     if engine._output_rate != rate:
@@ -150,10 +163,10 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--text", default="", help="Skip the mic; use this transcript directly.")
     parser.add_argument("--seconds", type=float, default=0.0, help="Fixed capture length; 0 = VAD auto-stop.")
-    parser.add_argument("--stt-model", default="distil-large-v3")
-    parser.add_argument("--language", default="de")
+    parser.add_argument("--stt-model", default="medium-streaming-en")
+    parser.add_argument("--language", default="en")
     parser.add_argument("--llm", default="gemma4:e4b")
-    parser.add_argument("--ref-audio", default="tim-knauer.wav")
+    parser.add_argument("--voice", default="M1", help="Supertonic preset: F1-F5 or M1-M5.")
     parser.add_argument("--vad-threshold", type=float, default=0.5)
     parser.add_argument("--silence-ms", type=int, default=700)
     args = parser.parse_args()
@@ -178,7 +191,7 @@ def main() -> None:
     print(f"[llm] {time.time() - t:.2f}s  ->  {answer!r}", flush=True)
 
     t = time.time()
-    speak(answer, args.ref_audio)
+    speak(answer, args.voice, args.language)
     print(f"[tts] {time.time() - t:.2f}s  (spoken)", flush=True)
 
 

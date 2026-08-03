@@ -114,7 +114,7 @@ tasks:
     desc: Create the Python venv for the voice sidecars (uv). Needs `uv`.
     dir: apps/voice
     cmds:
-      # CPU `onnxruntime` (moss-tts-nano's declared dep) is what we want: the
+      # CPU `onnxruntime` (supertonic's declared dep) is what we want: the
       # sidecars default to CPU. For a GPU box, set `voice.device: cuda` and
       # overlay the CUDA build: `uv pip install onnxruntime-gpu==<same-version>`.
       - uv sync
@@ -143,7 +143,7 @@ tasks:
       - uv run neoshell-voice-stt
 
   voice:tts:
-    desc: Run the MOSS-TTS-Nano TTS sidecar alone (for manual socket testing)
+    desc: Run the Supertonic 3 TTS sidecar alone (for manual socket testing)
     deps: [voice:setup]
     dir: apps/voice
     cmds:

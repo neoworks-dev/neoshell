@@ -418,10 +418,11 @@ static void offer_mime(void*, wl_data_offer* offer, const char* mime) {
     // Read our per-offer data from the proxy (set after add_listener so it isn't
     // clobbered). The listener `data` arg is unreliable for the same reason.
     auto* od = static_cast<OfferData*>(wl_data_offer_get_user_data(offer));
-    if (mime) {
-        g_printerr("[dnd] offer mime: %s\n", mime);
-        if (od) od->mimes.push_back(mime);
-    }
+    if (mime && od) od->mimes.push_back(mime);
+    // Don't log here: offer_mime runs for clipboard selection offers too (the
+    // compositor re-advertises the selection on every focus change), so logging
+    // mimes at this point looks like a phantom drag. Log at dd_enter instead,
+    // where the offer is known to be an actual drag.
     // Mimes stream in before OR after enter. Once this offer is the active drag
     // and advertises something usable, accept it (needed for the drop to fire).
     if (od && od->conn && offer == od->conn->dnd_offer) try_accept(od->conn);
@@ -484,12 +485,20 @@ static std::vector<std::string> parse_uri_list(const std::string& text) {
     return paths;
 }
 
-// Save raw image bytes from a browser drag to a temp file under XDG_RUNTIME_DIR
-// (tmpfs — cleared on logout, fitting "temporary storage"). Returns the path.
+// Base directory for dropped images. XDG_DATA_HOME (default ~/.local/share) is
+// persisted across restarts, unlike XDG_RUNTIME_DIR's tmpfs.
+static std::string drops_base_dir() {
+    const char* dataHome = getenv("XDG_DATA_HOME");
+    if (dataHome && *dataHome) return std::string(dataHome) + "/neoshell/drops";
+    const char* home = getenv("HOME");
+    if (home && *home) return std::string(home) + "/.local/share/neoshell/drops";
+    return std::string("/tmp/neoshell-drops");
+}
+
+// Save raw image bytes from a browser drag to a file under XDG_DATA_HOME so it
+// survives logout/restart. Returns the path.
 static std::string save_dropped_image(const std::string& bytes, const std::string& mime) {
-    const char* runtime = getenv("XDG_RUNTIME_DIR");
-    std::string dir = (runtime && *runtime) ? std::string(runtime) : std::string("/tmp");
-    dir += "/neoshell-drops";
+    std::string dir = drops_base_dir();
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
 
@@ -611,6 +620,11 @@ static void dd_enter(void* data, wl_data_device*, uint32_t serial, wl_surface* s
     c->dnd_x = wl_fixed_to_double(x);
     c->dnd_y = wl_fixed_to_double(y);
     g_printerr("[dnd] enter surface=%p at %.0f,%.0f\n", (void*)surface, c->dnd_x, c->dnd_y);
+    auto* od = static_cast<OfferData*>(
+        offer ? wl_data_offer_get_user_data(offer) : nullptr);
+    if (od)
+        for (const auto& mime : od->mimes)
+            g_printerr("[dnd] offer mime: %s\n", mime.c_str());
     // Accept now if the mimes already arrived; otherwise offer_mime will, once
     // this offer advertises a usable type.
     if (offer) try_accept(c);
