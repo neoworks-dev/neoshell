@@ -61,31 +61,54 @@ without an assistant.
 The core does not inject keybinds. Declare them in your own Hyprland config;
 each one runs `neoshell emit <topic>` against the core's control socket.
 
-```
-# assistant
-bind  = SUPER, A,       exec, neoshell emit agent:open
-bind  = SUPER, Escape,  exec, neoshell emit agent:interrupt
-bind  = SUPER, Y,       exec, neoshell emit agent:approve
-bind  = SUPER, N,       exec, neoshell emit agent:deny
-bind  = SUPER SHIFT, Y, exec, neoshell emit agent:always
+| Topic | What it does |
+|---|---|
+| `agent:open` / `agent:close` | Expand the notch's assistant panel and focus its input. |
+| `agent:ask <text>` | Send a prompt without typing it — useful from a script. |
+| `agent:approve` / `agent:deny` | Answer the longest-waiting tool call, which is the one the notch is showing. |
+| `agent:always` | Approve, and stop asking about that tool for the rest of the session. |
+| `agent:always-project` | The same, remembered for this workspace. |
+| `agent:interrupt` | Stop the current turn. |
+| `agent:restart` | Restart the backend after it has failed enough times to give up. |
+| `voice:toggle` | Turn voice mode on or off. Starts and stops the daemon that holds the microphone, so "off" releases the device. |
+| `voice:listen` / `voice:stop` | Push-to-talk: bind the second one on key release. |
+| `voice:cancel` | Abort the spoken turn. |
+| `surface:toggle\|open\|close <class>` | Show or hide a surface, e.g. `spotlight`, `settings`. |
 
-# voice
-bind  = SUPER, V,       exec, neoshell emit voice:toggle
-bind  = SUPER, space,   exec, neoshell emit voice:listen
-bindr = SUPER, space,   exec, neoshell emit voice:stop
+A set that leaves the common Hyprland defaults alone:
+
+```conf
+# assistant
+bind  = SUPER, A,        exec, neoshell emit agent:open
+bind  = SUPER SHIFT, A,  exec, neoshell emit agent:interrupt
+bind  = SUPER, Y,        exec, neoshell emit agent:approve
+bind  = SUPER, N,        exec, neoshell emit agent:deny
+bind  = SUPER SHIFT, Y,  exec, neoshell emit agent:always
+
+# voice — hold Z to talk, CTRL+Z to turn voice mode off entirely
+bind  = SUPER, Z,        exec, neoshell emit voice:listen
+bindr = SUPER, Z,        exec, neoshell emit voice:stop
+bind  = SUPER SHIFT, Z,  exec, neoshell emit voice:cancel
+bind  = SUPER CTRL, Z,   exec, neoshell emit voice:toggle
 
 # surfaces
-bind  = SUPER, D,       exec, neoshell emit surface:toggle spotlight
-bind  = SUPER, comma,   exec, neoshell emit surface:toggle settings
+bind  = SUPER, SPACE,    exec, neoshell emit surface:toggle spotlight
 ```
 
-`agent:approve` / `agent:deny` answer the longest-waiting tool call, so pressing
-yes answers the thing the notch is showing. `agent:always` is the same as yes
-plus "stop asking about this tool for the rest of the session".
+For a Lua config (`hyprland.lua`) the same binds are:
 
-Other topics: `agent:close`, `agent:ask <text>`, `agent:always-project`,
-`agent:restart` (after the backend has failed enough times to give up),
-`voice:cancel`, `surface:open`, `surface:close`.
+```lua
+hl.bind(mod .. " + A", hl.dsp.exec_cmd("neoshell emit agent:open"))
+hl.bind(mod .. " + SHIFT + A", hl.dsp.exec_cmd("neoshell emit agent:interrupt"))
+hl.bind(mod .. " + Y", hl.dsp.exec_cmd("neoshell emit agent:approve"))
+hl.bind(mod .. " + N", hl.dsp.exec_cmd("neoshell emit agent:deny"))
+hl.bind(mod .. " + SHIFT + Y", hl.dsp.exec_cmd("neoshell emit agent:always"))
+
+hl.bind(mod .. " + Z", hl.dsp.exec_cmd("neoshell emit voice:listen"))
+hl.bind(mod .. " + Z", hl.dsp.exec_cmd("neoshell emit voice:stop"), { release = true })
+hl.bind(mod .. " + SHIFT + Z", hl.dsp.exec_cmd("neoshell emit voice:cancel"))
+hl.bind(mod .. " + CTRL + Z", hl.dsp.exec_cmd("neoshell emit voice:toggle"))
+```
 
 ## Approvals
 
