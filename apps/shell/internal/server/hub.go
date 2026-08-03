@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/neoworks/neoshell/internal/ai"
 	"github.com/neoworks/neoshell/internal/ipc"
 )
 
@@ -59,9 +58,13 @@ type InMessage struct {
 	ActionKey string `json:"actionKey,omitempty"`
 	Reason    int    `json:"reason,omitempty"`
 
-	// ai:chat — the new user prompt and prior conversation turns.
-	Prompt  string       `json:"prompt,omitempty"`
-	History []ai.Message `json:"history,omitempty"`
+	// agent:ask / agent:voice:* — what the user asked.
+	Prompt string `json:"prompt,omitempty"`
+
+	// agent:approve — which pending tool call to answer and how. An empty
+	// ToolUseID answers the oldest, which is what the keybinds send.
+	ToolUseID string `json:"toolUseId,omitempty"`
+	Result    string `json:"result,omitempty"`
 
 	// timer:start / track:start
 	Label    string `json:"label,omitempty"`
@@ -141,8 +144,20 @@ func (h *Hub) UnsubscribeClient(c *Client, topic string) {
 	h.mu.Unlock()
 }
 
-// Broadcast sends data to all clients subscribed to a topic.
+// Broadcast sends data to all clients subscribed to a topic and caches it, so a
+// surface that subscribes later hydrates immediately with current state.
 func (h *Hub) Broadcast(topic string, data any) {
+	h.publish(topic, data, true)
+}
+
+// BroadcastEphemeral sends data without caching it. Use it for anything that is
+// an increment rather than a state: replaying one streamed token to a surface
+// that connected afterwards is worse than sending it nothing at all.
+func (h *Hub) BroadcastEphemeral(topic string, data any) {
+	h.publish(topic, data, false)
+}
+
+func (h *Hub) publish(topic string, data any, remember bool) {
 	msg := OutMessage{Type: topic, Data: data}
 	raw, err := json.Marshal(msg)
 	if err != nil {
@@ -150,7 +165,9 @@ func (h *Hub) Broadcast(topic string, data any) {
 	}
 
 	h.mu.Lock()
-	h.lastState[topic] = raw
+	if remember {
+		h.lastState[topic] = raw
+	}
 	subs := h.topics[topic]
 	var targets []*Client
 	for c := range subs {

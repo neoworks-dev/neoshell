@@ -1,5 +1,6 @@
 // Package onnx is the in-process embedding backend: it runs nomic-embed-text
-// (and nomic-embed-vision) via onnxruntime, replacing the external Ollama server.
+// (and nomic-embed-vision) via onnxruntime, so there is no external model
+// server to run.
 // It is the only cgo dependency in the search daemon, kept in its own package so
 // the pure-Go core never pulls in onnxruntime.
 package onnx

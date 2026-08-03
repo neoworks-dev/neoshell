@@ -8,8 +8,13 @@ import (
 	"github.com/neoworks/neoshell/internal/capability"
 )
 
-// Capability exposes the timer service as named actions shared by the AI tool
-// loop and the launcher, so both drive the exact same state through one path.
+// Capability exposes the timer service as named actions shared by the agent
+// and the launcher, so both drive the exact same state through one path.
+//
+// Every timer action is PolicyAllow. They touch nothing outside the shell, they
+// are trivially reversible, and "set a timer for ten minutes" is the request an
+// assistant should simply carry out — a confirmation prompt would cost more
+// than the action.
 func (s *Service) Capability() capability.Capability {
 	return timerCapability{service: s}
 }
@@ -29,6 +34,7 @@ func (c timerCapability) Actions() []capability.Action {
 				"seconds": {Type: "number", Description: "Duration in seconds.", Required: true},
 				"label":   {Type: "string", Description: "What the timer is for.", Required: false},
 			},
+			Policy:  capability.PolicyAllow,
 			Handler: c.startTimer,
 		},
 		{
@@ -37,12 +43,14 @@ func (c timerCapability) Actions() []capability.Action {
 			Params: map[string]capability.ParamSpec{
 				"id": {Type: "string", Description: "The timer id to cancel.", Required: true},
 			},
+			Policy:  capability.PolicyAllow,
 			Handler: c.stopTimer,
 		},
 		{
 			Name:        "timer:list",
 			Description: "List the running countdown timers and active tracking sessions.",
 			Params:      map[string]capability.ParamSpec{},
+			Policy:      capability.PolicyAllow,
 			Handler:     c.listTimers,
 		},
 		{
@@ -51,6 +59,7 @@ func (c timerCapability) Actions() []capability.Action {
 			Params: map[string]capability.ParamSpec{
 				"label": {Type: "string", Description: "What is being tracked.", Required: true},
 			},
+			Policy:  capability.PolicyAllow,
 			Handler: c.startTrack,
 		},
 		{
@@ -59,6 +68,7 @@ func (c timerCapability) Actions() []capability.Action {
 			Params: map[string]capability.ParamSpec{
 				"id": {Type: "string", Description: "The session id to stop; empty stops the latest.", Required: false},
 			},
+			Policy:  capability.PolicyAllow,
 			Handler: c.stopTrack,
 		},
 	}

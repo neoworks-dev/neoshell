@@ -48,15 +48,6 @@ func defaultSurfaces() []plugins.ResolvedSurface {
 			Toggleable: true,
 			Classes:    []string{"spotlight"},
 		},
-		// Floating AI chat windows on the Overlay layer. Stays mapped; the "chat"
-		// class minimizes/restores its windows.
-		{
-			View:     "chat",
-			Layer:    "overlay",
-			Anchors:  []string{"top", "bottom", "left", "right"},
-			Keyboard: "ondemand",
-			Classes:  []string{"chat"},
-		},
 	}
 
 	resolved := make([]plugins.ResolvedSurface, len(surfaces))

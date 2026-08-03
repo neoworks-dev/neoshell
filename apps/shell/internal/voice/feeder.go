@@ -2,6 +2,11 @@ package voice
 
 import "strings"
 
+// minChunk is the shortest sentence worth speaking on its own. A boundary
+// before this is skipped and merged forward: synthesising "Sure." alone costs a
+// whole TTS round trip to say one word, and the pause afterwards is audible.
+const minChunk = 15
+
 // feeder splits a streamed token sequence into whole sentences and speaks each
 // as soon as it completes, so audio starts before the full answer is generated.
 type feeder struct {
@@ -25,7 +30,7 @@ func (f *feeder) push(token string) {
 		if cut < 0 {
 			break
 		}
-		sentence := strings.TrimSpace(text[:cut])
+		sentence := Speakable(text[:cut])
 		rest := text[cut:]
 		f.buf.Reset()
 		f.buf.WriteString(rest)
@@ -40,7 +45,7 @@ func (f *feeder) flush() {
 	if f.tts == nil {
 		return
 	}
-	sentence := strings.TrimSpace(f.buf.String())
+	sentence := Speakable(f.buf.String())
 	f.buf.Reset()
 	if sentence != "" {
 		_ = f.tts.Speak(f.gen, sentence)
@@ -49,17 +54,23 @@ func (f *feeder) flush() {
 
 // sentenceBreak returns the byte index just past the first sentence-ending
 // punctuation followed by whitespace (or a newline), or -1 if none. Requiring a
-// trailing space avoids cutting mid-token (e.g. on "3.14" or "e.g.").
+// trailing space avoids cutting mid-token (e.g. on "3.14" or "e.g."), and a
+// boundary shorter than minChunk is skipped so a one-word opener is merged into
+// the sentence after it.
 func sentenceBreak(s string) int {
 	runes := []rune(s)
 	for i, r := range runes {
-		if r == '\n' {
-			return len(string(runes[:i+1]))
-		}
-		if r == '.' || r == '!' || r == '?' || r == '…' {
+		cut := -1
+		switch {
+		case r == '\n':
+			cut = len(string(runes[:i+1]))
+		case r == '.' || r == '!' || r == '?' || r == '…':
 			if i+1 < len(runes) && isSpace(runes[i+1]) {
-				return len(string(runes[:i+1]))
+				cut = len(string(runes[:i+1]))
 			}
+		}
+		if cut >= minChunk {
+			return cut
 		}
 	}
 	return -1

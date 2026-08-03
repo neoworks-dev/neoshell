@@ -44,11 +44,14 @@ The Go core itself links only libc — it is statically built otherwise.
 | Package | Enables |
 |---|---|
 | `gst-plugins-good`, `gst-plugins-bad` | `<video>` / `<audio>` playback in web surfaces (wpewebkit ships only `gst-plugins-base`) |
-| `ollama` | Embeddings for **semantic file search** (`neoshell-search`). Pull the models: `ollama pull nomic-embed-text` (text/PDF + queries) and `ollama pull moondream` (captions images so they're searchable in the same vector space). |
-| `surrealdb` | Persistent BM25 + vector index for semantic file search. AUR/official installer (not in the official repos). |
+| `bun` | The **assistant**. The core spawns nib as its agent backend; point `NEOSHELL_NIB_DIR` at a nib checkout, or put a compiled `nib-server` on `PATH` (or in `NEOSHELL_NIB_BIN`). |
+| `uv` | The Python venv for the **voice** sidecars (`task voice:setup`). Without it there is no speech in or out. |
+| `cudnn` + `task search:gpu` | Runs the search embeddings on the GPU. They are in-process ONNX either way; this only makes them faster. |
 
-Without `ollama`/`surrealdb` the search daemon degrades gracefully: filename +
-in-memory text search still works, just without semantic recall or persistence.
+Each is independently optional. Without a nib checkout the shell runs unchanged
+minus the assistant — bar, launcher, widgets, and file search do not depend on
+it. Without the ONNX models the search daemon degrades to filename + BM25: no
+semantic recall, but the launcher still finds files.
 
 ## Build
 

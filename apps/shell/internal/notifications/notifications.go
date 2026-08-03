@@ -54,9 +54,9 @@ type Event struct {
 
 // Daemon owns the D-Bus name and bridges notifications to the shell.
 type Daemon struct {
-	conn  *dbus.Conn
-	emit  func(Event)
-	mu    sync.Mutex
+	conn   *dbus.Conn
+	emit   func(Event)
+	mu     sync.Mutex
 	lastID uint32
 }
 
@@ -97,6 +97,14 @@ func (d *Daemon) Close(id uint32, reason int) {
 		reason = ReasonDismissed
 	}
 	d.conn.Emit(objectPath, ifaceName+".NotificationClosed", id, uint32(reason))
+}
+
+// Post raises a notification that originated inside the shell rather than on
+// the bus. It shares notify's id counter so a shell-raised notification can be
+// dismissed and actioned exactly like an application's.
+func (d *Daemon) Post(n Notification) uint32 {
+	n.ID = 0
+	return d.notify(n)
 }
 
 func (d *Daemon) notify(n Notification) uint32 {

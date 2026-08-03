@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/neoworks/neoshell/internal/ai"
 	"github.com/neoworks/neoshell/internal/config"
 )
 
@@ -20,7 +19,7 @@ type Deps struct {
 	Config    *config.Store
 }
 
-// Manager owns the voice pipeline: the two sidecars and the per-turn fan-out.
+// Manager owns the voice pipeline: the two sidecars and the turn state machine.
 type Manager struct {
 	deps Deps
 
@@ -35,7 +34,6 @@ type Manager struct {
 	currentGen string
 	genCounter int
 	state      State
-	history    []ai.Message
 
 	done chan struct{}
 }
@@ -44,13 +42,10 @@ func New(deps Deps) *Manager {
 	return &Manager{deps: deps, done: make(chan struct{}), state: StateIdle}
 }
 
-// Start spawns the sidecars and begins the pipeline. Best-effort: if voice is
-// disabled or a sidecar fails to launch, it logs and returns, leaving the rest
-// of the shell unaffected.
+// Start spawns the sidecars and begins the pipeline. Best-effort: if a sidecar
+// fails to launch it logs and returns. Launching the neoshell-voice daemon is
+// itself the opt-in, so there is no config gate here.
 func (m *Manager) Start() {
-	if !m.cfgBool("plugins.providers.voice", true) || !m.cfgBool("voice.enabled", false) {
-		return
-	}
 	m.mu.Lock()
 	if m.started {
 		m.mu.Unlock()
@@ -148,13 +143,13 @@ func (m *Manager) configureSidecars() {
 	_ = m.stt.Configure(sttCommand{
 		Mode:         m.mode(),
 		Language:     m.cfgString("voice.language", "en"),
-		Model:        m.cfgString("voice.sttModel", "distil-small.en"),
+		Model:        m.cfgString("voice.sttModel", "medium-streaming-en"),
 		WakeWord:     m.cfgString("voice.wakeWord", ""),
 		VADThreshold: m.cfgFloat("voice.vad.threshold", 0.5),
 		VADSilenceMs: m.cfgInt("voice.vad.silenceMs", 700),
 		VADMinMs:     m.cfgInt("voice.vad.minSpeechMs", 200),
 	})
-	_ = m.tts.Configure(m.cfgString("voice.ttsRefAudio", ""), m.cfgString("voice.ttsVoice", "M1"), m.cfgString("voice.language", "de"))
+	_ = m.tts.Configure(m.cfgString("voice.ttsRefAudio", ""), m.cfgString("voice.ttsVoice", "M1"), m.cfgString("voice.language", "en"))
 }
 
 // run consumes STT events for the whole session; TTS events are handled by
@@ -199,7 +194,7 @@ func (m *Manager) mode() string { return m.cfgString("voice.mode", "wake") }
 func (m *Manager) sidecarEnv() []string {
 	env := []string{}
 	if os.Getenv("NEOSHELL_VOICE_DEVICE") == "" {
-		env = append(env, "NEOSHELL_VOICE_DEVICE="+m.cfgString("voice.device", "cuda"))
+		env = append(env, "NEOSHELL_VOICE_DEVICE="+m.cfgString("voice.device", "cpu"))
 	}
 	return env
 }

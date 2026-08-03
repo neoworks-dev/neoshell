@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/neoworks/neoshell/internal/agentd"
 	"github.com/neoworks/neoshell/internal/config"
 	"github.com/neoworks/neoshell/internal/eventbus"
 	"github.com/neoworks/neoshell/internal/fileindex"
@@ -122,7 +123,8 @@ Environment:
 
 	// Semantic search daemon (BM25 + vector over file contents). Spawned detached;
 	// the core proxies search:files to it and degrades to the filename index above
-	// when it (or its Ollama/Surreal deps) is absent.
+	// when it is absent. Embeddings are in-process ONNX; there is no external
+	// model server to run.
 	startSearchDaemon()
 	go pollSearchProgress(hub)
 
@@ -191,7 +193,39 @@ Environment:
 			log.Printf("event socket: %v", err)
 		}
 	}()
-	go srv.Listen(fmt.Sprintf(":%d", *port))
+	// Loopback only. The shell's HTTP surface drives the desktop — launching
+	// apps, moving windows, invoking capabilities — so it must not be reachable
+	// from the network. Everything that talks to it (the render host, the voice
+	// daemon, the agent backend) runs on this machine.
+	listener, err := srv.Listen(fmt.Sprintf("127.0.0.1:%d", *port))
+	if err != nil {
+		log.Fatalf("server: %v", err)
+	}
+	defer listener.Close()
+
+	// The agent backend runs for the life of the shell. It is started only now,
+	// after the listener is bound, because the extension inside it queries
+	// /capabilities as it loads — a backend that started first would find
+	// nothing and register no tools.
+	agentCtx, stopAgent := context.WithCancel(context.Background())
+	defer stopAgent()
+	agentd.Start(agentCtx, srv, hub, cfg, *port)
+
+	// Voice mode. The daemon holds the microphone, so the toggle starts and
+	// stops the process rather than muting it. The state persists, so the
+	// choice survives a restart.
+	voice := &voiceDaemon{}
+	defer voice.stop()
+	voice.apply(voiceEnabled(cfg))
+	srv.OnVoiceToggle(func() bool {
+		enabled := !voiceEnabled(cfg)
+		if err := cfg.Set("voice.enabled", enabled); err != nil {
+			log.Printf("voice: persist toggle: %v", err)
+		}
+		voice.apply(enabled)
+		return enabled
+	})
+
 	go hypr.EventLoop(hub)
 	go sys.Poll(hub)
 	// Bridge the wallpaper daemon's bar-strip colors to the frontend. Tolerates
@@ -211,7 +245,8 @@ Environment:
 
 	// Keybinds are no longer injected by the core. The user declares them in their
 	// own Hyprland config, each running `neoshell emit <topic>` (e.g. voice:listen,
-	// surface:toggle, chat:new, surface:close). See the project README for the set.
+	// surface:toggle, agent:open, agent:approve, voice:toggle). See the project
+	// README for the set.
 
 	// The frontend reads ?port to find the WebSocket regardless of where the page
 	// is served, so the render host's surface URL carries it too.

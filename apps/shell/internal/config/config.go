@@ -79,74 +79,55 @@ func Defaults() map[string]any {
 			"gap":      10,
 			"autoHide": true,
 		},
-		// Command-palette providers and the AI chat, each toggleable live from the
-		// settings menu. Absent keys default to enabled in the frontend registry.
+		// Feature toggles, live from the settings menu. One key governs a feature
+		// everywhere it appears: its command-palette provider, its desktop
+		// widgets, and the actions the agent can call. Absent keys default to
+		// enabled in the frontend registry.
 		"plugins": map[string]any{
 			"providers": map[string]any{
 				"apps": true, "files": true, "calculator": true, "color": true,
 				"windows": true, "system": true, "web": true, "emoji": true,
 				"ssh": true, "process": true, "clipboard": true, "timer": true,
-				"chat": true, "voice": true,
+				"voice": true,
+				// Capabilities the agent drives the desktop through.
+				"widgets": true, "overlay": true, "agent": true,
 			},
 		},
-		// AI chat backend. provider is "ollama" (local) or "external" (an
-		// OpenAI/Anthropic-compatible endpoint); apiKey/endpoint apply to external.
-		// ragTopK is how many search hits are injected as context.
-		"ai": map[string]any{
-			"provider": "ollama",
-			"model":    "llama3.1",
-			"endpoint": "",
-			"apiKey":   "",
-			"ragTopK":  6,
-			// tools lets the model call safe read-only actions (search/read/open
-			// files); rerank reorders RAG hits by Nomic-embedding similarity (via
-			// the search daemon) before grounding the answer.
-			"tools":  true,
-			"rerank": true,
-			// Voice fan-out models. fastModel gives the instant spoken reply (no
-			// tools); slowModel produces the detailed answer and may call tools.
-			// Both fall back to `model` when unset.
-			"fastModel": "gemma4:e4b",
-			"slowModel": "gemma4:e4b",
-			// Expert escalation. The local model may call the ask_expert tool to
-			// delegate a genuinely complex task to a more capable backend; its
-			// answer replaces the local one. Not the default path — opt-in per
-			// turn by the model. backend is "claude-code" (the Claude Code CLI in
-			// print mode) or "external" (an OpenAI/Anthropic-compatible endpoint;
-			// unset keys fall back to the ai.* external settings).
-			"escalate": map[string]any{
-				"enabled":  true,
-				"backend":  "claude-code",
-				"command":  "claude",
-				"model":    "",
-				"endpoint": "",
-				"apiKey":   "",
-			},
+		// The nib agent backend. The core spawns it at startup and keeps one
+		// session alive for the life of the shell; sessionId is written back so
+		// a restart resumes the same conversation rather than starting a
+		// stranger. Empty provider/model/thinking let nib apply its own
+		// defaults, which is what you want unless you have a reason otherwise.
+		"nib": map[string]any{
+			"workspace": "$HOME",
+			"provider":  "",
+			"model":     "",
+			"thinking":  "",
+			"sessionId": "",
 		},
-		// Local voice assistant: Whisper STT → two-tier LLM fan-out → Chatterbox
-		// TTS, driven by the Python sidecars in apps/voice. Disabled by default;
-		// enable once the sidecar venv is set up (task voice:setup). mode is how
-		// listening is triggered: "always" (always-on with an addressivity gate),
-		// "wake" (wake word), or "ptt" (push-to-talk keybind).
+		// Voice: STT sidecar → the shared agent session → TTS sidecar. The
+		// pipeline is a separate daemon (neoshell-voice) because it holds the
+		// microphone and two Python model processes; `enabled` is the toggle
+		// the core and the `voice:toggle` keybind drive, and it persists so the
+		// choice survives a restart. mode is how listening is triggered:
+		// "always" (always-on, gated by an addressivity classifier), "wake"
+		// (wake word), or "ptt" (push-to-talk keybind). plugins.providers.voice
+		// controls whether the bar shows the voice indicator.
 		"voice": map[string]any{
-			"enabled":  true,
-			"device":   "cuda",
-			"language": "de",
-			"sttModel": "distil-large-v3",
+			"enabled":  false,
+			"device":   "cpu",
+			"language": "en",
+			"sttModel": "medium-streaming-en",
 			"mode":     "ptt",
 			"vad": map[string]any{
 				"threshold":   0.5,
 				"silenceMs":   700,
 				"minSpeechMs": 200,
 			},
-			"wakeWord": "neo",
-			"bargeIn":  true,
-			// Reconciliation between the fast and slow tiers: "speculative" lets the
-			// fast tier attempt a real answer that the slow tier overrides.
-			"fanoutMode":        "speculative",
-			"ttsVoice":          "default",
-			"ttsRefAudio":       "tim-knauer.wav",
-			"fastFillerEnabled": true,
+			"wakeWord":    "neo",
+			"bargeIn":     true,
+			"ttsVoice":    "default",
+			"ttsRefAudio": "tim-knauer.wav",
 		},
 		// Web search: %s is replaced with the URL-encoded query.
 		"web": map[string]any{
