@@ -1,7 +1,7 @@
 """Standalone STT -> LLM -> TTS pipeline tester.
 
 Exercises the three model stages end to end WITHOUT the Go core, sockets, or the
-shell: capture mic -> Moonshine -> Ollama (gemma4:e4b) -> Supertonic 3 ->
+shell: capture mic -> Whisper -> Ollama (gemma4:e4b) -> Supertonic 3 ->
 speaker. Prints per-stage timing so you can see where latency goes.
 
 Run from apps/voice:
@@ -98,26 +98,27 @@ def open_input():
 
 
 def transcribe(audio: np.ndarray, model_name: str, language: str) -> str:
-    """Stream the captured utterance through Moonshine, mirroring the sidecar.
-    Streaming archs (small/medium) only produce output this way."""
-    import moonshine_voice as moonshine
-    from moonshine_voice import LineCompleted, ModelArch
+    """One-shot faster-whisper decode of the captured utterance, mirroring the
+    sidecar's settings (int8, greedy, no context carry-over)."""
+    from faster_whisper import WhisperModel
 
-    wanted_arch = ModelArch.MEDIUM_STREAMING
-    for info in moonshine.download.MODEL_INFO.get(language, {}).get("models", []):
-        if info["model_name"] == model_name:
-            wanted_arch = info["model_arch"]
-            break
-    name, arch = moonshine.get_model_for_language(language, wanted_arch)
-    model = moonshine.Transcriber(model_path=moonshine.get_model_path(name), model_arch=arch)
-
-    lines: list[str] = []
-    model.add_listener(lambda ev: lines.append(ev.line.text) if isinstance(ev, LineCompleted) else None)
-    model.start()
-    for start in range(0, len(audio), STT_RATE // 2):
-        model.add_audio(audio[start:start + STT_RATE // 2].tolist(), STT_RATE)
-    model.stop()
-    return " ".join(lines).strip()
+    model = WhisperModel(
+        model_name,
+        device="cpu",
+        compute_type="int8",
+        download_root=str(config.models_dir() / "whisper"),
+    )
+    if language == "auto":
+        language = None
+    segments, _info = model.transcribe(
+        audio,
+        language=language,
+        beam_size=1,
+        condition_on_previous_text=False,
+        vad_filter=False,
+    )
+    parts = [segment.text.strip() for segment in segments]
+    return " ".join(part for part in parts if part).strip()
 
 
 def ask_llm(prompt: str, model: str) -> str:
@@ -163,7 +164,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--text", default="", help="Skip the mic; use this transcript directly.")
     parser.add_argument("--seconds", type=float, default=0.0, help="Fixed capture length; 0 = VAD auto-stop.")
-    parser.add_argument("--stt-model", default="medium-streaming-en")
+    parser.add_argument("--stt-model", default="small")
     parser.add_argument("--language", default="en")
     parser.add_argument("--llm", default="gemma4:e4b")
     parser.add_argument("--voice", default="M1", help="Supertonic preset: F1-F5 or M1-M5.")

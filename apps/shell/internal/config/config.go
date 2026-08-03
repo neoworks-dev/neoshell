@@ -117,7 +117,7 @@ func Defaults() map[string]any {
 			"enabled":  false,
 			"device":   "cpu",
 			"language": "en",
-			"sttModel": "medium-streaming-en",
+			"sttModel": "small",
 			"mode":     "ptt",
 			"vad": map[string]any{
 				"threshold":   0.5,
