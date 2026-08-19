@@ -40,6 +40,17 @@ export class Context {
     return this.kernel.getService(name) as Value | undefined
   }
 
+  // require returns a service that must exist — typically one listed in the
+  // plugin's inject, where the kernel guarantees presence. Throws instead of
+  // returning undefined so callers skip the null check.
+  require<Value = unknown>(name: string): Value {
+    const value = this.get<Value>(name)
+    if (value !== undefined) {
+      return value
+    }
+    throw new Error(`kernel: service "${name}" is not available`)
+  }
+
   // plugin mounts a child fiber. It is disposed with its parent, in reverse
   // registration order relative to the parent's other effects.
   plugin<Config>(plugin: Plugin<Config>, config?: Config): Fiber {
