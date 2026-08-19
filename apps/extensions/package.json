@@ -1,0 +1,17 @@
+{
+  "name": "@neoshell/extensions",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@neoshell/kernel": "file:../../packages/kernel"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
