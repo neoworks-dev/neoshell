@@ -1,19 +1,13 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context, Plugin } from '@neoshell/kernel'
+import type { BusService } from '../lib/bus.js'
 
 // system: battery and audio state as retained bus topics. First in-process
 // extension — the Go core's internal/system pollers, moved out of the runtime.
 //
 //   system.battery  {percent, charging, status}   30s poll over /sys
 //   system.volume   {volume, muted}               wpctl, re-read on pactl events
-
-// Structural view of the host's bus service. Extensions depend on the shape,
-// not the host package.
-interface BusService {
-  publish(type: string, data: unknown): void
-  retain(type: string, data: unknown): () => void
-}
 
 interface SystemConfig {
   batteryDir?: string

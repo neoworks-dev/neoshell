@@ -3,42 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Kernel } from '@neoshell/kernel'
-import type { Plugin } from '@neoshell/kernel'
 import systemExtension from '../system/backend.js'
-
-// Minimal in-memory stand-in for the host bus: enough shape for the extension,
-// plus inspection of retained values.
-class FakeBus {
-  readonly retained = new Map<string, unknown>()
-
-  publish(): void {}
-
-  retain(type: string, data: unknown): () => void {
-    this.retained.set(type, data)
-    return () => {
-      this.retained.delete(type)
-    }
-  }
-}
-
-function busProvider(bus: FakeBus): Plugin {
-  return {
-    name: 'fake-bus',
-    apply(context) {
-      context.provide('bus', bus)
-    },
-  }
-}
-
-async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (!predicate()) {
-    if (Date.now() >= deadline) {
-      throw new Error('waitFor timed out')
-    }
-    await Bun.sleep(10)
-  }
-}
+import { busProvider, FakeBus, waitFor } from './helpers.js'
 
 describe('system extension', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'neoshell-system-test-'))

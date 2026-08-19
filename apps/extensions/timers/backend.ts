@@ -1,7 +1,9 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import type { Context, Plugin } from '@neoshell/kernel'
+import type { Plugin } from '@neoshell/kernel'
+import { registerFunction } from '../lib/bus.js'
+import type { BusService } from '../lib/bus.js'
 
 // timers: countdown timers and time-tracking sessions, moved out of the Go
 // core (internal/timers). State persists to XDG data and is a retained bus
@@ -15,18 +17,6 @@ import type { Context, Plugin } from '@neoshell/kernel'
 //   track:stop             {id?}   stops the given or most recent running one
 //
 // Expired timers fire a desktop notification via notify-send, best-effort.
-
-interface BusMessage {
-  type: string
-  data: unknown
-  replyTo?: string
-}
-
-interface BusService {
-  publish(type: string, data: unknown): void
-  retain(type: string, data: unknown): () => void
-  subscribe(pattern: string, handler: (message: BusMessage) => void): () => void
-}
 
 interface Timer {
   id: string
@@ -70,27 +60,6 @@ const timersExtension: Plugin<TimersConfig | undefined> = {
 }
 
 export default timersExtension
-
-function registerFunction(
-  context: Context,
-  bus: BusService,
-  type: string,
-  handler: (data: unknown) => unknown,
-): void {
-  context.effect(() =>
-    bus.subscribe(type, (message) => {
-      const result = handler(message.data)
-      replyIfRequested(bus, message, result)
-    }),
-  )
-}
-
-function replyIfRequested(bus: BusService, message: BusMessage, result: unknown): void {
-  if (message.replyTo === undefined) {
-    return
-  }
-  bus.publish(message.replyTo, result)
-}
 
 class TimersService {
   private state: TimersState = { timers: [], sessions: [] }
