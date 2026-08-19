@@ -3,8 +3,10 @@ import { join } from 'node:path'
 import { Kernel } from '@neoshell/kernel'
 import { busPlugin } from './plugins/bus.js'
 import { configPlugin } from './plugins/config.js'
+import { extensionsPlugin } from './plugins/extensions.js'
 import { httpPlugin } from './plugins/http.js'
 import { renderHostPlugin } from './plugins/renderHost.js'
+import { surfacesPlugin } from './plugins/surfaces.js'
 import { unixSocketPlugin } from './plugins/unixSocket.js'
 
 // neoshell-host: the kernel root. Mounts the built-in runtime plugins — bus,
@@ -19,6 +21,10 @@ function main(): void {
   kernel.mount(httpPlugin, {
     port: envNumber('NEOSHELL_HOST_PORT', 9877),
     pluginsDir: process.env.NEOSHELL_PLUGINS,
+  })
+  kernel.mount(surfacesPlugin)
+  kernel.mount(extensionsPlugin, {
+    extensionsDir: envString('NEOSHELL_EXTENSIONS', 'apps/extensions'),
   })
   mountRenderHostIfEnabled(kernel)
   installSignalHandlers(kernel)
