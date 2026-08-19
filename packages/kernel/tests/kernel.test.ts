@@ -330,3 +330,33 @@ describe('kernel teardown', () => {
     expect(two.state).toBe('disposed')
   })
 })
+
+describe('require', () => {
+  test('require returns an injected service and throws on a missing one', async () => {
+    const kernel = new Kernel()
+    let requiredValue: unknown
+    let missingError: unknown
+    const provider = kernel.mount({
+      name: 'provider',
+      apply(context) {
+        context.provide('thing', 7)
+      },
+    })
+    const consumer = kernel.mount({
+      name: 'consumer',
+      inject: ['thing'],
+      apply(context) {
+        requiredValue = context.require('thing')
+        try {
+          context.require('absent')
+        } catch (error) {
+          missingError = error
+        }
+      },
+    })
+    await settleAll([provider, consumer])
+
+    expect(requiredValue).toBe(7)
+    expect(missingError).toBeInstanceOf(Error)
+  })
+})
