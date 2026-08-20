@@ -9,9 +9,8 @@ Install everything (Arch):
 ```sh
 # Runtime + build, in one go.
 sudo pacman -S --needed \
-  wpewebkit libwpe wayland libdrm libxkbcommon mesa libglvnd \
-  webkit2gtk-4.1 gtk3 \
-  go rust bun go-task base-devel make pkgconf nlohmann-json
+  bun wpewebkit libwpe wayland libdrm libxkbcommon mesa libglvnd \
+  go rust go-task base-devel make pkgconf nlohmann-json
 ```
 
 A wlroots-based Wayland compositor is also required at runtime (see
@@ -27,6 +26,7 @@ closure (GStreamer, ICU, HarfBuzz, libsoup…) is pulled in transitively by
 
 | Package | Provides (library) | Used by |
 |---|---|---|
+| `bun` | the `bun` runtime | the host (`apps/host`) and the emit CLI run from source |
 | `wpewebkit` | `libWPEWebKit-2.0.so`, `libwpe-platform-2.0` | render host — the off-screen web engine |
 | `libwpe` | `libwpe-1.0.so.1` | render host — WPE general lib |
 | `wayland` | `libwayland-client/cursor/egl/server` | render host, wallpaper daemon — layer-shell client |
@@ -34,10 +34,9 @@ closure (GStreamer, ICU, HarfBuzz, libsoup…) is pulled in transitively by
 | `mesa` | `libgbm.so.1` | render host — GBM buffer allocation |
 | `libglvnd` | `libEGL.so.1`, `libGLX.so.0` | render host — EGL/GL dispatch |
 | `libxkbcommon` | `libxkbcommon.so.0` | render host — keyboard mapping |
-| `webkit2gtk-4.1` | `libwebkit2gtk-4.1.so` | settings app — Tauri 2 WebView |
-| `gtk3` | `libgtk-3.so.0` | settings app — Tauri 2 window (pulled in by webkit2gtk-4.1) |
 
-The Go core itself links only libc — it is statically built otherwise.
+The notifications D-Bus bridge (Go) links only libc — it is statically built
+otherwise.
 
 ### Optional (runtime)
 
@@ -51,15 +50,17 @@ Required only to compile from source; not needed on an installed system.
 
 | Package | Builds |
 |---|---|
-| `go` | the Go core (`neoshell`) |
-| `rust` | the wallpaper daemon (`apps/bg`) and settings app (`apps/settings`), via `cargo` |
-| `bun` | the Svelte UI (`apps/ui`) and the surface plugins (`apps/plugins`) |
+| `go` | the notifications D-Bus bridge (`apps/extensions/notifications/daemon`) |
+| `rust` | the wallpaper daemon (`apps/bg`), via `cargo` |
 | `go-task` | runs `Taskfile.yml` (the build orchestrator) |
 | `base-devel`, `make` | C++ toolchain (`g++`) for the render host |
 | `pkgconf` | `pkg-config` lookups in the render host `Makefile` |
 | `nlohmann-json` | JSON header used by the render host control protocol |
 | `wayland` | `wayland-scanner` generates the protocol glue (also a runtime dep) |
-| `webkit2gtk-4.1` | Tauri links it when building the settings app (also a runtime dep) |
+
+The settings app (`apps/settings`, Tauri) is currently not wired into the
+build or the package — it needs `rust` and `webkit2gtk-4.1`/`gtk3` when it
+returns.
 
 The Wayland protocol XML the render host needs (`wlr-layer-shell`, `xdg-shell`,
 `linux-dmabuf`) is vendored in `apps/render-host/protocols/`, so
