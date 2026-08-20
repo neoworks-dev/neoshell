@@ -1,55 +1,56 @@
 # neoshell
 
-A desktop shell for Hyprland. A Go core, a WPE render host, and Svelte surfaces
-on layer-shell.
+A desktop shell for Hyprland. A small TypeScript host — a pub/sub bus plus a
+render pipeline — and everything else as extensions. See `ARCHITECTURE.md`
+for the full design.
 
 ```
-task build     compile the render host, daemons, settings app, and core
-task run       build the surfaces and serve them from the core
-task dev       hot-reload: Vite on :5173 + the core
+task build     compile the render host, daemons, and the notifications bridge
+task run       run the host (spawns the render host, mounts extensions)
+task test      run every test suite
 ```
 
 ## Layout
 
 ```
-Hyprland keybind ──► neoshell emit <topic> ──► control socket
+Hyprland keybind ──► neoshell-emit <topic> ──► unix socket
                                                     │
-neoshell core (127.0.0.1:9876) ─────────────────────┤
-  ├─ internal/capability      one action, invocable by name from any surface
-  ├─ internal/plugins         reads apps/plugins/<id>/manifest.json
-  └─ internal/renderhost      drives the WPE render host's layer-shell surfaces
+neoshell-host (bun, 127.0.0.1:9877) ────────────────┤
+  ├─ bus            pub/sub with retained topics; unix socket + WebSocket
+  ├─ extensions     mounts apps/extensions/<id> backends as kernel fibers
+  ├─ view tree      config-declared UI tree → one webview per top-level node
+  └─ render host    C++/WPE layer-shell webviews (apps/render-host)
 
-   the bar · the dock · the desktop      (apps/plugins/<id>)
+apps/extensions/<id>/     backend.ts (host-side) and/or dist/views.js (webview)
+packages/kernel           the plugin kernel (fibers, services, effects)
+packages/surface          the webview runtime (bus client, view registry, renderer)
 ```
 
-Each surface is a standalone plugin: a directory under `apps/plugins/` with a
-`manifest.json` declaring its layer-shell surfaces and a `dist/` the core serves
-at `/plugins/<id>/`. The core creates surfaces from the manifests it finds, so
-adding one is a directory, not a code change.
+An extension is a directory under `apps/extensions/` with a `manifest.json`.
+It contributes **functions** (a backend module mounted in the host, talking
+over the bus) and/or **views** (an ES module the webviews import from
+`/plugins/<id>/`). Backends that need another language spawn a daemon as an
+effect — the notifications extension runs a Go D-Bus bridge this way.
+
+The UI is declared in the config as a tree of view nodes; each top-level node
+becomes a layer-shell webview. Adding a view is a config edit, not a code
+change.
 
 ### Configuration
 
+`~/.config/neoshell/config.json`
+
 | Key | Meaning |
 |---|---|
-| `appearance.*` | Accent, wallpaper, and the shared background mode/alpha/blur. |
-| `bar.*`, `dock.*`, `desktop.*` | Per-surface layout and module toggles. |
-| `plugins.providers.*` | One toggle per feature. It governs the feature's desktop widgets and its registered actions together. |
+| `views` | The view tree: `[{id, type, args, children}]`. Top-level `args` carry the layer-shell spec (layer, anchors, exclusive, keyboard). |
+| `extensions` | The mount list: which extension backends run, with per-extension config. |
+| `appearance.*` | Wallpaper and the shared background blur. |
 
 ## Keybinds
 
-The core does not inject keybinds. Declare them in your own Hyprland config;
-each one runs `neoshell emit <topic>` against the core's control socket.
-
-| Topic | What it does |
-|---|---|
-| `surface:toggle\|open\|close <class>` | Show or hide a surface, e.g. `settings`. |
+The host does not inject keybinds. Declare them in your own Hyprland config;
+each one publishes a message on the host's bus:
 
 ```conf
-bind = SUPER, S, exec, neoshell emit surface:toggle settings
-```
-
-For a Lua config (`hyprland.lua`) the same bind is:
-
-```lua
-hl.bind(mod .. " + S", hl.dsp.exec_cmd("neoshell emit surface:toggle settings"))
+bind = SUPER, S, exec, bun /path/to/neoshell/apps/host/src/emit.ts surface:toggle settings
 ```

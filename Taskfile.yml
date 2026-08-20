@@ -1,42 +1,29 @@
 # Taskfile for neoshell. Requires go-task (https://taskfile.dev).
 #
-#   task dev     hot-reload dev: Vite (HMR) + Go core loading localhost:5173
-#   task run     production: build UI + serve it from the Go core
-#   task build   compile the render host, daemons, settings app, and Go core
+#   task run     run the TS host (spawns the render host, mounts extensions)
+#   task build   compile the render host, daemons, and the notifications bridge
 #
-# The Go core spawns the render host, so the render host must be built first.
+# The host spawns the render host, so the render host must be built first.
 # Binary paths are absolute (via ROOT_DIR) so they resolve regardless of the
-# task's working directory (Go tasks run from apps/shell).
+# task's working directory.
 version: "3"
 
 vars:
-  # Svelte UI (git submodule).
-  UI_DIR: apps/ui
   # C++/WPE render host (built by `make` in apps/render-host/).
   RENDER_BIN: '{{.ROOT_DIR}}/apps/render-host/neoshell-render'
-  # Monitor connector to run on, e.g. `task dev MONITOR=DP-1`. Empty = default.
-  # Run `task monitors` to list connectors.
-  MONITOR: '{{.MONITOR | default ""}}'
-  # Expands to the --monitor flag only when MONITOR is set, so the empty default
-  # leaves the binary on its own default monitor.
-  MONITOR_FLAG: '{{if .MONITOR}}--monitor {{.MONITOR}}{{end}}'
   # neoshell-bg wallpaper daemon. Release for fast image scaling.
   BG_BIN: '{{.ROOT_DIR}}/apps/bg/target/release/neoshell-bg'
-  # neoshell-settings standalone app (Tauri). Spawned by the core on the gear button.
-  SETTINGS_BIN: '{{.ROOT_DIR}}/apps/settings/target/release/neoshell-settings'
   # Wallpaper image to set, e.g. `task wallpaper WALLPAPER=~/pic.png`.
   WALLPAPER: '{{.WALLPAPER | default ""}}'
 
 env:
-  # HTTP/WebSocket port for the Go core.
-  NEOSHELL_PORT: '{{.NEOSHELL_PORT | default "9876"}}'
-  # Surface plugins directory. The core reads each <id>/manifest.json to create
-  # surfaces and serves each <id>/dist at /plugins/<id>/.
-  NEOSHELL_PLUGINS: '{{.ROOT_DIR}}/apps/plugins'
-  # Point the Go core at the render host built by render:build.
+  # HTTP/WebSocket port for the host.
+  NEOSHELL_HOST_PORT: '{{.NEOSHELL_HOST_PORT | default "9877"}}'
+  # Extensions directory: each <id>/manifest.json declares a backend module
+  # and/or a views module; <id>/dist is served at /plugins/<id>/.
+  NEOSHELL_EXTENSIONS: '{{.ROOT_DIR}}/apps/extensions'
+  # Point the host at the render host built by render:build.
   NEOSHELL_RENDER_BIN: '{{.RENDER_BIN}}'
-  # Let the core launch the settings app the gear button opens.
-  NEOSHELL_SETTINGS_BIN: '{{.SETTINGS_BIN}}'
 
 tasks:
   default:
@@ -45,8 +32,7 @@ tasks:
     silent: true
 
   install:
-    desc: Install UI dependencies (bun)
-    dir: "{{.UI_DIR}}"
+    desc: Install workspace dependencies (bun)
     cmds:
       - bun install
 
@@ -56,65 +42,11 @@ tasks:
     cmds:
       - make
 
-  core:build:
-    desc: Build the Go core binary (./neoshell)
-    dir: apps/shell
+  notifyd:build:
+    desc: Build the notifications D-Bus bridge (Go)
+    dir: apps/extensions/notifications/daemon
     cmds:
-      - go build -o "{{.ROOT_DIR}}/neoshell" ./cmd/neoshell
-
-  cli:install:
-    desc: Install `neoshell` to $GOBIN (PATH) so Hyprland binds can call it in dev
-    dir: apps/shell
-    cmds:
-      - go install ./cmd/neoshell
-
-  ui:build:
-    desc: Build the settings-host UI to apps/ui/dist
-    dir: "{{.UI_DIR}}"
-    cmds:
-      - bun run build
-
-  plugins:build:
-    desc: Build every surface plugin to apps/plugins/<id>/dist
-    dir: apps/plugins
-    cmds:
-      - for d in bar dock desktop; do (cd "$d" && bun run build); done
-
-  plugins:dev:
-    desc: Single multi-page dev server for all plugin surfaces (HMR, port 5173)
-    dir: apps/plugins-dev
-    cmds:
-      - bun run dev
-
-  build:
-    desc: Build the render host, daemons, the settings app, and the Go core
-    deps: [render:build, bg:build, settings:build, core:build]
-
-  ui:dev:
-    desc: Run the Vite dev server with HMR (port 5173)
-    dir: "{{.UI_DIR}}"
-    cmds:
-      - bun run dev
-
-  core:dev:
-    desc: Run the Go core (no --frontend, so the render host loads Vite on :5173)
-    deps: [render:build, cli:install]
-    dir: apps/shell
-    cmds:
-      - go run ./cmd/neoshell {{.MONITOR_FLAG}}
-
-  dev:
-    desc: >-
-      Hot-reload dev — plugin surfaces via the multi-page aggregator (HMR) + Go
-      core + wallpaper daemon. The settings app (gear) uses the built UI.
-    deps: [settings:build, plugins:dev, core:dev, bg]
-
-  run:
-    desc: Production-like — build the UI + plugins and serve them from the Go core
-    deps: [render:build, cli:install, ui:build, plugins:build]
-    dir: apps/shell
-    cmds:
-      - go run ./cmd/neoshell --frontend "{{.ROOT_DIR}}/apps/ui/dist" {{.MONITOR_FLAG}}
+      - go build -o neoshell-notifyd .
 
   bg:build:
     desc: Build the neoshell-bg wallpaper daemon (release)
@@ -128,12 +60,42 @@ tasks:
     cmds:
       - cargo build --release
 
+  build:
+    desc: Build the render host, daemons, and the notifications bridge
+    deps: [render:build, bg:build, notifyd:build]
+
+  run:
+    desc: Run the host (spawns the render host, mounts extensions and views)
+    deps: [render:build, notifyd:build]
+    dir: apps/host
+    cmds:
+      - bun src/main.ts
+
+  host:headless:
+    desc: Run the host without the render host (tests, remote development)
+    dir: apps/host
+    env:
+      NEOSHELL_HOST_RENDER: "0"
+    cmds:
+      - bun src/main.ts
+
+  emit:
+    desc: Publish one message on the running host's bus — task emit -- <topic> [payload]
+    dir: apps/host
+    cmds:
+      - bun src/emit.ts {{.CLI_ARGS}}
+
+  test:
+    desc: Run every test suite (kernel, host, surface, extensions)
+    cmds:
+      - cd packages/kernel && bun test
+      - cd apps/host && bun test
+      - cd packages/surface && bun test
+      - cd apps/extensions && bun test
+
   bg:
     desc: Run the wallpaper daemon (optionally WALLPAPER=path to set on start)
     deps: [bg:build]
-    env:
-      # Sample the bar strip on the same monitor the bar runs on.
-      NEOSHELL_MONITOR: '{{.MONITOR}}'
     cmds:
       - "{{.BG_BIN}} daemon {{.WALLPAPER}}"
 
@@ -147,14 +109,14 @@ tasks:
       - "{{.BG_BIN}} img {{.WALLPAPER}}"
 
   monitors:
-    desc: List monitor connectors usable with MONITOR=
+    desc: List monitor connectors
     cmds:
       - hyprctl monitors -j | jq -r '.[].name'
 
   clean:
     desc: Remove build artifacts
     cmds:
-      - rm -f neoshell
       - cd apps/render-host && make clean
       - cd apps/bg && cargo clean
       - cd apps/settings && cargo clean
+      - rm -f apps/extensions/notifications/daemon/neoshell-notifyd
