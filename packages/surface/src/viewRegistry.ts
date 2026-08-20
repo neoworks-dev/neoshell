@@ -14,18 +14,36 @@ export type ViewFactory = (element: HTMLElement, args: unknown) => ViewInstance
 
 export class ViewRegistry {
   private readonly views = new Map<string, ViewFactory>()
+  private readonly listeners = new Set<() => void>()
 
   register(type: string, factory: ViewFactory): () => void {
     if (this.views.has(type)) {
       throw new Error(`ui: view type "${type}" is already registered`)
     }
     this.views.set(type, factory)
+    this.notifyChanged()
     return () => {
       this.views.delete(type)
+      this.notifyChanged()
     }
   }
 
   resolve(type: string): ViewFactory | undefined {
     return this.views.get(type)
+  }
+
+  // onChange fires after every registration or removal — the renderer
+  // re-renders so views that arrive after the tree still appear.
+  onChange(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  private notifyChanged(): void {
+    for (const listener of [...this.listeners]) {
+      listener()
+    }
   }
 }
