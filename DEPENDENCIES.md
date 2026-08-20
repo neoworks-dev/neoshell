@@ -44,14 +44,6 @@ The Go core itself links only libc — it is statically built otherwise.
 | Package | Enables |
 |---|---|
 | `gst-plugins-good`, `gst-plugins-bad` | `<video>` / `<audio>` playback in web surfaces (wpewebkit ships only `gst-plugins-base`) |
-| `bun` | The **assistant**. The core spawns nib as its agent backend; point `NEOSHELL_NIB_DIR` at a nib checkout, or put a compiled `nib-server` on `PATH` (or in `NEOSHELL_NIB_BIN`). |
-| `uv` | The Python venv for the **voice** sidecars (`task voice:setup`). Without it there is no speech in or out. |
-| `cudnn` + `task search:gpu` | Runs the search embeddings on the GPU. They are in-process ONNX either way; this only makes them faster. |
-
-Each is independently optional. Without a nib checkout the shell runs unchanged
-minus the assistant — bar, launcher, widgets, and file search do not depend on
-it. Without the ONNX models the search daemon degrades to filename + BM25: no
-semantic recall, but the launcher still finds files.
 
 ## Build
 
@@ -61,7 +53,7 @@ Required only to compile from source; not needed on an installed system.
 |---|---|
 | `go` | the Go core (`neoshell`) |
 | `rust` | the wallpaper daemon (`apps/bg`) and settings app (`apps/settings`), via `cargo` |
-| `bun` | the Svelte UI (`apps/ui`) |
+| `bun` | the Svelte UI (`apps/ui`) and the surface plugins (`apps/plugins`) |
 | `go-task` | runs `Taskfile.yml` (the build orchestrator) |
 | `base-devel`, `make` | C++ toolchain (`g++`) for the render host |
 | `pkgconf` | `pkg-config` lookups in the render host `Makefile` |

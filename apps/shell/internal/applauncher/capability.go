@@ -27,7 +27,6 @@ func (c appCapability) Actions() []capability.Action {
 			Params: map[string]capability.ParamSpec{
 				"query": {Type: "string", Description: "Filter by name; empty lists everything.", Required: false},
 			},
-			Policy:  capability.PolicyAllow,
 			Handler: c.list,
 		},
 		{

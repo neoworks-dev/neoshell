@@ -33,14 +33,12 @@ func (c widgetCapability) Actions() []capability.Action {
 			Name:        "widgets:types",
 			Description: "List the widget types that can be placed on the desktop. Call this before widgets:add.",
 			Params:      map[string]capability.ParamSpec{},
-			Policy:      capability.PolicyAllow,
 			Handler:     c.listTypes,
 		},
 		{
 			Name:        "widgets:list",
 			Description: "List the widgets currently on the desktop with their ids, positions, and sizes.",
 			Params:      map[string]capability.ParamSpec{},
-			Policy:      capability.PolicyAllow,
 			Handler:     c.list,
 		},
 		{

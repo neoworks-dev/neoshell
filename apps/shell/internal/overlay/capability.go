@@ -34,7 +34,6 @@ func (c overlayCapability) Actions() []capability.Action {
 				"body":    {Type: "string", Description: "Longer detail.", Required: false},
 				"urgency": {Type: "string", Description: "low, normal, or critical. Defaults to normal.", Required: false},
 			},
-			Policy:  capability.PolicyAllow,
 			Handler: c.notify,
 		},
 		{
@@ -45,14 +44,13 @@ func (c overlayCapability) Actions() []capability.Action {
 				"tone": {Type: "string", Description: "info, success, warning, or error. Defaults to info.", Required: false},
 				"ms":   {Type: "integer", Description: "How long to show it, in milliseconds.", Required: false},
 			},
-			Policy:  capability.PolicyAllow,
 			Handler: c.toast,
 		},
 		{
 			Name:        "overlay:surface",
-			Description: "Open, close, or toggle one of the shell's surfaces, such as the spotlight launcher.",
+			Description: "Open, close, or toggle one of the shell's surfaces, such as the dock.",
 			Params: map[string]capability.ParamSpec{
-				"class":  {Type: "string", Description: "Surface class, e.g. spotlight.", Required: true},
+				"class":  {Type: "string", Description: "Surface class, e.g. dock.", Required: true},
 				"action": {Type: "string", Description: "open, close, or toggle. Defaults to toggle.", Required: false},
 			},
 			Handler: c.surface,
@@ -70,7 +68,7 @@ func (c overlayCapability) notify(_ context.Context, arguments map[string]any) (
 	if c.service.notifier == nil {
 		// No session bus. A toast is the honest fallback: the user still sees
 		// the message, and the result says it was not a real notification.
-		c.service.emit("agent:toast", map[string]any{
+		c.service.emit("shell:toast", map[string]any{
 			"text": strings.TrimSpace(summary + " " + body),
 			"tone": "info",
 			"ms":   defaultToastMs,
@@ -97,7 +95,7 @@ func (c overlayCapability) toast(_ context.Context, arguments map[string]any) (c
 	if !ok || ms <= 0 {
 		ms = defaultToastMs
 	}
-	c.service.emit("agent:toast", map[string]any{
+	c.service.emit("shell:toast", map[string]any{
 		"text": text,
 		"tone": tone(stringArg(arguments, "tone")),
 		"ms":   ms,

@@ -24,17 +24,8 @@ vars:
   BG_BIN: '{{.ROOT_DIR}}/apps/bg/target/release/neoshell-bg'
   # neoshell-settings standalone app (Tauri). Spawned by the core on the gear button.
   SETTINGS_BIN: '{{.ROOT_DIR}}/apps/settings/target/release/neoshell-settings'
-  # neoshell-search semantic file-search daemon. Spawned by the core at startup.
-  SEARCH_BIN: '{{.ROOT_DIR}}/apps/shell/neoshell-search'
-  # Python interpreter for the voice sidecars (created by voice:setup).
-  VOICE_PYTHON: '{{.ROOT_DIR}}/apps/voice/.venv/bin/python'
-  # neoshell-voice daemon. Started and stopped by the core on the voice toggle.
-  VOICE_BIN: '{{.ROOT_DIR}}/neoshell-voice'
   # Wallpaper image to set, e.g. `task wallpaper WALLPAPER=~/pic.png`.
   WALLPAPER: '{{.WALLPAPER | default ""}}'
-  # nib checkout the core runs the agent backend from. Source beats the
-  # committed binary, which lags the repository.
-  NIB_DIR: '{{.NIB_DIR | default "/home/moritz/Documents/neoworks/nib"}}'
 
 env:
   # HTTP/WebSocket port for the Go core.
@@ -46,15 +37,6 @@ env:
   NEOSHELL_RENDER_BIN: '{{.RENDER_BIN}}'
   # Let the core launch the settings app the gear button opens.
   NEOSHELL_SETTINGS_BIN: '{{.SETTINGS_BIN}}'
-  # Let the core launch the semantic search daemon at startup.
-  NEOSHELL_SEARCH_BIN: '{{.SEARCH_BIN}}'
-  # Let the core launch the nib agent backend at startup. Unset it to run the
-  # shell without an assistant; everything else still works.
-  NEOSHELL_NIB_DIR: '{{.NIB_DIR}}'
-  # Let the core start and stop the voice daemon when voice mode is toggled.
-  # The daemon runs the Python sidecar modules via this interpreter.
-  NEOSHELL_VOICE_BIN: '{{.VOICE_BIN}}'
-  NEOSHELL_VOICE_PYTHON: '{{.VOICE_PYTHON}}'
 
 tasks:
   default:
@@ -80,74 +62,11 @@ tasks:
     cmds:
       - go build -o "{{.ROOT_DIR}}/neoshell" ./cmd/neoshell
 
-  search:build:
-    desc: Build the semantic file-search daemon (neoshell-search)
-    dir: apps/shell
-    cmds:
-      - go build -o neoshell-search ./cmd/neoshell-search
-
-  search:gpu:
-    desc: >-
-      Fetch the CUDA 12 runtime libs onnxruntime-gpu needs into
-      <models>/cuda12, so embeddings run on the GPU. The daemon adds this dir to
-      LD_LIBRARY_PATH. Needs `uv` and the system cuDNN 9 (pacman -S cudnn).
-    vars:
-      MODELS:
-        sh: echo "${XDG_DATA_HOME:-$HOME/.local/share}/neoshell/models"
-    cmds:
-      - mkdir -p "{{.MODELS}}/cuda12"
-      - >-
-        uv pip install --target "{{.MODELS}}/.cuda-wheels"
-        nvidia-cuda-runtime-cu12 nvidia-cublas-cu12 nvidia-cufft-cu12
-        nvidia-cuda-nvrtc-cu12 nvidia-curand-cu12 nvidia-nvjitlink-cu12
-      - find "{{.MODELS}}/.cuda-wheels/nvidia" -name '*.so*' -exec cp -an {} "{{.MODELS}}/cuda12/" \;
-      - rm -rf "{{.MODELS}}/.cuda-wheels"
-      - echo "CUDA 12 libs installed. Restart the daemon; log should show 'on CUDA GPU'."
-
   cli:install:
     desc: Install `neoshell` to $GOBIN (PATH) so Hyprland binds can call it in dev
     dir: apps/shell
     cmds:
       - go install ./cmd/neoshell
-
-  voice:setup:
-    desc: Create the Python venv for the voice sidecars (uv). Needs `uv`.
-    dir: apps/voice
-    cmds:
-      # CPU `onnxruntime` (supertonic's declared dep) is what we want: the
-      # sidecars default to CPU. For a GPU box, set `voice.device: cuda` and
-      # overlay the CUDA build: `uv pip install onnxruntime-gpu==<same-version>`.
-      - uv sync
-
-  voice:build:
-    desc: Build the standalone voice assistant daemon (neoshell-voice)
-    dir: apps/shell
-    cmds:
-      - go build -o "{{.ROOT_DIR}}/neoshell-voice" ./cmd/neoshell-voice
-
-  voice:
-    desc: >-
-      Run the voice daemon standalone against a running core. Normally the core
-      starts it from voice.enabled (`neoshell emit voice:toggle`); use this to
-      run it in the foreground with its logs in view.
-    deps: [voice:setup]
-    dir: apps/shell
-    cmds:
-      - go run ./cmd/neoshell-voice
-
-  voice:stt:
-    desc: Run the Moonshine STT sidecar alone (for manual socket testing)
-    deps: [voice:setup]
-    dir: apps/voice
-    cmds:
-      - uv run neoshell-voice-stt
-
-  voice:tts:
-    desc: Run the Supertonic 3 TTS sidecar alone (for manual socket testing)
-    deps: [voice:setup]
-    dir: apps/voice
-    cmds:
-      - uv run neoshell-voice-tts
 
   ui:build:
     desc: Build the settings-host UI to apps/ui/dist
@@ -159,7 +78,7 @@ tasks:
     desc: Build every surface plugin to apps/plugins/<id>/dist
     dir: apps/plugins
     cmds:
-      - for d in bar dock desktop spotlight; do (cd "$d" && bun run build); done
+      - for d in bar dock desktop; do (cd "$d" && bun run build); done
 
   plugins:dev:
     desc: Single multi-page dev server for all plugin surfaces (HMR, port 5173)
@@ -167,32 +86,9 @@ tasks:
     cmds:
       - bun run dev
 
-  nib:extension:
-    desc: Link the neoshell capability extension into ~/.nib/extensions
-    status:
-      - test -L "$HOME/.nib/extensions/neoshell.ts"
-    cmds:
-      # A symlink, not a copy: ~/.nib/extensions is inside nib's data directory
-      # and therefore trusted, and editing the file in this repository is then
-      # live on the next backend start with no install step to forget.
-      - mkdir -p "$HOME/.nib/extensions"
-      - ln -sfn "{{.ROOT_DIR}}/apps/nib-extension/neoshell.ts" "$HOME/.nib/extensions/neoshell.ts"
-
-  probe:
-    desc: >-
-      Serve the capability routes + agent backend on :9899 without the render
-      host, so the assistant stack can be exercised on a live session.
-      `task probe -- ask "<prompt>"` drives one turn instead.
-    deps: [nib:extension]
-    dir: apps/shell
-    env:
-      SMOKE_AGENT: "1"
-    cmds:
-      - go run ./cmd/neoshell-probe {{.CLI_ARGS}}
-
   build:
     desc: Build the render host, daemons, the settings app, and the Go core
-    deps: [render:build, bg:build, settings:build, search:build, core:build, voice:build, nib:extension]
+    deps: [render:build, bg:build, settings:build, core:build]
 
   ui:dev:
     desc: Run the Vite dev server with HMR (port 5173)
@@ -202,7 +98,7 @@ tasks:
 
   core:dev:
     desc: Run the Go core (no --frontend, so the render host loads Vite on :5173)
-    deps: [render:build, search:build, cli:install, voice:build, nib:extension]
+    deps: [render:build, cli:install]
     dir: apps/shell
     cmds:
       - go run ./cmd/neoshell {{.MONITOR_FLAG}}
@@ -215,7 +111,7 @@ tasks:
 
   run:
     desc: Production-like — build the UI + plugins and serve them from the Go core
-    deps: [render:build, search:build, cli:install, ui:build, plugins:build, voice:build, nib:extension]
+    deps: [render:build, cli:install, ui:build, plugins:build]
     dir: apps/shell
     cmds:
       - go run ./cmd/neoshell --frontend "{{.ROOT_DIR}}/apps/ui/dist" {{.MONITOR_FLAG}}
@@ -259,7 +155,6 @@ tasks:
     desc: Remove build artifacts
     cmds:
       - rm -f neoshell
-      - rm -f apps/shell/neoshell-search
       - cd apps/render-host && make clean
       - cd apps/bg && cargo clean
       - cd apps/settings && cargo clean

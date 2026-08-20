@@ -9,7 +9,7 @@ import (
 )
 
 // runEmit sends one control event to the running core's event socket, so a
-// Hyprland keybind can run e.g. `neoshell emit voice:listen`. An optional second
+// Hyprland keybind can run e.g. `neoshell emit surface:toggle dock`. An optional second
 // argument carries a JSON payload (or a bare string, wrapped as JSON).
 func runEmit(args []string) {
 	if len(args) == 0 || args[0] == "" {

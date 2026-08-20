@@ -19,7 +19,7 @@ func writeManifest(t *testing.T, dir, id, body string) {
 
 func TestLoadReadsEnabledManifestsSortedByID(t *testing.T) {
 	dir := t.TempDir()
-	writeManifest(t, dir, "spotlight", `{"id":"spotlight","surfaces":[{"view":"spotlight","layer":"overlay","anchors":["top","left"],"keyboard":"ondemand","toggleable":true}]}`)
+	writeManifest(t, dir, "overlay", `{"id":"overlay","surfaces":[{"view":"overlay","layer":"overlay","anchors":["top","left"],"keyboard":"ondemand","toggleable":true}]}`)
 	writeManifest(t, dir, "bar", `{"id":"bar","surfaces":[{"view":"bar","layer":"top","anchors":["top"],"keyboard":"none","blur":true}]}`)
 	writeManifest(t, dir, "disabled", `{"id":"disabled","enabled":false,"surfaces":[{"view":"x","layer":"top"}]}`)
 
@@ -30,8 +30,8 @@ func TestLoadReadsEnabledManifestsSortedByID(t *testing.T) {
 	if len(manifests) != 2 {
 		t.Fatalf("want 2 enabled manifests, got %d", len(manifests))
 	}
-	if manifests[0].ID != "bar" || manifests[1].ID != "spotlight" {
-		t.Fatalf("want [bar spotlight] sorted, got [%s %s]", manifests[0].ID, manifests[1].ID)
+	if manifests[0].ID != "bar" || manifests[1].ID != "overlay" {
+		t.Fatalf("want [bar overlay] sorted, got [%s %s]", manifests[0].ID, manifests[1].ID)
 	}
 
 	surfaces := Resolve(manifests)
@@ -45,7 +45,7 @@ func TestLoadReadsEnabledManifestsSortedByID(t *testing.T) {
 		t.Errorf("want PluginID bar, got %q", surfaces[0].PluginID)
 	}
 	if !surfaces[1].Toggleable {
-		t.Errorf("spotlight surface should be toggleable")
+		t.Errorf("overlay surface should be toggleable")
 	}
 }
 

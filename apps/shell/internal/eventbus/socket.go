@@ -12,7 +12,7 @@ import (
 )
 
 // SocketPath returns the control socket path under XDG_RUNTIME_DIR, mirroring
-// searchd.SocketPath / renderhost.DefaultSocketPath.
+// renderhost.DefaultSocketPath.
 func SocketPath() string {
 	runtime := os.Getenv("XDG_RUNTIME_DIR")
 	if runtime == "" {
@@ -23,7 +23,7 @@ func SocketPath() string {
 
 // Serve listens on socketPath and publishes every decoded line to bus. Blocks
 // until ctx is cancelled (returns nil) or the listener errors. Replaces any
-// stale socket file. Mirrors searchd.Serve.
+// stale socket file.
 func Serve(ctx context.Context, socketPath string, bus *Bus) error {
 	_ = os.Remove(socketPath)
 	listener, err := net.Listen("unix", socketPath)

@@ -50,30 +50,6 @@ func TestRegistryInvoke(t *testing.T) {
 	}
 }
 
-// The AI sees the sanitized alias; it must resolve back to the canonical action.
-func TestRegistryResolvesToolAlias(t *testing.T) {
-	registry := NewRegistry()
-	registry.Register(fakeCapability{id: "demo", actions: []Action{echoAction("thing:do")}})
-
-	alias := ToolName("thing:do")
-	if alias != "thing_do" {
-		t.Fatalf("alias = %q, want thing_do", alias)
-	}
-	if !registry.Has(alias) {
-		t.Fatal("expected alias to resolve")
-	}
-	if owner := registry.Owner(alias); owner != "demo" {
-		t.Fatalf("owner via alias = %q, want demo", owner)
-	}
-	result, err := registry.Invoke(context.Background(), alias, map[string]any{"value": "x"})
-	if err != nil {
-		t.Fatalf("invoke via alias: %v", err)
-	}
-	if result.Text != "thing:do:x" {
-		t.Fatalf("text = %q", result.Text)
-	}
-}
-
 func TestRegistryInvokeUnknown(t *testing.T) {
 	registry := NewRegistry()
 	if _, err := registry.Invoke(context.Background(), "missing", nil); err == nil {
@@ -107,22 +83,4 @@ func TestDuplicateActionPanics(t *testing.T) {
 	registry := NewRegistry()
 	registry.Register(fakeCapability{id: "one", actions: []Action{echoAction("dup")}})
 	registry.Register(fakeCapability{id: "two", actions: []Action{echoAction("dup")}})
-}
-
-func TestActionJSONSchema(t *testing.T) {
-	schema := echoAction("x").JSONSchema()
-	if schema["type"] != "object" {
-		t.Fatalf("type = %v", schema["type"])
-	}
-	required, ok := schema["required"].([]string)
-	if !ok || len(required) != 1 || required[0] != "value" {
-		t.Fatalf("required = %v", schema["required"])
-	}
-	properties, ok := schema["properties"].(map[string]any)
-	if !ok {
-		t.Fatalf("properties missing: %v", schema["properties"])
-	}
-	if _, ok := properties["value"]; !ok {
-		t.Fatal("expected 'value' property in schema")
-	}
 }
