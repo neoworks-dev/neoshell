@@ -1,13 +1,16 @@
 import { homedir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { Kernel } from '@neoshell/kernel'
+import { assetsPlugin } from './plugins/assets.js'
 import { busPlugin } from './plugins/bus.js'
 import { configPlugin } from './plugins/config.js'
 import { extensionsPlugin } from './plugins/extensions.js'
 import { httpPlugin } from './plugins/http.js'
 import { renderHostPlugin } from './plugins/renderHost.js'
+import { surfacePagePlugin } from './plugins/surfacePage.js'
 import { surfacesPlugin } from './plugins/surfaces.js'
 import { unixSocketPlugin } from './plugins/unixSocket.js'
+import { viewTreePlugin } from './plugins/viewTree.js'
 
 // neoshell-host: the kernel root. Mounts the built-in runtime plugins — bus,
 // config, transports, render host — and nothing feature-shaped. Runs alongside
@@ -15,26 +18,29 @@ import { unixSocketPlugin } from './plugins/unixSocket.js'
 
 function main(): void {
   const kernel = new Kernel()
+  const extensionsDir = envString('NEOSHELL_EXTENSIONS', 'apps/extensions')
   kernel.mount(busPlugin)
   kernel.mount(configPlugin, { path: defaultConfigPath() })
   kernel.mount(unixSocketPlugin, { socketPath: join(runtimeDir(), 'neoshell-host.sock') })
   kernel.mount(httpPlugin, {
     port: envNumber('NEOSHELL_HOST_PORT', 9877),
-    pluginsDir: process.env.NEOSHELL_PLUGINS,
+    // Extension bundles are the plugin dirs: /plugins/<id>/ serves <ext>/dist.
+    pluginsDir: envString('NEOSHELL_PLUGINS', extensionsDir),
   })
+  kernel.mount(assetsPlugin)
+  kernel.mount(surfacePagePlugin)
   kernel.mount(surfacesPlugin)
-  kernel.mount(extensionsPlugin, {
-    extensionsDir: envString('NEOSHELL_EXTENSIONS', 'apps/extensions'),
-  })
+  kernel.mount(extensionsPlugin, { extensionsDir })
+  kernel.mount(viewTreePlugin, { extensionsDir })
   mountRenderHostIfEnabled(kernel)
   installSignalHandlers(kernel)
   console.log('neoshell-host running')
 }
 
-// The render host stays with the Go core until migration step 5; opt in with
-// NEOSHELL_HOST_RENDER=1 to let this process own it instead.
+// The host owns the render host by default; NEOSHELL_HOST_RENDER=0 runs
+// headless (tests, remote development).
 function mountRenderHostIfEnabled(kernel: Kernel): void {
-  if (process.env.NEOSHELL_HOST_RENDER !== '1') {
+  if (process.env.NEOSHELL_HOST_RENDER === '0') {
     return
   }
   kernel.mount(renderHostPlugin, {
