@@ -3,9 +3,8 @@ package renderhost
 import "github.com/neoworks/neoshell/internal/plugins"
 
 // defaultSurfaces returns the built-in shell surfaces used when no plugin
-// manifests are found. They mirror the previously hardcoded bar, desktop, dock,
-// and spotlight surfaces so behavior is unchanged without a plugins directory.
-// All load from the monolith (HasDist false) via ?view=.
+// manifests are found: bar, desktop, and dock. All load from the monolith
+// (HasDist false) via ?view=.
 func defaultSurfaces() []plugins.ResolvedSurface {
 	surfaces := []plugins.Surface{
 		// Top, not Overlay: a fullscreen window covers the Top layer but draws
@@ -37,16 +36,6 @@ func defaultSurfaces() []plugins.ResolvedSurface {
 			Anchors:  []string{"bottom", "left", "right"},
 			Keyboard: "none",
 			Blur:     true,
-		},
-		// Fullscreen apps spotlight on the Overlay layer (above all windows).
-		// Toggleable: window:toggle maps/unmaps it.
-		{
-			View:       "spotlight",
-			Layer:      "overlay",
-			Anchors:    []string{"top", "bottom", "left", "right"},
-			Keyboard:   "ondemand",
-			Toggleable: true,
-			Classes:    []string{"spotlight"},
 		},
 	}
 

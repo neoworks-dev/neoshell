@@ -2,7 +2,7 @@
 // plugin is a directory containing a manifest.json that declares one or more
 // layer-shell surfaces. The Go core reads these manifests to decide which
 // surfaces to create and how to configure them, replacing the previously
-// hardcoded set of shell surfaces (bar, desktop, dock, spotlight).
+// hardcoded set of shell surfaces (bar, desktop, dock).
 //
 // The manifest is the shared contract between the Go core (which creates the
 // surfaces) and the frontend plugin (which owns the surface's UI): the same
@@ -35,8 +35,8 @@ type Surface struct {
 	Layer    string   `json:"layer"`
 	Anchors  []string `json:"anchors"`
 	Keyboard string   `json:"keyboard"`
-	// Toggleable marks a surface that window:toggle maps/unmaps (e.g. spotlight)
-	// rather than one that stays mapped for its lifetime (e.g. bar).
+	// Toggleable marks a surface that window:toggle maps/unmaps rather than one
+	// that stays mapped for its lifetime (e.g. bar).
 	Toggleable bool `json:"toggleable,omitempty"`
 	// StartHidden hides the surface immediately after creation, for toggleable
 	// surfaces that should not be visible until first opened.

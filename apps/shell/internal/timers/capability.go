@@ -34,7 +34,6 @@ func (c timerCapability) Actions() []capability.Action {
 				"seconds": {Type: "number", Description: "Duration in seconds.", Required: true},
 				"label":   {Type: "string", Description: "What the timer is for.", Required: false},
 			},
-			Policy:  capability.PolicyAllow,
 			Handler: c.startTimer,
 		},
 		{
@@ -43,14 +42,12 @@ func (c timerCapability) Actions() []capability.Action {
 			Params: map[string]capability.ParamSpec{
 				"id": {Type: "string", Description: "The timer id to cancel.", Required: true},
 			},
-			Policy:  capability.PolicyAllow,
 			Handler: c.stopTimer,
 		},
 		{
 			Name:        "timer:list",
 			Description: "List the running countdown timers and active tracking sessions.",
 			Params:      map[string]capability.ParamSpec{},
-			Policy:      capability.PolicyAllow,
 			Handler:     c.listTimers,
 		},
 		{
@@ -59,7 +56,6 @@ func (c timerCapability) Actions() []capability.Action {
 			Params: map[string]capability.ParamSpec{
 				"label": {Type: "string", Description: "What is being tracked.", Required: true},
 			},
-			Policy:  capability.PolicyAllow,
 			Handler: c.startTrack,
 		},
 		{
@@ -68,7 +64,6 @@ func (c timerCapability) Actions() []capability.Action {
 			Params: map[string]capability.ParamSpec{
 				"id": {Type: "string", Description: "The session id to stop; empty stops the latest.", Required: false},
 			},
-			Policy:  capability.PolicyAllow,
 			Handler: c.stopTrack,
 		},
 	}

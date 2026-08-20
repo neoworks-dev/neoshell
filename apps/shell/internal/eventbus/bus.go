@@ -14,7 +14,7 @@ import (
 )
 
 // Event is one control message. On the wire it is a single newline-delimited
-// JSON object, matching the searchd/renderhost socket conventions. Payload is
+// JSON object, matching the renderhost socket conventions. Payload is
 // optional and opaque to the Bus; each subscriber decodes it as needed.
 type Event struct {
 	Topic   string          `json:"topic"`

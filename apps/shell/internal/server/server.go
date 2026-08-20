@@ -18,10 +18,7 @@ import (
 	"github.com/neoworks/neoshell/internal/capability"
 	"github.com/neoworks/neoshell/internal/config"
 	"github.com/neoworks/neoshell/internal/eventbus"
-	"github.com/neoworks/neoshell/internal/fileindex"
-	"github.com/neoworks/neoshell/internal/files"
 	"github.com/neoworks/neoshell/internal/hyprland"
-	"github.com/neoworks/neoshell/internal/nib"
 	"github.com/neoworks/neoshell/internal/notifications"
 	"github.com/neoworks/neoshell/internal/overlay"
 	"github.com/neoworks/neoshell/internal/shell"
@@ -57,9 +54,8 @@ type Server struct {
 	sys        *system.System
 	cfg        *config.Store
 	notifier   *notifications.Daemon // may be nil if the bus was unavailable
-	index      *fileindex.Index      // file search index (may still be building)
 	timers     *timers.Service       // countdown timers + tracking sessions
-	registry   *capability.Registry  // shared action registry (agent tools + launcher commands)
+	registry   *capability.Registry  // shared action registry, invoked by name over the WebSocket
 	frontend   string                // dir to serve static frontend from; empty = disabled
 	pluginsDir string                // dir of surface plugins (each with a dist/); empty = disabled
 
@@ -69,36 +65,22 @@ type Server struct {
 	// one into config.
 	widgetMu    sync.Mutex
 	widgetTypes []widgets.Type
-
-	// The agent backend's live session, plus the tool metadata used to render
-	// its calls. Attached once the backend reports healthy; see agent.go.
-	agent agentBridge
-	// The in-flight spoken turn, if any; see voice.go.
-	voice voiceTurn
-	// Flips voice mode. Set by whoever owns the daemon process; guarded by
-	// agent.mu, which already covers the rest of the assistant's wiring.
-	voiceToggle func() bool
 }
 
-func New(hub *Hub, bus *eventbus.Bus, hypr *hyprland.Client, sys *system.System, cfg *config.Store, notifier *notifications.Daemon, index *fileindex.Index, frontend, pluginsDir string) *Server {
-	server := &Server{hub: hub, hypr: hypr, sys: sys, cfg: cfg, notifier: notifier, index: index, frontend: frontend, pluginsDir: pluginsDir}
+func New(hub *Hub, bus *eventbus.Bus, hypr *hyprland.Client, sys *system.System, cfg *config.Store, notifier *notifications.Daemon, frontend, pluginsDir string) *Server {
+	server := &Server{hub: hub, hypr: hypr, sys: sys, cfg: cfg, notifier: notifier, frontend: frontend, pluginsDir: pluginsDir}
 	server.timers = timers.New(func(state timers.State) {
 		hub.Broadcast("timer", state)
 	})
-	// One registry, two front doors: the launcher invokes these actions by name
-	// over the WebSocket, and the agent backend calls the same set as tools over
-	// HTTP. Registering here is the only place a feature has to opt in to both.
+	// One registry of named actions, invoked over the WebSocket. Registering here
+	// is the only place a feature has to opt in.
 	server.registry = capability.NewRegistry()
 	server.registry.Register(server.timers.Capability())
 	server.registry.Register(windows.New(hypr).Capability())
 	server.registry.Register(applauncher.New().Capability())
-	server.registry.Register(files.New(server.searchFiles).Capability())
 	server.registry.Register(widgets.New(cfg, server.knownWidgetTypes).Capability())
 	server.registry.Register(overlay.New(hub.Broadcast, notifier).Capability())
 
-	// The voice pipeline runs in its own process (neoshell-voice), started and
-	// stopped by the voice toggle. When running, it connects over this
-	// WebSocket and drives the shared agent session (see voice.go).
 	server.subscribeControlEvents(bus)
 	return server
 }
@@ -109,66 +91,9 @@ func (s *Server) subscribeControlEvents(bus *eventbus.Bus) {
 	if bus == nil {
 		return
 	}
-	// Voice control keybinds are forwarded to the voice daemon (if running) over
-	// the hub as a "voice:control" topic; the daemon subscribes to it. When no
-	// daemon is connected these are harmless no-ops.
-	bus.Subscribe("voice:listen", func(eventbus.Event) { s.forwardVoiceControl("listen") })
-	bus.Subscribe("voice:stop", func(eventbus.Event) { s.forwardVoiceControl("stop") })
-	bus.Subscribe("voice:cancel", func(eventbus.Event) { s.forwardVoiceControl("cancel") })
-	bus.Subscribe("voice:toggle", func(eventbus.Event) { s.toggleVoice() })
-
 	bus.Subscribe("surface:toggle", func(e eventbus.Event) { s.handleSurface("toggle", e) })
 	bus.Subscribe("surface:open", func(e eventbus.Event) { s.handleSurface("open", e) })
 	bus.Subscribe("surface:close", func(e eventbus.Event) { s.handleSurface("close", e) })
-	// Agent keybinds. Approving by key is the point of the design: a tool that
-	// asks should be answerable without reaching for the mouse, and "always"
-	// is how the user stops being asked about a thing they have decided on.
-	bus.Subscribe("agent:open", func(eventbus.Event) { s.broadcastAgentPanel(true, false) })
-	bus.Subscribe("agent:close", func(eventbus.Event) { s.broadcastAgentPanel(false, true) })
-	bus.Subscribe("agent:ask", func(e eventbus.Event) {
-		prompt := payloadText(e)
-		s.broadcastAgentPanel(prompt == "", false)
-		if prompt != "" {
-			go s.handleAgentAsk(prompt)
-		}
-	})
-	bus.Subscribe("agent:approve", func(eventbus.Event) { go s.handleAgentApprove("", nib.ApproveOnce, "") })
-	bus.Subscribe("agent:deny", func(eventbus.Event) { go s.handleAgentApprove("", nib.ApproveDeny, "") })
-	bus.Subscribe("agent:always", func(eventbus.Event) { go s.handleAgentApprove("", nib.ApproveSession, "") })
-	bus.Subscribe("agent:always-project", func(eventbus.Event) { go s.handleAgentApprove("", nib.ApproveProject, "") })
-	bus.Subscribe("agent:interrupt", func(eventbus.Event) { go s.handleAgentInterrupt() })
-	bus.Subscribe("agent:restart", func(eventbus.Event) { s.restartAgent() })
-}
-
-// broadcastAgentPanel asks the notch to expand or collapse its agent panel.
-func (s *Server) broadcastAgentPanel(focusInput, closePanel bool) {
-	s.hub.BroadcastEphemeral("agent:panel", map[string]any{
-		"open":  !closePanel,
-		"focus": focusInput,
-	})
-}
-
-// payloadText reads a free-text control payload, accepting a bare JSON string
-// or {"text":"…"}, mirroring how surfaceClass reads its own.
-func payloadText(event eventbus.Event) string {
-	if len(event.Payload) == 0 {
-		return ""
-	}
-	var text string
-	if json.Unmarshal(event.Payload, &text) == nil && text != "" {
-		return text
-	}
-	var obj struct {
-		Text   string `json:"text"`
-		Prompt string `json:"prompt"`
-	}
-	if json.Unmarshal(event.Payload, &obj) == nil {
-		if obj.Text != "" {
-			return obj.Text
-		}
-		return obj.Prompt
-	}
-	return ""
 }
 
 // handleSurface forwards a surface:* control event to the frontend. Each UI
@@ -184,7 +109,7 @@ func (s *Server) handleSurface(action string, event eventbus.Event) {
 }
 
 // surfaceClass reads the target class from the emit payload, accepting either a
-// bare JSON string ("spotlight") or an object {"class":"spotlight"}.
+// bare JSON string ("dock") or an object {"class":"dock"}.
 func surfaceClass(event eventbus.Event) string {
 	if len(event.Payload) == 0 {
 		return ""
@@ -237,9 +162,8 @@ func parseIconFromDesktop(path string) string {
 }
 
 // Listen registers every HTTP route and binds addr, returning once the socket
-// is accepting. Binding is synchronous on purpose: the agent backend is spawned
-// with this server's address in its environment and queries /capabilities as it
-// starts, so the listener must already exist by the time the child runs.
+// is accepting. Binding is synchronous so the render host, spawned afterwards
+// with this server's address, always finds a listener.
 //
 // Serving continues in a goroutine; the returned listener is closed on shutdown.
 func (s *Server) Listen(addr string) (net.Listener, error) {
@@ -293,11 +217,8 @@ func (s *Server) Listen(addr string) (net.Listener, error) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		http.ServeFile(w, r, path)
 	})
-	// Surface and voice control now arrive over the event socket (`neoshell emit`),
-	// not HTTP — see server.subscribeControlEvents and internal/eventbus.
-
-	// The out-of-process agent backend reaches the capability registry here.
-	s.registerCapabilityRoutes()
+	// Surface control arrives over the event socket (`neoshell emit`), not HTTP —
+	// see server.subscribeControlEvents and internal/eventbus.
 
 	// Serve each surface plugin's built dist at /plugins/<id>/. Registered before
 	// the root frontend handler so it takes precedence.
@@ -410,22 +331,6 @@ func (s *Server) route(c *Client, msg InMessage) {
 			})
 		}()
 
-	case "voice:listen":
-		s.forwardVoiceControl("listen")
-	case "voice:stop":
-		s.forwardVoiceControl("stop")
-	case "voice:cancel":
-		s.forwardVoiceControl("cancel")
-	case "voice:toggle":
-		s.toggleVoice()
-
-	case "agent:voice:ask":
-		go s.handleVoiceAsk(c, msg)
-	case "agent:voice:addressed":
-		go s.handleVoiceAddressed(c, msg)
-	case "agent:voice:cancel":
-		s.handleVoiceCancel(msg)
-
 	case "timer:start":
 		s.timers.StartTimer(msg.Label, msg.Duration)
 	case "timer:stop":
@@ -438,18 +343,9 @@ func (s *Server) route(c *Client, msg InMessage) {
 		data, _ := json.Marshal(OutMessage{Type: "timer", Data: s.timers.Snapshot()})
 		c.Send(data)
 
-	case "agent:ask":
-		go s.handleAgentAsk(msg.Prompt)
-	case "agent:interrupt":
-		go s.handleAgentInterrupt()
-	case "agent:approve":
-		go s.handleAgentApprove(msg.ToolUseID, msg.Result, "")
-	case "agent:sync":
-		s.broadcastAgentState()
-
 	case "command:invoke":
-		// Launcher entry point into the shared action registry — the same
-		// actions the agent calls as tools. Name is the action; Data holds args.
+		// Frontend entry point into the shared action registry. Name is the
+		// action; Data holds args.
 		s.handleCommandInvoke(c, msg)
 
 	case "surface:drag-start":
@@ -512,14 +408,6 @@ func (s *Server) route(c *Client, msg InMessage) {
 
 	case "apps:list":
 		data, _ := json.Marshal(OutMessage{Type: "apps", Data: apps.List()})
-		c.Send(data)
-
-	case "search:files":
-		// Echo the query back so the client can drop stale (out-of-order) results.
-		data, _ := json.Marshal(OutMessage{Type: "searchResults", Data: map[string]any{
-			"query":   msg.Query,
-			"results": s.searchFiles(msg.Query),
-		}})
 		c.Send(data)
 
 	case "launch":

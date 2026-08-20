@@ -24,9 +24,6 @@ type InMessage struct {
 	ID  string `json:"id,omitempty"`
 	Cmd string `json:"cmd,omitempty"`
 
-	// search:files — fuzzy filename query against the file index.
-	Query string `json:"query,omitempty"`
-
 	// hyprland:dispatch
 	Dispatcher string `json:"dispatcher,omitempty"`
 	Arg        string `json:"arg,omitempty"`
@@ -57,14 +54,6 @@ type InMessage struct {
 	NotifID   uint32 `json:"notifId,omitempty"`
 	ActionKey string `json:"actionKey,omitempty"`
 	Reason    int    `json:"reason,omitempty"`
-
-	// agent:ask / agent:voice:* — what the user asked.
-	Prompt string `json:"prompt,omitempty"`
-
-	// agent:approve — which pending tool call to answer and how. An empty
-	// ToolUseID answers the oldest, which is what the keybinds send.
-	ToolUseID string `json:"toolUseId,omitempty"`
-	Result    string `json:"result,omitempty"`
 
 	// timer:start / track:start
 	Label    string `json:"label,omitempty"`

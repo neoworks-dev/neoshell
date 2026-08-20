@@ -47,7 +47,6 @@ func (c windowCapability) Actions() []capability.Action {
 			Name:        "windows:list",
 			Description: "List the open windows with their class, title, workspace, geometry, and address. Call this first when a request names a window loosely.",
 			Params:      map[string]capability.ParamSpec{},
-			Policy:      capability.PolicyAllow,
 			Handler:     c.list,
 		},
 		{
@@ -109,7 +108,6 @@ func (c windowCapability) Actions() []capability.Action {
 			Name:        "workspace:list",
 			Description: "List the workspaces, their window counts, and which one is active.",
 			Params:      map[string]capability.ParamSpec{},
-			Policy:      capability.PolicyAllow,
 			Handler:     c.listWorkspaces,
 		},
 		{

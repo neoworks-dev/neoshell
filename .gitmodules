@@ -16,9 +16,6 @@
 [submodule "apps/plugins/desktop"]
 	path = apps/plugins/desktop
 	url = /home/moritz/Documents/neoworks/neoshell-plugin-desktop.git
-[submodule "apps/plugins/spotlight"]
-	path = apps/plugins/spotlight
-	url = /home/moritz/Documents/neoworks/neoshell-plugin-spotlight.git
 [submodule "apps/plugins-dev"]
 	path = apps/plugins-dev
 	url = /home/moritz/Documents/neoworks/neoshell-plugins-dev.git

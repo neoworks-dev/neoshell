@@ -8,9 +8,7 @@ import (
 	"github.com/neoworks/neoshell/internal/capability"
 )
 
-// invokeAction is the single entry point into the shared capability registry.
-// Every caller goes through it — the launcher over the WebSocket, and the agent
-// backend over HTTP — so a capability behaves identically whichever asked, and
+// invokeAction is the single entry point into the shared capability registry, so
 // the plugins.providers gate is enforced in exactly one place.
 func (s *Server) invokeAction(ctx context.Context, name string, arguments map[string]any) (capability.Result, error) {
 	if name == "" {
@@ -25,14 +23,12 @@ func (s *Server) invokeAction(ctx context.Context, name string, arguments map[st
 	return s.registry.Invoke(ctx, name, arguments)
 }
 
-// capabilityEnabled gates a capability by the same plugins.providers toggle that
-// controls its launcher provider, so disabling a feature withdraws it from the
-// agent's tool list too.
+// capabilityEnabled gates a capability by its plugins.providers toggle.
 func (s *Server) capabilityEnabled(capabilityID string) bool {
 	return s.cfgBool("plugins.providers."+capabilityID, true)
 }
 
-// handleCommandInvoke runs a launcher command against the shared registry and
+// handleCommandInvoke runs a named action against the shared registry and
 // replies to the requesting client with the outcome.
 func (s *Server) handleCommandInvoke(c *Client, msg InMessage) {
 	arguments := map[string]any{}

@@ -80,58 +80,13 @@ func Defaults() map[string]any {
 			"autoHide": true,
 		},
 		// Feature toggles, live from the settings menu. One key governs a feature
-		// everywhere it appears: its command-palette provider, its desktop
-		// widgets, and the actions the agent can call. Absent keys default to
-		// enabled in the frontend registry.
+		// everywhere it appears: its desktop widgets and its registered actions.
+		// Absent keys default to enabled in the frontend registry.
 		"plugins": map[string]any{
 			"providers": map[string]any{
-				"apps": true, "files": true, "calculator": true, "color": true,
-				"windows": true, "system": true, "web": true, "emoji": true,
-				"ssh": true, "process": true, "clipboard": true, "timer": true,
-				"voice": true,
-				// Capabilities the agent drives the desktop through.
-				"widgets": true, "overlay": true, "agent": true,
+				"apps": true, "windows": true, "timer": true,
+				"widgets": true, "overlay": true,
 			},
-		},
-		// The nib agent backend. The core spawns it at startup and keeps one
-		// session alive for the life of the shell; sessionId is written back so
-		// a restart resumes the same conversation rather than starting a
-		// stranger. Empty provider/model/thinking let nib apply its own
-		// defaults, which is what you want unless you have a reason otherwise.
-		"nib": map[string]any{
-			"workspace": "$HOME",
-			"provider":  "",
-			"model":     "",
-			"thinking":  "",
-			"sessionId": "",
-		},
-		// Voice: STT sidecar → the shared agent session → TTS sidecar. The
-		// pipeline is a separate daemon (neoshell-voice) because it holds the
-		// microphone and two Python model processes; `enabled` is the toggle
-		// the core and the `voice:toggle` keybind drive, and it persists so the
-		// choice survives a restart. mode is how listening is triggered:
-		// "always" (always-on, gated by an addressivity classifier), "wake"
-		// (wake word), or "ptt" (push-to-talk keybind). plugins.providers.voice
-		// controls whether the bar shows the voice indicator.
-		"voice": map[string]any{
-			"enabled":  false,
-			"device":   "cpu",
-			"language": "en",
-			"sttModel": "small",
-			"mode":     "ptt",
-			"vad": map[string]any{
-				"threshold":   0.5,
-				"silenceMs":   700,
-				"minSpeechMs": 200,
-			},
-			"wakeWord":    "neo",
-			"bargeIn":     true,
-			"ttsVoice":    "default",
-			"ttsRefAudio": "tim-knauer.wav",
-		},
-		// Web search: %s is replaced with the URL-encoded query.
-		"web": map[string]any{
-			"engine": "https://www.google.com/search?q=%s",
 		},
 	}
 }
