@@ -121,6 +121,9 @@ const char* surface_output_name(Surface*);
 
 // Present a WPE dmabuf; on_release runs when the compositor releases the buffer.
 void surface_submit(Surface*, WPEBufferDMABuf*, std::function<void()> on_release);
+// Attach a fully transparent shm buffer of the configured size, mapping the
+// surface without web content — contentless exclusive-zone reservations.
+void surface_attach_blank(Surface*);
 // Called once per frame callback (vblank) so the host can tick WPE.
 void surface_set_vblank_cb(Surface*, std::function<void()>);
 // Called when the layer surface is configured (and on resize) with the actual
