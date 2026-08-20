@@ -1106,3 +1106,24 @@ void surface_submit(Surface* s, WPEBufferDMABuf* dma, std::function<void()> on_r
     wl_surface_commit(s->wl);
     wl_display_flush(c->display);
 }
+
+void surface_attach_blank(Surface* s) {
+    WaylandConn* c = s->conn;
+    int w = s->width, h = s->height;
+    if (w <= 0 || h <= 0 || !c->shm) return;
+    int stride = w * 4;
+    int size = stride * h;
+    int fd = memfd_create("neoshell-blank", MFD_CLOEXEC);
+    if (fd < 0) { g_printerr("[present] memfd_create failed for blank buffer\n"); return; }
+    if (ftruncate(fd, size) < 0) { close(fd); return; }   // memfd is zero-filled = transparent
+    wl_shm_pool* pool = wl_shm_create_pool(c->shm, fd, size);
+    wl_buffer* buffer = wl_shm_pool_create_buffer(pool, 0, w, h, stride, WL_SHM_FORMAT_ARGB8888);
+    wl_shm_pool_destroy(pool);
+    close(fd);
+    auto* release = new std::function<void()>([]() {});
+    wl_buffer_add_listener(buffer, &buffer_listener, release);   // destroys the buffer on release
+    wl_surface_attach(s->wl, buffer, 0, 0);
+    wl_surface_damage_buffer(s->wl, 0, 0, w, h);
+    wl_surface_commit(s->wl);
+    wl_display_flush(c->display);
+}

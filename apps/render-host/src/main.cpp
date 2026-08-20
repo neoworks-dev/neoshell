@@ -376,8 +376,28 @@ void on_render(WPEView* view, WPEBuffer* buffer, const WPERectangle*, guint) {
 }
 
 // ---- control handler ----
+// A create with an empty url is a contentless reservation surface: it exists
+// only to hold an exclusive zone (layer webviews are full-screen and reserve
+// nothing themselves). No webview, no input; a transparent shm buffer maps it.
+void handle_create_reservation(const SurfaceSpec& spec) {
+    auto* s = new Surf();
+    s->role = spec.role;
+    s->surface = surface_create(g_host.conn, spec);
+    surface_set_region(s->surface, {});   // fully click-through
+    surface_set_configure_cb(s->surface, [s](int, int) {
+        surface_attach_blank(s->surface);
+        if (!s->ready_emitted) {
+            control_emit_ready(g_host.control, s->role);
+            s->ready_emitted = true;
+        }
+    });
+    g_host.by_role[spec.role] = s;
+    g_printerr("[neoshell-wpe] surface.create role=%s (reservation)\n", spec.role.c_str());
+}
+
 void handle_create(const SurfaceSpec& spec, const std::string& url) {
     if (g_host.by_role.count(spec.role)) return;
+    if (url.empty()) { handle_create_reservation(spec); return; }
     auto* s = new Surf();
     s->role = spec.role;
     s->url = url;
