@@ -2,39 +2,42 @@ import { renderTree } from './renderer.js'
 import type { ViewNode } from './renderer.js'
 import { SurfaceRuntime } from './runtime.js'
 
-// bootSurface is the entry the host's /surface page runs: read the surface id
-// from the URL, start the runtime against the serving host's bus, and keep the
-// surface's own top-level node rendered into <body>. Re-renders when the tree
-// changes and (debounced) when view registrations arrive — view modules mount
-// asynchronously after the tree is already known.
+// bootSurface is the entry the host's /surface page runs. One webview exists
+// per layer-shell layer, so ?surface= names a layer ("top", "background", …).
+// The boot renders every top-level tree node assigned to that layer into its
+// own positioned wrapper (the node's args carry anchors/size), and reports the
+// wrappers' bounding rects as the surface's input region — everything outside
+// them stays click-through.
 
 interface TopLevelNode extends ViewNode {
   id?: string
+  args?: Record<string, unknown>
 }
 
 export async function bootSurface(): Promise<SurfaceRuntime> {
   const params = new URLSearchParams(window.location.search)
-  const surfaceId = params.get('surface')
-  if (surfaceId === null || surfaceId === '') {
+  const layer = params.get('surface')
+  if (layer === null || layer === '') {
     throw new Error('surface: missing ?surface= parameter')
   }
   const runtime = new SurfaceRuntime({
-    surfaceId,
+    surfaceId: layer,
     busUrl: `ws://${window.location.host}/ws`,
   })
   await runtime.start()
-  followViewTree(runtime, surfaceId, document.body)
+  followViewTree(runtime, layer, document.body)
   return runtime
 }
 
-function followViewTree(runtime: SurfaceRuntime, surfaceId: string, container: HTMLElement): void {
+function followViewTree(runtime: SurfaceRuntime, layer: string, container: HTMLElement): void {
+  const reporter = new InputRectReporter(runtime, layer)
   let disposeRendered = () => {}
-  let currentNode: ViewNode | null = null
+  let currentNodes: TopLevelNode[] = []
   let rerenderTimer: ReturnType<typeof setTimeout> | null = null
 
   const rerender = () => {
     disposeRendered()
-    disposeRendered = renderCurrent(container, currentNode, runtime)
+    disposeRendered = renderLayerNodes(container, currentNodes, runtime, reporter)
   }
   const scheduleRerender = () => {
     if (rerenderTimer !== null) {
@@ -47,34 +50,189 @@ function followViewTree(runtime: SurfaceRuntime, surfaceId: string, container: H
   }
 
   runtime.bus.subscribe('views', (message) => {
-    currentNode = findSurfaceNode(message.data, surfaceId)
+    currentNodes = nodesForLayer(message.data, layer)
     rerender()
   })
   runtime.views.onChange(scheduleRerender)
 }
 
-function renderCurrent(
+function renderLayerNodes(
   container: HTMLElement,
-  node: ViewNode | null,
+  nodes: TopLevelNode[],
   runtime: SurfaceRuntime,
+  reporter: InputRectReporter,
 ): () => void {
-  if (node === null) {
-    return () => {}
+  const disposers: Array<() => void> = []
+  const wrappers: HTMLElement[] = []
+  for (const node of nodes) {
+    const wrapper = makeWrapper(node)
+    container.appendChild(wrapper)
+    const disposeTree = renderTree(wrapper, [node], runtime.views)
+    wrappers.push(wrapper)
+    disposers.push(() => {
+      disposeTree()
+      wrapper.remove()
+    })
   }
-  return renderTree(container, [node], runtime.views)
-}
-
-// findSurfaceNode picks this surface's top-level entry out of the published
-// tree. The entry is both the webview (its args hold the surface spec, which
-// only the host reads) and the root view rendered here.
-export function findSurfaceNode(tree: unknown, surfaceId: string): ViewNode | null {
-  if (!Array.isArray(tree)) {
-    return null
-  }
-  for (const candidate of tree as TopLevelNode[]) {
-    if (candidate !== null && typeof candidate === 'object' && candidate.id === surfaceId) {
-      return candidate
+  reporter.track(wrappers)
+  return () => {
+    for (const dispose of disposers.reverse()) {
+      dispose()
     }
   }
-  return null
+}
+
+function makeWrapper(node: TopLevelNode): HTMLElement {
+  const wrapper = document.createElement('div')
+  if (node.id !== undefined) {
+    wrapper.dataset.surfaceNode = node.id
+  }
+  positionWrapper(wrapper, argsOf(node))
+  return wrapper
+}
+
+// positionWrapper turns a top-level node's layer-shell-style args (anchors,
+// width, height) into fixed CSS positioning inside the full-screen webview.
+// display:grid stretches the rendered view to fill the wrapper.
+export function positionWrapper(element: HTMLElement, args: Record<string, unknown>): void {
+  const anchors = anchorsOf(args)
+  element.style.position = 'fixed'
+  element.style.display = 'grid'
+  for (const edge of ['top', 'bottom', 'left', 'right']) {
+    if (anchors.has(edge)) {
+      element.style.setProperty(edge, '0')
+    }
+  }
+  applySize(element, args, anchors)
+}
+
+function applySize(element: HTMLElement, args: Record<string, unknown>, anchors: Set<string>): void {
+  const width = args.width
+  const height = args.height
+  if (typeof height === 'number' && !(anchors.has('top') && anchors.has('bottom'))) {
+    element.style.height = `${height}px`
+  }
+  if (typeof width === 'number' && !(anchors.has('left') && anchors.has('right'))) {
+    element.style.width = `${width}px`
+  }
+}
+
+function anchorsOf(args: Record<string, unknown>): Set<string> {
+  if (!Array.isArray(args.anchors)) {
+    return new Set(['top', 'bottom', 'left', 'right'])
+  }
+  return new Set(args.anchors.filter((value) => typeof value === 'string'))
+}
+
+// nodesForLayer picks this webview's top-level entries out of the published
+// tree: every node whose args.layer matches (missing layer defaults to "top").
+export function nodesForLayer(tree: unknown, layer: string): TopLevelNode[] {
+  if (!Array.isArray(tree)) {
+    return []
+  }
+  const nodes: TopLevelNode[] = []
+  for (const candidate of tree as TopLevelNode[]) {
+    if (isNode(candidate) && layerOf(candidate) === layer) {
+      nodes.push(candidate)
+    }
+  }
+  return nodes
+}
+
+function isNode(value: unknown): value is TopLevelNode {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+  return typeof (value as TopLevelNode).type === 'string'
+}
+
+export function layerOf(node: TopLevelNode): string {
+  const layer = argsOf(node).layer
+  if (typeof layer === 'string' && layer !== '') {
+    return layer
+  }
+  return 'top'
+}
+
+function argsOf(node: TopLevelNode): Record<string, unknown> {
+  if (node.args === undefined) {
+    return {}
+  }
+  return node.args
+}
+
+interface InputRect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+// InputRectReporter publishes the wrappers' bounding boxes on
+// surface.<layer>.input whenever they change; the host forwards them to the
+// render host as the surface's wayland input region.
+class InputRectReporter {
+  private readonly runtime: SurfaceRuntime
+  private readonly layer: string
+  private wrappers: HTMLElement[] = []
+  private observer: ResizeObserver | null = null
+  private lastPayload = ''
+  private pending = false
+
+  constructor(runtime: SurfaceRuntime, layer: string) {
+    this.runtime = runtime
+    this.layer = layer
+    window.addEventListener('resize', () => {
+      this.schedule()
+    })
+    if (typeof ResizeObserver !== 'undefined') {
+      this.observer = new ResizeObserver(() => {
+        this.schedule()
+      })
+    }
+  }
+
+  track(wrappers: HTMLElement[]): void {
+    this.wrappers = wrappers
+    this.observeWrappers()
+    this.schedule()
+  }
+
+  private observeWrappers(): void {
+    if (this.observer === null) {
+      return
+    }
+    this.observer.disconnect()
+    for (const wrapper of this.wrappers) {
+      this.observer.observe(wrapper)
+    }
+  }
+
+  private schedule(): void {
+    if (this.pending) {
+      return
+    }
+    this.pending = true
+    setTimeout(() => {
+      this.pending = false
+      this.report()
+    }, 0)
+  }
+
+  private report(): void {
+    const rects = this.wrappers.filter((wrapper) => wrapper.isConnected).map(rectOf)
+    const payload = JSON.stringify(rects)
+    if (payload === this.lastPayload) {
+      return
+    }
+    this.lastPayload = payload
+    this.runtime.bus.publish(`surface.${this.layer}.input`, { rects })
+  }
+}
+
+function rectOf(element: HTMLElement): InputRect {
+  const box = element.getBoundingClientRect()
+  const x = Math.floor(box.left)
+  const y = Math.floor(box.top)
+  return { x, y, w: Math.ceil(box.right) - x, h: Math.ceil(box.bottom) - y }
 }

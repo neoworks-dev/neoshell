@@ -1,22 +1,23 @@
 import { join } from 'node:path'
 import type { Context, Plugin } from '@neoshell/kernel'
-import type { Bus } from '../bus.js'
+import type { Bus, BusMessage } from '../bus.js'
 import type { HttpService } from './http.js'
 import type { SurfacesService, RemoteView } from './surfaces.js'
 
 // viewTreePlugin turns the config view tree into a running desktop:
 //
-//  - each top-level entry is a webview: its args carry the layer-shell spec,
-//    passed to the render host (when running); the entry itself is the root
-//    view the surface renders
+//  - one webview per layer-shell layer that any top-level entry uses; layers
+//    nothing uses get no surface (and are destroyed when they empty out)
+//  - a top-level entry's args position it inside its layer webview (the
+//    surface runtime renders it into an anchored wrapper) and, when it
+//    declares an exclusive zone, spawn a contentless reservation surface —
+//    the layer webview itself is full-screen and reserves nothing
+//  - each layer webview starts fully click-through; the surface runtime
+//    reports the occupied rects on surface.<layer>.input and the host
+//    forwards them as the wayland input region
 //  - the resolved tree is the retained "views" topic surfaces render from
-//  - every extension whose view types appear in a surface's subtree gets its
-//    views module mounted into that surface (remote fibers)
-//
-// Exclusive zones currently ride on their own top-level entries (bar and dock
-// as separate webviews): the render host cannot yet create contentless
-// reservation surfaces, so collapsing the top layer into one webview waits on
-// that. The tree keeps the cost visible either way.
+//  - every extension whose view types appear in a layer's subtrees gets its
+//    views module mounted into that layer's webview (remote fibers)
 
 export interface ViewTreeConfig {
   extensionsDir: string
@@ -29,12 +30,23 @@ interface TreeNode {
   children?: TreeNode[]
 }
 
+interface InputRect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
 // RenderHostLike is the optional renderhost service — absent when the render
 // host is not owned by this process (tests, migration).
 interface RenderHostLike {
   createSurface(spec: Record<string, unknown>): void
   destroy(role: string): void
+  setInputRegion(role: string, rects: InputRect[]): void
 }
+
+const LAYERS = new Set(['background', 'bottom', 'top', 'overlay'])
+const KEYBOARD_RANK: Record<string, number> = { none: 0, ondemand: 1, exclusive: 2 }
 
 // The neoworks default profile: bar, dock, wallpaper. Ordinary config — a
 // user's "views" key replaces it wholesale.
@@ -51,7 +63,11 @@ const DEFAULT_TREE: TreeNode[] = [
       exclusiveSize: 36,
       blur: true,
     },
-    children: [{ type: 'neoshell.clock' }, { type: 'neoshell.battery' }],
+    children: [
+      { type: 'neoshell.volume' },
+      { type: 'neoshell.battery' },
+      { type: 'neoshell.clock' },
+    ],
   },
   {
     id: 'dock',
@@ -60,9 +76,9 @@ const DEFAULT_TREE: TreeNode[] = [
       layer: 'top',
       anchors: ['bottom', 'left', 'right'],
       keyboard: 'none',
-      height: 70,
+      height: 76,
       exclusiveEdge: 'bottom',
-      exclusiveSize: 70,
+      exclusiveSize: 76,
       blur: true,
     },
   },
@@ -86,15 +102,30 @@ export const viewTreePlugin: Plugin<ViewTreeConfig> = {
     const surfaces = context.require<SurfacesService>('surfaces')
     const manager = new ViewTreeManager(context, bus, surfaces, http.port, config.extensionsDir)
     context.effect(() => {
-      const unsubscribe = bus.subscribe('config', (message) => {
+      const unsubscribeConfig = bus.subscribe('config', (message) => {
         manager.applyFromSnapshot(message.data)
       })
+      const unsubscribeInput = bus.subscribe('surface.*', (message) => {
+        manager.handleSurfaceMessage(message)
+      })
       return async () => {
-        unsubscribe()
+        unsubscribeConfig()
+        unsubscribeInput()
         await manager.teardown()
       }
     })
   },
+}
+
+// SurfacePlan is one render-host surface the current tree wants: either a
+// layer webview or a contentless exclusive-zone reservation. The signature
+// detects spec changes that require a destroy + recreate.
+interface SurfacePlan {
+  role: string
+  signature: string
+  spec: Record<string, unknown>
+  isWebview: boolean
+  blur: boolean
 }
 
 class ViewTreeManager {
@@ -103,7 +134,7 @@ class ViewTreeManager {
   private readonly surfaces: SurfacesService
   private readonly port: number
   private readonly extensionsDir: string
-  private readonly createdSurfaces = new Set<string>()
+  private readonly createdSurfaces = new Map<string, string>()
   private readonly mountedViews = new Map<string, RemoteView>()
   private clearRetained: () => void = () => {}
   private lastSignature = ''
@@ -132,13 +163,25 @@ class ViewTreeManager {
     return this.queue
   }
 
+  handleSurfaceMessage(message: BusMessage): void {
+    const layer = inputTopicLayer(message.type)
+    if (layer === null || !this.createdSurfaces.has(layer)) {
+      return
+    }
+    const renderHost = this.context.get<RenderHostLike>('renderhost')
+    if (renderHost === undefined) {
+      return
+    }
+    renderHost.setInputRegion(layer, inputRectsOf(message.data))
+  }
+
   async teardown(): Promise<void> {
     await this.queue
     for (const [, view] of this.mountedViews) {
       await view.dispose()
     }
     this.mountedViews.clear()
-    this.destroyRemovedSurfaces(new Set())
+    this.syncSurfaces(new Map())
     this.clearRetained()
   }
 
@@ -152,68 +195,59 @@ class ViewTreeManager {
     this.clearRetained()
     this.clearRetained = this.bus.retain('views', tree)
 
-    const desiredSurfaces = new Set<string>()
-    for (const node of tree) {
-      this.ensureSurface(node, desiredSurfaces)
-    }
-    this.destroyRemovedSurfaces(desiredSurfaces)
+    this.syncSurfaces(planSurfaces(tree, this.port))
     await this.syncViewMounts(tree)
   }
 
-  private ensureSurface(node: TreeNode, desired: Set<string>): void {
-    if (node.id === undefined || node.id === '') {
-      console.error(`view-tree: top-level node "${node.type}" has no id, skipped`)
-      return
+  private syncSurfaces(desired: Map<string, SurfacePlan>): void {
+    for (const [role, signature] of [...this.createdSurfaces]) {
+      this.destroyIfStale(role, signature, desired)
     }
-    desired.add(node.id)
-    if (this.createdSurfaces.has(node.id)) {
-      return
+    for (const plan of desired.values()) {
+      this.createIfMissing(plan)
     }
-    this.createdSurfaces.add(node.id)
-    this.createWebview(node)
   }
 
-  private createWebview(node: TreeNode): void {
+  private destroyIfStale(role: string, signature: string, desired: Map<string, SurfacePlan>): void {
+    const plan = desired.get(role)
+    if (plan !== undefined && plan.signature === signature) {
+      return
+    }
+    this.createdSurfaces.delete(role)
+    const renderHost = this.context.get<RenderHostLike>('renderhost')
+    if (renderHost !== undefined) {
+      renderHost.destroy(role)
+    }
+  }
+
+  private createIfMissing(plan: SurfacePlan): void {
+    if (this.createdSurfaces.has(plan.role)) {
+      return
+    }
+    this.createdSurfaces.set(plan.role, plan.signature)
     const renderHost = this.context.get<RenderHostLike>('renderhost')
     if (renderHost === undefined) {
       return
     }
-    const args = argsOf(node)
-    renderHost.createSurface({
-      role: node.id,
-      url: `http://127.0.0.1:${this.port}/surface?surface=${node.id}`,
-      layer: args.layer,
-      anchors: args.anchors,
-      keyboard: args.keyboard,
-      width: args.width,
-      height: args.height,
-      exclusiveEdge: args.exclusiveEdge,
-      exclusiveSize: args.exclusiveSize,
-    })
-    if (args.blur === true) {
-      this.bus.publish('hypr:keyword', { name: 'layerrule', value: `blur,neoshell.${node.id}` })
-      this.bus.publish('hypr:keyword', {
-        name: 'layerrule',
-        value: `ignorealpha 0.1,neoshell.${node.id}`,
-      })
+    renderHost.createSurface(plan.spec)
+    if (plan.isWebview) {
+      renderHost.setInputRegion(plan.role, [])
+    }
+    if (plan.blur) {
+      this.applyBlurRules(plan.role)
     }
   }
 
-  private destroyRemovedSurfaces(desired: Set<string>): void {
-    for (const surfaceId of [...this.createdSurfaces]) {
-      if (desired.has(surfaceId)) {
-        continue
-      }
-      this.createdSurfaces.delete(surfaceId)
-      const renderHost = this.context.get<RenderHostLike>('renderhost')
-      if (renderHost !== undefined) {
-        renderHost.destroy(surfaceId)
-      }
-    }
+  private applyBlurRules(role: string): void {
+    this.bus.publish('hypr:keyword', { name: 'layerrule', value: `blur,neoshell.${role}` })
+    this.bus.publish('hypr:keyword', {
+      name: 'layerrule',
+      value: `ignorealpha 0.1,neoshell.${role}`,
+    })
   }
 
   // syncViewMounts mounts each referenced extension's views module into each
-  // surface that uses it, keyed surface:extension, and disposes mounts the
+  // layer webview that uses it, keyed layer:extension, and disposes mounts the
   // tree no longer needs.
   private async syncViewMounts(tree: TreeNode[]): Promise<void> {
     const desired = new Map<string, { surfaceId: string; url: string }>()
@@ -232,15 +266,13 @@ class ViewTreeManager {
     node: TreeNode,
     desired: Map<string, { surfaceId: string; url: string }>,
   ): Promise<void> {
-    if (node.id === undefined || node.id === '') {
-      return
-    }
+    const layer = layerOf(node)
     for (const extensionId of extensionIdsIn(node)) {
       const url = await this.viewsUrlOf(extensionId)
       if (url === null) {
         continue
       }
-      desired.set(`${node.id}:${extensionId}`, { surfaceId: node.id, url })
+      desired.set(`${layer}:${extensionId}`, { surfaceId: layer, url })
     }
   }
 
@@ -277,6 +309,147 @@ class ViewTreeManager {
     const url = `http://127.0.0.1:${this.port}${mount.url}`
     this.mountedViews.set(key, this.surfaces.mount(mount.surfaceId, { url }))
   }
+}
+
+// planSurfaces derives the desired render-host surfaces from the tree: one
+// full-screen webview per used layer plus one reservation surface per
+// exclusive-zone node.
+function planSurfaces(tree: TreeNode[], port: number): Map<string, SurfacePlan> {
+  const plans = new Map<string, SurfacePlan>()
+  for (const [layer, nodes] of groupByLayer(tree)) {
+    addWebviewPlan(plans, layer, nodes, port)
+    for (const node of nodes) {
+      addReservationPlan(plans, layer, node)
+    }
+  }
+  return plans
+}
+
+function addWebviewPlan(
+  plans: Map<string, SurfacePlan>,
+  layer: string,
+  nodes: TreeNode[],
+  port: number,
+): void {
+  const spec: Record<string, unknown> = {
+    role: layer,
+    url: `http://127.0.0.1:${port}/surface?surface=${layer}`,
+    layer,
+    anchors: ['top', 'bottom', 'left', 'right'],
+    keyboard: maxKeyboard(nodes),
+  }
+  plans.set(layer, {
+    role: layer,
+    signature: JSON.stringify(spec),
+    spec,
+    isWebview: true,
+    blur: nodes.some((node) => argsOf(node).blur === true),
+  })
+}
+
+function addReservationPlan(plans: Map<string, SurfacePlan>, layer: string, node: TreeNode): void {
+  const args = argsOf(node)
+  const edge = args.exclusiveEdge
+  const size = args.exclusiveSize
+  if (typeof edge !== 'string' || typeof size !== 'number' || size <= 0) {
+    return
+  }
+  if (node.id === undefined || node.id === '') {
+    console.error(`view-tree: exclusive-zone node "${node.type}" has no id, zone skipped`)
+    return
+  }
+  const role = `reserve.${node.id}`
+  const spec: Record<string, unknown> = {
+    role,
+    url: '',
+    layer,
+    anchors: reservationAnchors(edge),
+    keyboard: 'none',
+    exclusiveEdge: edge,
+    exclusiveSize: size,
+  }
+  plans.set(role, {
+    role,
+    signature: JSON.stringify(spec),
+    spec,
+    isWebview: false,
+    blur: false,
+  })
+}
+
+function reservationAnchors(edge: string): string[] {
+  if (edge === 'top' || edge === 'bottom') {
+    return [edge, 'left', 'right']
+  }
+  return [edge, 'top', 'bottom']
+}
+
+function groupByLayer(tree: TreeNode[]): Map<string, TreeNode[]> {
+  const groups = new Map<string, TreeNode[]>()
+  for (const node of tree) {
+    const layer = layerOf(node)
+    const nodes = groups.get(layer)
+    if (nodes === undefined) {
+      groups.set(layer, [node])
+      continue
+    }
+    nodes.push(node)
+  }
+  return groups
+}
+
+function layerOf(node: TreeNode): string {
+  const layer = argsOf(node).layer
+  if (typeof layer === 'string' && LAYERS.has(layer)) {
+    return layer
+  }
+  return 'top'
+}
+
+function maxKeyboard(nodes: TreeNode[]): string {
+  let best = 'none'
+  for (const node of nodes) {
+    const keyboard = argsOf(node).keyboard
+    if (typeof keyboard !== 'string' || KEYBOARD_RANK[keyboard] === undefined) {
+      continue
+    }
+    if (KEYBOARD_RANK[keyboard] > KEYBOARD_RANK[best]) {
+      best = keyboard
+    }
+  }
+  return best
+}
+
+function inputTopicLayer(topic: string): string | null {
+  const match = /^surface\.([^.]+)\.input$/.exec(topic)
+  if (match === null) {
+    return null
+  }
+  return match[1]
+}
+
+function inputRectsOf(data: unknown): InputRect[] {
+  if (typeof data !== 'object' || data === null) {
+    return []
+  }
+  const rects = (data as { rects?: unknown }).rects
+  if (!Array.isArray(rects)) {
+    return []
+  }
+  return rects.filter(isInputRect)
+}
+
+function isInputRect(value: unknown): value is InputRect {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+  const rect = value as InputRect
+  return (
+    typeof rect.x === 'number' &&
+    typeof rect.y === 'number' &&
+    typeof rect.w === 'number' &&
+    typeof rect.h === 'number'
+  )
 }
 
 // extensionIdsIn collects the namespace prefixes ("vpn" from "vpn.indicator")
