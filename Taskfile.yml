@@ -48,6 +48,12 @@ tasks:
     cmds:
       - go build -o neoshell-notifyd .
 
+  views:build:
+    desc: Build the neoshell default views (Svelte + Tailwind → dist)
+    dir: apps/extensions
+    cmds:
+      - bun run build:views
+
   bg:build:
     desc: Build the neoshell-bg wallpaper daemon (release)
     dir: apps/bg
@@ -61,12 +67,12 @@ tasks:
       - cargo build --release
 
   build:
-    desc: Build the render host, daemons, and the notifications bridge
-    deps: [render:build, bg:build, notifyd:build]
+    desc: Build the render host, daemons, the notifications bridge, and the views
+    deps: [render:build, bg:build, notifyd:build, views:build]
 
   run:
     desc: Run the host (spawns the render host, mounts extensions and views)
-    deps: [render:build, notifyd:build]
+    deps: [render:build, notifyd:build, views:build]
     dir: apps/host
     cmds:
       - bun src/main.ts
@@ -86,12 +92,13 @@ tasks:
       - bun src/emit.ts {{.CLI_ARGS}}
 
   test:
-    desc: Run every test suite (kernel, host, surface, extensions)
+    desc: Run every test suite (kernel, host, surface, extensions, views check)
     cmds:
       - cd packages/kernel && bun test
       - cd apps/host && bun test
       - cd packages/surface && bun test
       - cd apps/extensions && bun test
+      - cd apps/extensions && bun run check:views
 
   bg:
     desc: Run the wallpaper daemon (optionally WALLPAPER=path to set on start)
