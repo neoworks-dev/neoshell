@@ -1,3 +1,0 @@
-packages:
-  - path: "github.com/neoworks/neoshell/internal/hyprland"
-    output_path: "../neoshell-ui/src/lib/sdk/types.ts"
