@@ -3,6 +3,7 @@ import type { Server } from 'bun'
 import type { Plugin } from '@neoshell/kernel'
 import type { Bus } from '../bus.js'
 import { WireConnection } from '../wire.js'
+import type { AssetsService } from './assets.js'
 
 export interface HttpConfig {
   // Port to bind on 127.0.0.1; 0 picks a free one (the bound port is exposed
@@ -29,7 +30,12 @@ export const httpPlugin: Plugin<HttpConfig> = {
   inject: ['bus'],
   apply(context, config) {
     const bus = context.require<Bus>('bus')
-    const server = serveHttp(bus, config)
+    // Lazy lookups: these services may mount after (or without) this plugin.
+    const lookups: ServiceLookups = {
+      assets: () => context.get<AssetsService>('assets'),
+      pages: () => context.get<PageService>('pages'),
+    }
+    const server = serveHttp(bus, config, lookups)
     context.effect(() => () => server.stop(true))
     if (server.port === undefined) {
       throw new Error('http: server bound without a TCP port')
@@ -38,12 +44,22 @@ export const httpPlugin: Plugin<HttpConfig> = {
   },
 }
 
-function serveHttp(bus: Bus, config: HttpConfig): Server<WsData> {
+// PageService lets another plugin (the surface page) contribute whole routes.
+export interface PageService {
+  handle(url: URL): Promise<Response> | Response | null
+}
+
+interface ServiceLookups {
+  assets: () => AssetsService | undefined
+  pages: () => PageService | undefined
+}
+
+function serveHttp(bus: Bus, config: HttpConfig, lookups: ServiceLookups): Server<WsData> {
   return Bun.serve<WsData>({
     hostname: '127.0.0.1',
     port: config.port,
     fetch(request, server) {
-      return routeRequest(request, server, config)
+      return routeRequest(request, server, config, lookups)
     },
     websocket: {
       open(ws) {
@@ -65,6 +81,7 @@ function routeRequest(
   request: Request,
   server: Server<WsData>,
   config: HttpConfig,
+  lookups: ServiceLookups,
 ): Response | Promise<Response> | undefined {
   const url = new URL(request.url)
   if (url.pathname === '/ws') {
@@ -73,7 +90,29 @@ function routeRequest(
   if (url.pathname.startsWith('/plugins/')) {
     return servePluginFile(url.pathname, config.pluginsDir)
   }
+  const delegated = delegateToServices(url, lookups)
+  if (delegated !== null) {
+    return delegated
+  }
   return new Response('not found', { status: 404 })
+}
+
+function delegateToServices(
+  url: URL,
+  lookups: ServiceLookups,
+): Response | Promise<Response> | null {
+  const pages = lookups.pages()
+  if (pages !== undefined) {
+    const response = pages.handle(url)
+    if (response !== null) {
+      return response
+    }
+  }
+  const assets = lookups.assets()
+  if (assets !== undefined) {
+    return assets.handle(url)
+  }
+  return null
 }
 
 function upgradeWebSocket(request: Request, server: Server<WsData>): Response | undefined {
