@@ -3,6 +3,8 @@
 *.test
 *.out
 /apps/shell/neoshell
+/apps/extensions/notifications/daemon/neoshell-notifyd
+/apps/extensions/systray/daemon/neoshell-trayd
 /apps/shell/neoshell-search
 /neoshell
 

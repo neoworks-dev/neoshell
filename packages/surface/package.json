@@ -11,7 +11,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@neoshell/kernel": "file:../kernel"
+    "@neoworks/extension-system": "link:@neoworks/extension-system"
   },
   "peerDependencies": {
     "typescript": "^5"

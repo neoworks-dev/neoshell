@@ -1,3 +1,5 @@
+import type { ChildSlot } from './renderer.js'
+
 // ViewRegistry is the surface's "ui" service: view plugins register factories
 // under namespaced type names ("neoshell.topbar", "vpn.indicator"), and the
 // renderer resolves view-tree nodes against it. Registration returns a
@@ -8,9 +10,15 @@ export interface ViewInstance {
   // Views with children render them into this element; absent means children
   // render directly into the view's own element.
   childrenHost?: HTMLElement
+  // Views that place their children themselves supply the element each child
+  // renders into; absent means children are appended in flow order.
+  childSlot?: ChildSlot
 }
 
-export type ViewFactory = (element: HTMLElement, args: unknown) => ViewInstance
+// id is the view tree node's id. A view that persists anything per instance —
+// a widget's own settings, as against the extension's — needs it to address
+// its own config; views that hold no instance state ignore it.
+export type ViewFactory = (element: HTMLElement, args: unknown, id: string) => ViewInstance
 
 export class ViewRegistry {
   private readonly views = new Map<string, ViewFactory>()

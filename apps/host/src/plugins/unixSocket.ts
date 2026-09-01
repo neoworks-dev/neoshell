@@ -1,6 +1,7 @@
 import { unlinkSync } from 'node:fs'
 import type { Socket } from 'bun'
-import type { Plugin } from '@neoshell/kernel'
+import type { Plugin } from '@neoworks/extension-system'
+import { requireService } from '../services.js'
 import type { Bus } from '../bus.js'
 import { WireConnection } from '../wire.js'
 
@@ -10,11 +11,11 @@ export interface UnixSocketConfig {
 
 // unixSocketPlugin exposes the bus to local processes — extension daemons and
 // the emit CLI — as NDJSON over a unix socket.
-export const unixSocketPlugin: Plugin<UnixSocketConfig> = {
+export const unixSocketPlugin: Plugin.Object<UnixSocketConfig> = {
   name: 'unix-socket',
   inject: ['bus'],
   apply(context, config) {
-    const bus = context.require<Bus>('bus')
+    const bus = requireService<Bus>(context, 'bus')
     context.effect(() => listenUnix(bus, config.socketPath))
   },
 }

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Kernel } from '@neoshell/kernel'
+import { Context } from '@neoworks/extension-system'
 import appsExtension from '../apps/backend.js'
 import type { App } from '../apps/backend.js'
 import { busProvider, FakeBus, waitFor } from './helpers.js'
@@ -48,7 +48,7 @@ describe('apps extension', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'neoshell-apps-test-'))
   const userDir = join(tempDir, 'user')
   const systemDir = join(tempDir, 'system')
-  const kernel = new Kernel()
+  const root = new Context()
   const bus = new FakeBus()
 
   beforeAll(async () => {
@@ -60,13 +60,12 @@ describe('apps extension', () => {
     writeFileSync(join(systemDir, 'sneaky.desktop'), HIDDEN)
     writeFileSync(join(systemDir, 'service.desktop'), SERVICE)
 
-    kernel.mount(busProvider(bus))
-    const fiber = kernel.mount(appsExtension, { searchDirs: [userDir, systemDir] })
-    await fiber.settle()
+    await root.plugin(busProvider(bus))
+    await root.plugin(appsExtension, { searchDirs: [userDir, systemDir] })
   })
 
   afterAll(async () => {
-    await kernel.dispose()
+    await root.fiber.dispose()
     rmSync(tempDir, { recursive: true, force: true })
   })
 

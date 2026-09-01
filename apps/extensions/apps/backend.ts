@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Plugin } from '@neoshell/kernel'
+import type { Plugin } from '@neoworks/extension-system'
+import { requireService } from '../lib/services.js'
 import { registerFunction } from '../lib/bus.js'
 import type { BusService } from '../lib/bus.js'
 
@@ -19,17 +20,18 @@ export interface App {
   icon: string
   wmClass: string
   categories: string[]
+  mimeTypes: string[]
 }
 
 interface AppsConfig {
   searchDirs?: string[]
 }
 
-const appsExtension: Plugin<AppsConfig | undefined> = {
+const appsExtension: Plugin.Object<AppsConfig | undefined> = {
   name: 'apps',
   inject: ['bus'],
   apply(context, config) {
-    const bus = context.require<BusService>('bus')
+    const bus = requireService<BusService>(context, 'bus')
     const searchDirs = resolveSearchDirs(config)
     registerFunction(context, bus, 'apps:list', () => listApps(searchDirs))
     registerFunction(context, bus, 'apps:launch', (data) => launchApp(data))
@@ -113,7 +115,15 @@ function parseDesktopFile(path: string, id: string): App | null {
   } catch {
     return null
   }
-  const app: App = { id, name: '', exec: '', icon: '', wmClass: '', categories: [] }
+  const app: App = {
+    id,
+    name: '',
+    exec: '',
+    icon: '',
+    wmClass: '',
+    categories: [],
+    mimeTypes: [],
+  }
   let inEntry = false
   for (const rawLine of raw.split('\n')) {
     const line = rawLine.trim()
@@ -160,6 +170,9 @@ function applyDesktopLine(app: App, line: string): boolean {
   }
   if (key === 'Categories') {
     app.categories = value.split(';').filter((category) => category !== '')
+  }
+  if (key === 'MimeType') {
+    app.mimeTypes = value.split(';').filter((mimeType) => mimeType !== '')
   }
   return true
 }

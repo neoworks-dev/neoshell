@@ -4,7 +4,10 @@ import { renderTree } from '../src/renderer.js'
 import type { ViewNode } from '../src/renderer.js'
 import { ViewRegistry } from '../src/viewRegistry.js'
 
-GlobalRegistrator.register()
+// bun runs the suites in one process; another file may already have registered.
+if (typeof document === 'undefined') {
+  GlobalRegistrator.register()
+}
 
 function makeRegistry(events: string[]): ViewRegistry {
   const registry = new ViewRegistry()
@@ -43,6 +46,27 @@ describe('view registry', () => {
 })
 
 describe('view tree renderer', () => {
+  // A view that persists anything per instance — a widget's own settings —
+  // addresses its config entry and its topic by the node's id.
+  test('a view receives its node id, and an empty one when the node has none', () => {
+    const seen: string[] = []
+    const registry = new ViewRegistry()
+    registry.register('demo.identified', (_element, _args, id) => {
+      seen.push(id)
+      return { dispose() {} }
+    })
+    const container = document.createElement('div')
+
+    const dispose = renderTree(
+      container,
+      [{ id: 'weather-2', type: 'demo.identified' }, { type: 'demo.identified' }],
+      registry,
+    )
+
+    expect(seen).toEqual(['weather-2', ''])
+    dispose()
+  })
+
   test('renders nested nodes into the declared children host', () => {
     const events: string[] = []
     const registry = makeRegistry(events)
@@ -67,6 +91,48 @@ describe('view tree renderer', () => {
     dispose()
     expect(container.childNodes).toHaveLength(0)
     expect(events.slice(3)).toEqual(['dispose b', 'dispose a', 'dispose frame'])
+  })
+
+  test('a view that places its own children renders them into its slots', () => {
+    const events: string[] = []
+    const registry = makeRegistry(events)
+    const slots: HTMLElement[] = []
+    registry.register('demo.canvas', (element) => {
+      events.push('mount canvas')
+      return {
+        dispose() {
+          events.push('dispose canvas')
+        },
+        childSlot(node) {
+          const slot = element.ownerDocument.createElement('div')
+          slot.dataset.slot = String(node.id)
+          element.appendChild(slot)
+          slots.push(slot)
+          return slot
+        },
+      }
+    })
+    const container = document.createElement('div')
+    const tree: ViewNode[] = [
+      {
+        type: 'demo.canvas',
+        children: [
+          { id: 'left', type: 'demo.box', args: 'a' },
+          { id: 'right', type: 'demo.box', args: 'b' },
+        ],
+      },
+    ]
+
+    const dispose = renderTree(container, tree, registry)
+
+    expect(slots.map((slot) => slot.dataset.slot)).toEqual(['left', 'right'])
+    expect(slots[0].dataset.view).toBe('demo.box')
+    expect(slots[0].dataset.viewId).toBe('left')
+    expect(events).toEqual(['mount canvas', 'mount a', 'mount b'])
+
+    dispose()
+    expect(container.childNodes).toHaveLength(0)
+    expect(slots[0].isConnected).toBe(false)
   })
 
   test('an unknown view type is skipped without breaking siblings', () => {

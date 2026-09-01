@@ -1,4 +1,5 @@
-import type { Plugin } from '@neoshell/kernel'
+import type { Plugin } from '@neoworks/extension-system'
+import { requireService } from '../services.js'
 import type { Bus, BusMessage } from '../bus.js'
 
 // surfacesPlugin is the host end of the remote-fiber bridge. Extensions mount
@@ -14,11 +15,11 @@ export interface RemoteViewSpec {
 
 export type RemoteViewState = 'pending' | 'active' | 'failed' | 'disposed'
 
-export const surfacesPlugin: Plugin = {
+export const surfacesPlugin: Plugin.Object = {
   name: 'surfaces',
   inject: ['bus'],
   apply(context) {
-    const bus = context.require<Bus>('bus')
+    const bus = requireService<Bus>(context, 'bus')
     const service = new SurfacesService(bus)
     context.effect(() => service.listen())
     context.provide('surfaces', service)

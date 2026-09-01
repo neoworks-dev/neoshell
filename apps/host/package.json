@@ -7,13 +7,13 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@neoshell/kernel": "file:../../packages/kernel"
+    "@neoworks/extension-system": "link:@neoworks/extension-system"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@neoshell/surface": "file:../../packages/surface"
+    "@neoshell/surface": "workspace:*"
   }
 }

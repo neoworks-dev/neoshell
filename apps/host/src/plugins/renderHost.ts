@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import type { Socket } from 'bun'
-import type { Plugin } from '@neoshell/kernel'
+import type { Plugin } from '@neoworks/extension-system'
+import { requireService } from '../services.js'
 import type { Bus } from '../bus.js'
 
 export interface RenderHostConfig {
@@ -39,11 +40,11 @@ export interface RenderEvent {
 // renderHostPlugin spawns the C++/WPE render host and drives its control
 // socket (NDJSON, protocol shared with the previous Go core). Events flow onto
 // the bus as render.<event>.
-export const renderHostPlugin: Plugin<RenderHostConfig> = {
+export const renderHostPlugin: Plugin.Object<RenderHostConfig> = {
   name: 'render-host',
   inject: ['bus'],
   async apply(context, config) {
-    const bus = context.require<Bus>('bus')
+    const bus = requireService<Bus>(context, 'bus')
     if (config.binaryPath !== '') {
       context.effect(() => spawnRenderHost(config.binaryPath))
     }
@@ -53,6 +54,10 @@ export const renderHostPlugin: Plugin<RenderHostConfig> = {
       bus.publish(`render.${event.event}`, event)
     })
     context.provide('renderhost', client)
+    // Retained so late subscribers (the view tree applies its config before
+    // this plugin finishes connecting) learn the render host is reachable and
+    // replay their surface commands.
+    context.effect(() => bus.retain('render.connected', true))
   },
 }
 
@@ -86,6 +91,9 @@ export class RenderHostClient {
     if (spec.exclusiveEdge !== undefined) {
       command.exclusive_edge = spec.exclusiveEdge
       command.exclusive_size = numberOrZero(spec.exclusiveSize)
+    } else if (spec.exclusiveSize !== undefined) {
+      // Edge-less negative size = ignore other surfaces' exclusive zones.
+      command.exclusive_size = spec.exclusiveSize
     }
     this.send(command)
   }

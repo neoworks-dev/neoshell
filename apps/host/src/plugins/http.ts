@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import type { Server } from 'bun'
-import type { Plugin } from '@neoshell/kernel'
+import type { Plugin } from '@neoworks/extension-system'
+import { optionalService, requireService } from '../services.js'
 import type { Bus } from '../bus.js'
 import { WireConnection } from '../wire.js'
 import type { AssetsService } from './assets.js'
@@ -25,15 +26,15 @@ interface WsData {
 // httpPlugin serves extension bundles over HTTP and exposes the bus to
 // webviews over a WebSocket at /ws. Loopback only: the shell's surfaces run on
 // this machine, and the bus drives the desktop.
-export const httpPlugin: Plugin<HttpConfig> = {
+export const httpPlugin: Plugin.Object<HttpConfig> = {
   name: 'http',
   inject: ['bus'],
   apply(context, config) {
-    const bus = context.require<Bus>('bus')
+    const bus = requireService<Bus>(context, 'bus')
     // Lazy lookups: these services may mount after (or without) this plugin.
     const lookups: ServiceLookups = {
-      assets: () => context.get<AssetsService>('assets'),
-      pages: () => context.get<PageService>('pages'),
+      assets: () => optionalService<AssetsService>(context, 'assets'),
+      pages: () => optionalService<PageService>(context, 'pages'),
     }
     const server = serveHttp(bus, config, lookups)
     context.effect(() => () => server.stop(true))

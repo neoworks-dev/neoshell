@@ -2,7 +2,8 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { Plugin } from '@neoshell/kernel'
+import type { Plugin } from '@neoworks/extension-system'
+import { requireService } from '../lib/services.js'
 import type { BusService } from '../lib/bus.js'
 
 // notifications: the daemon escape hatch in action. Owning
@@ -19,11 +20,11 @@ interface NotificationsConfig {
   hostSocketPath?: string
 }
 
-const notificationsExtension: Plugin<NotificationsConfig | undefined> = {
+const notificationsExtension: Plugin.Object<NotificationsConfig | undefined> = {
   name: 'notifications',
   inject: ['bus'],
   apply(context, config) {
-    context.require<BusService>('bus')
+    requireService<BusService>(context, 'bus')
     const daemonPath = resolveDaemonPath(config)
     if (!existsSync(daemonPath)) {
       throw new Error(`notifications: daemon binary missing at ${daemonPath} (task build)`)

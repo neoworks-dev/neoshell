@@ -1,7 +1,8 @@
 import { mkdirSync, readFileSync, watch, writeFileSync } from 'node:fs'
 import { basename, dirname } from 'node:path'
-import type { Plugin } from '@neoshell/kernel'
-import type { Bus } from '../bus.js'
+import type { Plugin } from '@neoworks/extension-system'
+import { requireService } from '../services.js'
+import type { Bus, BusMessage } from '../bus.js'
 
 export interface ConfigPluginConfig {
   path: string
@@ -17,17 +18,52 @@ export interface ConfigService {
 // dot-paths. The full snapshot is a retained bus topic ("config"), so every
 // subscriber — surface or daemon — hydrates on subscribe and re-hydrates on
 // every change, including external edits to the file.
-export const configPlugin: Plugin<ConfigPluginConfig> = {
+//
+//   config:set  {key, value} → {ok} | {error}
+//
+// config:set is the write half: a webview reaches the host over the bus alone,
+// so without it no surface can persist anything it lets the user change.
+export const configPlugin: Plugin.Object<ConfigPluginConfig> = {
   name: 'config',
   inject: ['bus'],
   apply(context, config) {
-    const bus = context.require<Bus>('bus')
+    const bus = requireService<Bus>(context, 'bus')
     const store = new ConfigStore(config.path, bus)
     store.load()
     context.effect(() => store.publishRetained())
     context.effect(() => store.watchFile())
+    context.effect(() =>
+      bus.subscribe('config:set', (message) => {
+        handleSet(bus, store, message)
+      }),
+    )
     context.provide('config', store)
   },
+}
+
+function handleSet(bus: Bus, store: ConfigService, message: BusMessage): void {
+  const request = recordOf(message.data)
+  const key = request.key
+  if (typeof key !== 'string' || key === '') {
+    reply(bus, message, { error: 'config:set needs a string key' })
+    return
+  }
+  store.set(key, request.value)
+  reply(bus, message, { ok: true })
+}
+
+function reply(bus: Bus, message: BusMessage, data: unknown): void {
+  if (message.replyTo === undefined) {
+    return
+  }
+  bus.publish(message.replyTo, data)
+}
+
+function recordOf(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) {
+    return {}
+  }
+  return value as Record<string, unknown>
 }
 
 class ConfigStore implements ConfigService {
@@ -44,7 +80,10 @@ class ConfigStore implements ConfigService {
 
   load(): void {
     mkdirSync(dirname(this.path), { recursive: true })
-    this.data = readConfigFile(this.path)
+    const data = readConfigFile(this.path)
+    if (data !== null) {
+      this.data = data
+    }
   }
 
   publishRetained(): () => void {
@@ -84,7 +123,13 @@ class ConfigStore implements ConfigService {
     if (changed !== null && changed.toString() !== fileName) {
       return
     }
-    this.data = readConfigFile(this.path)
+    // A writer that truncates before writing is observable mid-write: keep the
+    // last good tree rather than republishing an empty config to every surface.
+    const data = readConfigFile(this.path)
+    if (data === null) {
+      return
+    }
+    this.data = data
     this.republish()
   }
 
@@ -138,7 +183,9 @@ function ensureChildObject(node: Record<string, unknown>, part: string): Record<
   return created
 }
 
-function readConfigFile(path: string): Record<string, unknown> {
+// readConfigFile returns null when the file exists but does not parse — an
+// unreadable tree is not an empty tree, and callers keep what they had.
+function readConfigFile(path: string): Record<string, unknown> | null {
   let raw = ''
   try {
     raw = readFileSync(path, 'utf8')
@@ -148,7 +195,7 @@ function readConfigFile(path: string): Record<string, unknown> {
   return parseConfig(raw, path)
 }
 
-function parseConfig(raw: string, path: string): Record<string, unknown> {
+function parseConfig(raw: string, path: string): Record<string, unknown> | null {
   try {
     const parsed: unknown = JSON.parse(raw)
     if (typeof parsed === 'object' && parsed !== null) {
@@ -156,6 +203,7 @@ function parseConfig(raw: string, path: string): Record<string, unknown> {
     }
   } catch (error) {
     console.error(`host: bad config file ${path}:`, error)
+    return null
   }
-  return {}
+  return null
 }

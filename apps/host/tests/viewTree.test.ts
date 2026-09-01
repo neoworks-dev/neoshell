@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Kernel } from '@neoshell/kernel'
-import type { Plugin } from '@neoshell/kernel'
+import { Context } from '@neoworks/extension-system'
+import type { Plugin } from '@neoworks/extension-system'
 import { SurfaceRuntime } from '@neoshell/surface'
 import { busPlugin } from '../src/plugins/bus.js'
 import type { Bus } from '../src/bus.js'
@@ -23,7 +23,7 @@ export default {
   name: 'demo-views',
   inject: ['ui'],
   apply(context) {
-    const ui = context.require('ui')
+    const ui = context.get('ui')
     context.effect(() => ui.register('demo.panel', () => ({ dispose() {} })))
   },
 }
@@ -65,7 +65,7 @@ describe('view tree', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'neoshell-viewtree-test-'))
   const extensionsDir = join(tempDir, 'extensions')
   const configPath = join(tempDir, 'config.json')
-  const kernel = new Kernel()
+  const root = new Context()
   let runtime = null as unknown as SurfaceRuntime
   let config = null as unknown as ConfigService
 
@@ -78,17 +78,16 @@ describe('view tree', () => {
     writeFileSync(join(extensionsDir, 'demo', 'dist', 'views.js'), VIEWS_MODULE)
     writeFileSync(configPath, JSON.stringify({ views: TREE }))
 
-    kernel.mount(busPlugin)
-    kernel.mount(configPlugin, { path: configPath })
-    kernel.mount(httpPlugin, { port: 0, pluginsDir: extensionsDir })
-    kernel.mount(surfacesPlugin)
-    const tree = kernel.mount(viewTreePlugin, { extensionsDir })
-    await tree.settle()
-    await waitFor(() => kernel.getService('http') !== undefined)
-    config = kernel.getService('config') as ConfigService
+    await root.plugin(busPlugin)
+    await root.plugin(configPlugin, { path: configPath })
+    await root.plugin(httpPlugin, { port: 0, pluginsDir: extensionsDir })
+    await root.plugin(surfacesPlugin)
+    await root.plugin(viewTreePlugin, { extensionsDir })
+    await waitFor(() => root.get('http') !== undefined)
+    config = root.get('config') as ConfigService
 
     // The runtime plays the "top" layer webview — nodes mount per layer.
-    const port = (kernel.getService('http') as HttpService).port
+    const port = (root.get('http') as HttpService).port
     runtime = new SurfaceRuntime({
       surfaceId: 'top',
       busUrl: `ws://127.0.0.1:${port}/ws`,
@@ -99,7 +98,7 @@ describe('view tree', () => {
 
   afterAll(async () => {
     await runtime.stop()
-    await kernel.dispose()
+    await root.fiber.dispose()
     rmSync(tempDir, { recursive: true, force: true })
   })
 
@@ -130,6 +129,7 @@ describe('view tree', () => {
 interface CreatedSurface {
   role: string
   url: string
+  monitor: string
   layer: string
   anchors: string[]
   keyboard: string
@@ -155,11 +155,27 @@ class FakeRenderHost {
   }
 }
 
-function fakeRenderHostPlugin(fake: FakeRenderHost): Plugin {
+function fakeRenderHostPlugin(fake: FakeRenderHost): Plugin.Object {
   return {
     name: 'fake-render-host',
     apply(context) {
       context.provide('renderhost', fake)
+    },
+  }
+}
+
+// connectingRenderHostPlugin mirrors the real plugin's shape: an async apply
+// that awaits its socket, then provides the service and announces itself from
+// inside the same apply — so both happen before the fiber is active.
+function connectingRenderHostPlugin(fake: FakeRenderHost): Plugin.Object {
+  return {
+    name: 'connecting-render-host',
+    inject: ['bus'],
+    async apply(context) {
+      const bus = context.get('bus') as Bus
+      await Bun.sleep(1)
+      context.provide('renderhost', fake)
+      context.effect(() => bus.retain('render.connected', true))
     },
   }
 }
@@ -199,26 +215,25 @@ const LAYERED_TREE = [
 describe('view tree surfaces', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'neoshell-viewtree-surfaces-'))
   const configPath = join(tempDir, 'config.json')
-  const kernel = new Kernel()
+  const root = new Context()
   const fake = new FakeRenderHost()
   let bus = null as unknown as Bus
   let config = null as unknown as ConfigService
 
   beforeAll(async () => {
     writeFileSync(configPath, JSON.stringify({ views: LAYERED_TREE }))
-    kernel.mount(busPlugin)
-    kernel.mount(configPlugin, { path: configPath })
-    kernel.mount(httpPlugin, { port: 0, pluginsDir: tempDir })
-    kernel.mount(surfacesPlugin)
-    kernel.mount(fakeRenderHostPlugin(fake))
-    const tree = kernel.mount(viewTreePlugin, { extensionsDir: tempDir })
-    await tree.settle()
-    bus = kernel.getService('bus') as Bus
-    config = kernel.getService('config') as ConfigService
+    await root.plugin(busPlugin)
+    await root.plugin(configPlugin, { path: configPath })
+    await root.plugin(httpPlugin, { port: 0, pluginsDir: tempDir })
+    await root.plugin(surfacesPlugin)
+    await root.plugin(fakeRenderHostPlugin(fake))
+    await root.plugin(viewTreePlugin, { extensionsDir: tempDir })
+    bus = root.get('bus') as Bus
+    config = root.get('config') as ConfigService
   })
 
   afterAll(async () => {
-    await kernel.dispose()
+    await root.fiber.dispose()
     rmSync(tempDir, { recursive: true, force: true })
   })
 
@@ -257,5 +272,106 @@ describe('view tree surfaces', () => {
     config.set('views', [LAYERED_TREE[2]])
     await waitFor(() => fake.destroyed.length >= 3)
     expect(fake.destroyed.sort()).toEqual(['reserve.bar', 'reserve.dock', 'top'])
+  })
+})
+
+describe('view tree render host race', () => {
+  test('surfaces replay when the render host connects after the tree applied', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'neoshell-viewtree-race-'))
+    const configPath = join(tempDir, 'config.json')
+    writeFileSync(configPath, JSON.stringify({ views: LAYERED_TREE }))
+    const root = new Context()
+    const fake = new FakeRenderHost()
+
+    await root.plugin(busPlugin)
+    await root.plugin(configPlugin, { path: configPath })
+    await root.plugin(httpPlugin, { port: 0, pluginsDir: tempDir })
+    await root.plugin(surfacesPlugin)
+    await root.plugin(viewTreePlugin, { extensionsDir: tempDir })
+    expect(fake.created).toHaveLength(0)
+
+    // The real plugin connects its socket before providing, so both the
+    // service and render.connected land while its fiber is still loading — the
+    // view tree must still see the service and replay the whole plan.
+    await root.plugin(connectingRenderHostPlugin(fake))
+    await waitFor(() => fake.created.length >= 4)
+
+    expect(fake.created.map((spec) => spec.role).sort()).toEqual([
+      'background',
+      'reserve.bar',
+      'reserve.dock',
+      'top',
+    ])
+    await root.fiber.dispose()
+    rmSync(tempDir, { recursive: true, force: true })
+  })
+})
+
+// ---- output selection ----
+
+describe('view tree monitor', () => {
+  test('the configured monitor lands on every surface, and changing it recreates them', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'neoshell-viewtree-monitor-'))
+    const configPath = join(tempDir, 'config.json')
+    writeFileSync(configPath, JSON.stringify({ monitor: 'DP-2', views: LAYERED_TREE }))
+    const root = new Context()
+    const fake = new FakeRenderHost()
+
+    await root.plugin(busPlugin)
+    await root.plugin(configPlugin, { path: configPath })
+    await root.plugin(httpPlugin, { port: 0, pluginsDir: tempDir })
+    await root.plugin(surfacesPlugin)
+    await root.plugin(fakeRenderHostPlugin(fake))
+    await root.plugin(viewTreePlugin, { extensionsDir: tempDir })
+
+    await waitFor(() => fake.created.length >= 4)
+    expect(fake.created.every((spec) => spec.monitor === 'DP-2')).toBe(true)
+
+    const config = root.get('config') as ConfigService
+    config.set('monitor', 'HDMI-A-1')
+    await waitFor(() => fake.destroyed.length >= 4)
+    await waitFor(() => fake.created.length >= 8)
+    expect(fake.created.slice(4).every((spec) => spec.monitor === 'HDMI-A-1')).toBe(true)
+
+    await root.fiber.dispose()
+    rmSync(tempDir, { recursive: true, force: true })
+  })
+})
+
+// ---- views served from source in development ----
+
+describe('view modules in development', () => {
+  test('are imported from the dev server, unversioned', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'neoshell-viewsdev-test-'))
+    const configPath = join(tempDir, 'config.json')
+    mkdirSync(join(tempDir, 'demo'), { recursive: true })
+    writeFileSync(
+      join(tempDir, 'demo', 'manifest.json'),
+      JSON.stringify({ id: 'demo', views: 'views.js' }),
+    )
+    writeFileSync(configPath, JSON.stringify({ views: TREE }))
+    const root = new Context()
+
+    await root.plugin(busPlugin)
+    await root.plugin(configPlugin, { path: configPath })
+    await root.plugin(httpPlugin, { port: 0, pluginsDir: tempDir })
+    await root.plugin(surfacesPlugin)
+    await root.plugin(viewTreePlugin, {
+      extensionsDir: tempDir,
+      viewsDevOrigin: 'http://127.0.0.1:5174/',
+    })
+
+    const bus = root.get('bus') as Bus
+    const mounted: string[] = []
+    const unsubscribe = bus.subscribe('surface.top.mount', (message) => {
+      mounted.push((message.data as { url: string }).url)
+    })
+    bus.publish('surface.top.ready', {})
+    await waitFor(() => mounted.length >= 1)
+
+    expect(mounted[0]).toBe('http://127.0.0.1:5174/demo/src/views.ts')
+    unsubscribe()
+    await root.fiber.dispose()
+    rmSync(tempDir, { recursive: true, force: true })
   })
 })

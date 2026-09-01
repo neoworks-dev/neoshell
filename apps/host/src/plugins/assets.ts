@@ -1,7 +1,8 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
-import type { Plugin } from '@neoshell/kernel'
+import type { Plugin } from '@neoworks/extension-system'
+import { requireService } from '../services.js'
 import type { ConfigService } from './config.js'
 
 // assetsPlugin is the host's one honest wart (see ARCHITECTURE.md "Open"):
@@ -20,11 +21,11 @@ export interface AssetsService {
   handle(url: URL): Promise<Response> | Response | null
 }
 
-export const assetsPlugin: Plugin = {
+export const assetsPlugin: Plugin.Object = {
   name: 'assets',
   inject: ['config'],
   apply(context) {
-    const config = context.require<ConfigService>('config')
+    const config = requireService<ConfigService>(context, 'config')
     const resolver = new IconResolver()
     context.provide('assets', new Assets(config, resolver))
   },

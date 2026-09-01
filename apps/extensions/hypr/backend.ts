@@ -1,4 +1,6 @@
-import type { Plugin } from '@neoshell/kernel'
+import { existsSync, readdirSync, statSync } from 'node:fs'
+import type { Plugin } from '@neoworks/extension-system'
+import { requireService } from '../lib/services.js'
 import { registerFunction, RetainedTopics } from '../lib/bus.js'
 import type { BusService } from '../lib/bus.js'
 
@@ -32,11 +34,11 @@ const REQUEST_TIMEOUT_MS = 3000
 const REFRESH_DEBOUNCE_MS = 50
 const RECONNECT_DELAY_MS = 1000
 
-const hyprExtension: Plugin<HyprConfig | undefined> = {
+const hyprExtension: Plugin.Object<HyprConfig | undefined> = {
   name: 'hypr',
   inject: ['bus'],
   apply(context, config) {
-    const bus = context.require<BusService>('bus')
+    const bus = requireService<BusService>(context, 'bus')
     const paths = resolvePaths(config)
     const client = new HyprClient(paths)
     const publisher = new HyprPublisher(bus, client)
@@ -55,12 +57,46 @@ function resolvePaths(config: HyprConfig | undefined): HyprPaths {
   if (config !== undefined && config.requestSocket !== undefined && config.eventSocket !== undefined) {
     return { requestSocket: config.requestSocket, eventSocket: config.eventSocket }
   }
-  const signature = process.env.HYPRLAND_INSTANCE_SIGNATURE
-  if (signature === undefined || signature === '') {
-    throw new Error('hypr: HYPRLAND_INSTANCE_SIGNATURE not set')
-  }
-  const base = `${runtimeDir()}/hypr/${signature}`
+  const base = resolveInstanceDir(`${runtimeDir()}/hypr`, process.env.HYPRLAND_INSTANCE_SIGNATURE)
   return { requestSocket: `${base}/.socket.sock`, eventSocket: `${base}/.socket2.sock` }
+}
+
+// resolveInstanceDir prefers the signature, but a shell started from an older
+// session's environment inherits one whose socket is long gone — dead
+// signatures fall back to the newest instance that still has one.
+export function resolveInstanceDir(root: string, signature: string | undefined): string {
+  if (signature !== undefined && signature !== '' && hasRequestSocket(`${root}/${signature}`)) {
+    return `${root}/${signature}`
+  }
+  const newest = newestInstance(root)
+  if (newest === null) {
+    throw new Error(`hypr: no live compositor instance under ${root}`)
+  }
+  console.warn(`hypr: HYPRLAND_INSTANCE_SIGNATURE is stale, using ${newest}`)
+  return newest
+}
+
+function newestInstance(root: string): string | null {
+  const live = liveInstances(root)
+  if (live.length === 0) {
+    return null
+  }
+  live.sort((left, right) => statSync(right).mtimeMs - statSync(left).mtimeMs)
+  return live[0]
+}
+
+function liveInstances(root: string): string[] {
+  let entries: string[]
+  try {
+    entries = readdirSync(root)
+  } catch {
+    return []
+  }
+  return entries.map((entry) => `${root}/${entry}`).filter(hasRequestSocket)
+}
+
+function hasRequestSocket(dir: string): boolean {
+  return existsSync(`${dir}/.socket.sock`)
 }
 
 function runtimeDir(): string {
