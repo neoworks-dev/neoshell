@@ -2,8 +2,8 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Kernel } from '@neoshell/kernel'
-import type { Fiber } from '@neoshell/kernel'
+import { Context } from '@neoworks/extension-system'
+import type { Fiber } from '@neoworks/extension-system'
 import timersExtension from '../timers/backend.js'
 import { busProvider, FakeBus, waitFor } from './helpers.js'
 
@@ -27,12 +27,11 @@ describe('timers extension', () => {
   })
 
   async function mountTimers(dataPath: string): Promise<{ bus: FakeBus; fiber: Fiber }> {
-    const kernel = new Kernel()
+    const root = new Context()
     const bus = new FakeBus()
-    kernel.mount(busProvider(bus))
-    const fiber = kernel.mount(timersExtension, { dataPath, tickMs: 20, notify: false })
-    await fiber.settle()
-    cleanups.push(() => kernel.dispose())
+    await root.plugin(busProvider(bus))
+    const fiber = await root.plugin(timersExtension, { dataPath, tickMs: 20, notify: false })
+    cleanups.push(() => root.fiber.dispose())
     return { bus, fiber }
   }
 

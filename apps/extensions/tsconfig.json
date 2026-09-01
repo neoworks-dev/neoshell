@@ -10,5 +10,17 @@
     "types": ["bun"]
   },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules", "neoshell/src", "neoshell/vite.config.ts"]
+  "exclude": [
+    "node_modules",
+    "neoshell/src",
+    "neoshell/vite.config.ts",
+    "weather/src",
+    "weather/vite.config.ts",
+    "airquality/src",
+    "airquality/vite.config.ts",
+    "systray/src",
+    "systray/vite.config.ts",
+    "deskminder/src",
+    "deskminder/vite.config.ts"
+  ]
 }

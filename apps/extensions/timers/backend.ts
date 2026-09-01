@@ -1,7 +1,8 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import type { Plugin } from '@neoshell/kernel'
+import type { Plugin } from '@neoworks/extension-system'
+import { requireService } from '../lib/services.js'
 import { registerFunction } from '../lib/bus.js'
 import type { BusService } from '../lib/bus.js'
 
@@ -42,11 +43,11 @@ interface TimersConfig {
   notify?: boolean
 }
 
-const timersExtension: Plugin<TimersConfig | undefined> = {
+const timersExtension: Plugin.Object<TimersConfig | undefined> = {
   name: 'timers',
   inject: ['bus'],
   apply(context, config) {
-    const bus = context.require<BusService>('bus')
+    const bus = requireService<BusService>(context, 'bus')
     const service = new TimersService(bus, config)
     service.load()
     context.effect(() => service.publishRetained())

@@ -978,6 +978,11 @@ Surface* surface_create(WaylandConn* c, const SurfaceSpec& spec) {
         else
             zwlr_layer_surface_v1_set_size(s->layer, spec.exclusive_size, 0);
     } else {
+        // A negative exclusive size (no edge) means "ignore other surfaces'
+        // exclusive zones" — full-screen layer webviews span the whole output
+        // instead of being pushed inward by the bar/dock reservations.
+        if (spec.exclusive_size < 0)
+            zwlr_layer_surface_v1_set_exclusive_zone(s->layer, -1);
         // Resolve size: spanning anchors imply the output dimension; else explicit.
         bool spans_h = (spec.anchors & ANCHOR_LEFT) && (spec.anchors & ANCHOR_RIGHT);
         bool spans_v = (spec.anchors & ANCHOR_TOP) && (spec.anchors & ANCHOR_BOTTOM);

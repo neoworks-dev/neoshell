@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Socket } from 'bun'
-import { Kernel } from '@neoshell/kernel'
-import type { Fiber } from '@neoshell/kernel'
+import { Context } from '@neoworks/extension-system'
+import type { Fiber } from '@neoworks/extension-system'
 import appearanceExtension from '../appearance/backend.js'
 import { busProvider, FakeBus, waitFor } from './helpers.js'
 
@@ -64,19 +64,18 @@ describe('appearance extension', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'neoshell-appearance-test-'))
   const bgSocketPath = join(tempDir, 'bg.sock')
   const daemon = new FakeBgDaemon()
-  const kernel = new Kernel()
+  const root = new Context()
   const bus = new FakeBus()
   let fiber = null as unknown as Fiber
 
   beforeAll(async () => {
     daemon.start(bgSocketPath)
-    kernel.mount(busProvider(bus))
-    fiber = kernel.mount(appearanceExtension, { bgSocketPath, reconnectMs: 50 })
-    await fiber.settle()
+    await root.plugin(busProvider(bus))
+    fiber = await root.plugin(appearanceExtension, { bgSocketPath, reconnectMs: 50 })
   })
 
   afterAll(async () => {
-    await kernel.dispose()
+    await root.fiber.dispose()
     daemon.stop()
     rmSync(tempDir, { recursive: true, force: true })
   })

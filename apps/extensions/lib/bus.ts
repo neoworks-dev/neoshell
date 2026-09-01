@@ -1,4 +1,4 @@
-import type { Context } from '@neoshell/kernel'
+import type { Context } from '@neoworks/extension-system'
 
 // Shared bus glue for bundled extensions. Extensions depend on this structural
 // shape of the host's bus service, never on the host package itself.
@@ -13,6 +13,7 @@ export interface BusService {
   publish(type: string, data: unknown): void
   retain(type: string, data: unknown): () => void
   subscribe(pattern: string, handler: (message: BusMessage) => void): () => void
+  call(type: string, data: unknown, timeoutMs?: number): Promise<unknown>
 }
 
 // registerFunction exposes one named function as bus request/reply. The

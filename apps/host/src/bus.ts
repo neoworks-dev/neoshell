@@ -3,11 +3,14 @@
 // validates them, and knows no type names.
 
 // BusMessage as delivered to subscribers. replyTo names the topic a responder
-// publishes its reply on.
+// publishes its reply on. retain marks a value the bus is holding, which is
+// what lets a peer keep its own copy and hand it to a late subscriber of its
+// own without asking for another replay.
 export interface BusMessage {
   type: string
   data: unknown
   replyTo?: string
+  retain?: boolean
 }
 
 export type BusHandler = (message: BusMessage) => void
@@ -35,10 +38,7 @@ export class Bus {
   private nextReplyId = 1
 
   publish(type: string, data: unknown, replyTo?: string): void {
-    const message: BusMessage = { type, data, replyTo }
-    for (const entry of this.subscriptions) {
-      deliverIfMatching(entry, message)
-    }
+    this.deliver({ type, data, replyTo })
   }
 
   // retain publishes and stores the last value so late subscribers catch up on
@@ -46,9 +46,15 @@ export class Bus {
   // with its owner, like every other registration.
   retain(type: string, data: unknown): () => void {
     this.retained.set(type, data)
-    this.publish(type, data)
+    this.deliver({ type, data, retain: true })
     return () => {
       this.retained.delete(type)
+    }
+  }
+
+  private deliver(message: BusMessage): void {
+    for (const entry of this.subscriptions) {
+      deliverIfMatching(entry, message)
     }
   }
 
@@ -92,7 +98,7 @@ export class Bus {
 
   private replayRetained(entry: SubscriptionEntry): void {
     for (const [type, data] of this.retained) {
-      deliverIfMatching(entry, { type, data })
+      deliverIfMatching(entry, { type, data, retain: true })
     }
   }
 }

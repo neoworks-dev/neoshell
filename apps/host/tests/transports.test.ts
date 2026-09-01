@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Socket } from 'bun'
-import { Kernel } from '@neoshell/kernel'
+import { Context } from '@neoworks/extension-system'
 import { Bus } from '../src/bus.js'
 import { busPlugin } from '../src/plugins/bus.js'
 import { unixSocketPlugin } from '../src/plugins/unixSocket.js'
@@ -60,16 +60,15 @@ async function waitFor(predicate: () => boolean, timeoutMs = 1000): Promise<void
 describe('unix socket transport', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'neoshell-host-test-'))
   const socketPath = join(tempDir, 'bus.sock')
-  const kernel = new Kernel()
+  const root = new Context()
 
   beforeAll(async () => {
-    kernel.mount(busPlugin)
-    const transport = kernel.mount(unixSocketPlugin, { socketPath })
-    await transport.settle()
+    await root.plugin(busPlugin)
+    await root.plugin(unixSocketPlugin, { socketPath })
   })
 
   afterAll(async () => {
-    await kernel.dispose()
+    await root.fiber.dispose()
     rmSync(tempDir, { recursive: true, force: true })
   })
 
@@ -115,7 +114,7 @@ describe('unix socket transport', () => {
   })
 
   test('request/reply works across the socket via an in-process responder', async () => {
-    const bus = kernel.getService('bus') as Bus
+    const bus = root.get('bus') as Bus
     bus.subscribe('echo:upper', (message) => {
       bus.publish(message.replyTo as string, String(message.data).toUpperCase())
     })

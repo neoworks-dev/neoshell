@@ -90,3 +90,32 @@ describe('request and reply', () => {
     expect(bus.call('nobody:home', null, 20)).rejects.toThrow('timed out')
   })
 })
+
+// A peer keeps its own copy of retained values so it can serve its own late
+// subscribers. Marking the delivery is what lets it tell a retained value from
+// an ordinary event, which must never be replayed.
+describe('retained deliveries are marked', () => {
+  test('a retained publish and its replay both carry the flag', () => {
+    const bus = new Bus()
+    const live: BusMessage[] = []
+    bus.subscribe('state.current', (message) => live.push(message))
+
+    bus.retain('state.current', 'v1')
+
+    const late: BusMessage[] = []
+    bus.subscribe('state.current', (message) => late.push(message))
+
+    expect(live).toEqual([{ type: 'state.current', data: 'v1', retain: true }])
+    expect(late).toEqual([{ type: 'state.current', data: 'v1', retain: true }])
+  })
+
+  test('an ordinary publish is not marked', () => {
+    const bus = new Bus()
+    const seen: BusMessage[] = []
+    bus.subscribe('event.fired', (message) => seen.push(message))
+
+    bus.publish('event.fired', 1)
+
+    expect(seen[0].retain).toBeUndefined()
+  })
+})

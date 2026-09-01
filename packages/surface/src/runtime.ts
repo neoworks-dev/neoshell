@@ -1,5 +1,5 @@
-import { Kernel } from '@neoshell/kernel'
-import type { Fiber, Plugin } from '@neoshell/kernel'
+import { Context, FiberState } from '@neoworks/extension-system'
+import type { Fiber, Plugin } from '@neoworks/extension-system'
 import { BusClient } from './busClient.js'
 import { ViewRegistry } from './viewRegistry.js'
 
@@ -7,7 +7,7 @@ import { ViewRegistry } from './viewRegistry.js'
 // same kernel as the host and executes the host's mount/dispose commands:
 //
 //   host → surface   surface.<id>.mount    {fiber, url, config}
-//   surface          import(url); kernel.mount(module)
+//   surface          import(url); root.plugin(module)
 //   surface → host   surface.<id>.state    {fiber, state}
 //   host → surface   surface.<id>.dispose  {fiber}
 //
@@ -34,8 +34,19 @@ interface DisposeCommand {
   fiber: string
 }
 
+// The bridge reports fiber states as the names the host's RemoteView tracks,
+// so the wire protocol does not carry the kernel's numeric enum.
+const STATE_NAMES: Record<FiberState, string> = {
+  [FiberState.PENDING]: 'pending',
+  [FiberState.LOADING]: 'pending',
+  [FiberState.ACTIVE]: 'active',
+  [FiberState.FAILED]: 'failed',
+  [FiberState.UNLOADING]: 'active',
+  [FiberState.DISPOSED]: 'disposed',
+}
+
 export class SurfaceRuntime {
-  readonly kernel = new Kernel()
+  readonly root = new Context()
   readonly bus: BusClient
   readonly views = new ViewRegistry()
   private readonly surfaceId: string
@@ -50,8 +61,7 @@ export class SurfaceRuntime {
 
   async start(): Promise<void> {
     await this.bus.connect()
-    const services = this.kernel.mount(surfaceServicesPlugin(this.bus, this.views))
-    await services.settle()
+    await this.root.plugin(surfaceServicesPlugin(this.bus, this.views))
 
     const prefix = `surface.${this.surfaceId}`
     this.bus.subscribe(`${prefix}.mount`, (message) => {
@@ -64,7 +74,7 @@ export class SurfaceRuntime {
   }
 
   async stop(): Promise<void> {
-    await this.kernel.dispose()
+    await this.root.fiber.dispose()
     this.bus.close()
   }
 
@@ -77,10 +87,10 @@ export class SurfaceRuntime {
       this.reportState(command.fiber, 'failed')
       return
     }
-    const fiber = this.kernel.mount(plugin, command.config)
+    const fiber = this.root.plugin(plugin, command.config)
     this.fibers.set(command.fiber, fiber)
-    await fiber.settle()
-    this.reportState(command.fiber, fiber.state)
+    await settled(fiber)
+    this.reportState(command.fiber, STATE_NAMES[fiber.state])
   }
 
   private async handleDispose(command: DisposeCommand): Promise<void> {
@@ -101,13 +111,23 @@ export class SurfaceRuntime {
 
 // surfaceServicesPlugin publishes the two services every view plugin builds
 // on: the bus connection and the view registry.
-function surfaceServicesPlugin(bus: BusClient, views: ViewRegistry): Plugin {
+function surfaceServicesPlugin(bus: BusClient, views: ViewRegistry): Plugin.Object {
   return {
     name: 'surface-services',
     apply(context) {
       context.provide('bus', bus)
       context.provide('ui', views)
     },
+  }
+}
+
+// A view plugin that throws leaves its fiber failed, and the state report is
+// how the host learns that — so the rejection is awaited, not propagated.
+async function settled(fiber: PromiseLike<unknown>): Promise<void> {
+  try {
+    await fiber
+  } catch {
+    // reported through the fiber's state
   }
 }
 
@@ -121,7 +141,7 @@ function moduleLoaderOf(options: SurfaceRuntimeOptions): (url: string) => Promis
 async function loadViewPlugin(
   url: string,
   loadModule: (url: string) => Promise<unknown>,
-): Promise<Plugin | null> {
+): Promise<Plugin.Object | null> {
   let module: Record<string, unknown>
   try {
     module = (await loadModule(url)) as Record<string, unknown>
@@ -136,7 +156,7 @@ async function loadViewPlugin(
   return plugin
 }
 
-function pickPlugin(module: Record<string, unknown>): Plugin | null {
+function pickPlugin(module: Record<string, unknown>): Plugin.Object | null {
   if (isPlugin(module.default)) {
     return module.default
   }
@@ -146,9 +166,9 @@ function pickPlugin(module: Record<string, unknown>): Plugin | null {
   return null
 }
 
-function isPlugin(value: unknown): value is Plugin {
+function isPlugin(value: unknown): value is Plugin.Object {
   if (typeof value !== 'object' || value === null) {
     return false
   }
-  return typeof (value as Plugin).apply === 'function'
+  return typeof (value as Plugin.Object).apply === 'function'
 }

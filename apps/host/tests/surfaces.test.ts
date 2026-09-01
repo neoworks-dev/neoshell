@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Kernel } from '@neoshell/kernel'
+import { Context } from '@neoworks/extension-system'
 import { SurfaceRuntime } from '@neoshell/surface'
 import { busPlugin } from '../src/plugins/bus.js'
 import { httpPlugin } from '../src/plugins/http.js'
@@ -63,7 +63,7 @@ async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void
 
 describe('remote fiber bridge', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'neoshell-surfaces-test-'))
-  const kernel = new Kernel()
+  const root = new Context()
   let surfaces = null as unknown as SurfacesService
   let viewUrl = ''
   let busUrl = ''
@@ -74,20 +74,18 @@ describe('remote fiber bridge', () => {
     writeFileSync(join(tempDir, 'demo', 'dist', 'views.js'), VIEW_MODULE)
     writeFileSync(join(tempDir, 'demo', 'dist', 'broken.js'), 'export const notAPlugin = 1')
 
-    kernel.mount(busPlugin)
-    const http = kernel.mount(httpPlugin, { port: 0, pluginsDir: tempDir })
-    const bridge = kernel.mount(surfacesPlugin)
-    await http.settle()
-    await bridge.settle()
+    await root.plugin(busPlugin)
+    await root.plugin(httpPlugin, { port: 0, pluginsDir: tempDir })
+    await root.plugin(surfacesPlugin)
 
-    const port = (kernel.getService('http') as HttpService).port
+    const port = (root.get('http') as HttpService).port
     viewUrl = `http://127.0.0.1:${port}/plugins/demo/views.js`
     busUrl = `ws://127.0.0.1:${port}/ws`
-    surfaces = kernel.getService('surfaces') as SurfacesService
+    surfaces = root.get('surfaces') as SurfacesService
   })
 
   afterAll(async () => {
-    await kernel.dispose()
+    await root.fiber.dispose()
     rmSync(tempDir, { recursive: true, force: true })
   })
 

@@ -30,33 +30,36 @@ third party writes.
 
 ## The kernel
 
-A small plugin kernel of our own, modeled on
-[Cordis](https://github.com/cordiverse/cordis) but not depending on it. One
-TypeScript package, imported by both the host and every webview — one fiber
-state machine, one effect tracker, tested once, never mirrored across
-languages.
+[@neoworks/extension-system](https://github.com/neoworks-dev/extension-system),
+a Cordis-derived plugin kernel with zero runtime dependencies. One TypeScript
+package, imported by both the host and every webview — one fiber state machine,
+one effect tracker, tested once, never mirrored across languages. It is a local
+package linked in with `bun link @neoworks/extension-system`.
 
-Scope, deliberately bounded:
+What neoshell builds on:
 
 - flat mount list with per-entry `disabled` and `config`
-- `inject`/`provides` dependency resolution: a plugin mounts when its needs are
-  available, unloads transitively when a provider goes away, reloads when it
-  returns
+- `inject` dependency resolution: a plugin mounts when its needs are available,
+  unloads transitively when a provider goes away, reloads when it returns.
+  Resolution is by provider identity, so an unrelated context change is not a
+  reload
 - reversible effects: everything registered through `ctx` carries a disposer the
   kernel runs on unload
 - child fibers (`ctx.plugin`), disposed with their parent
 - ordered async disposal: children before parents, effects in reverse
-  registration order, `await dispose()` means finished
-- disposed-context guard: touching a dead context throws instead of silently
-  operating on a torn-down service
+  registration order, `await fiber.dispose()` means finished
+- inactive-context guard: `ctx.effect` on a disposed fiber throws instead of
+  silently leaking a registration past teardown
 
-Explicitly out of scope: Proxy-based interception, isolation scopes, waterfall
-dispatch, HMR. Add only when something needs them.
+The kernel offers more than neoshell uses — isolation scopes, per-consumer
+service interception, five event dispatch modes, Standard Schema config
+validation. Reach for those only when something needs them.
 
 The known-hard parts are the async races — an effect registered while disposal
-is already running, transitive unload ordering, use-after-dispose. These get
-tests from day one; they are the entire reason hot-reload and crash-recovery
-can be trusted, which is the product claim "easily extensible" rests on.
+is already running, transitive unload ordering, use-after-dispose. The kernel
+carries its own tests for these; they are the entire reason hot-reload and
+crash-recovery can be trusted, which is the product claim "easily extensible"
+rests on.
 
 ## Processes
 

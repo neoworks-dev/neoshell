@@ -7,6 +7,7 @@ export interface BusMessage {
   type: string
   data: unknown
   replyTo?: string
+  retain?: boolean
 }
 
 export type BusHandler = (message: BusMessage) => void
@@ -32,6 +33,11 @@ export class BusClient {
   private socket: WebSocket | null = null
   private readonly subscriptions = new Set<SubscriptionEntry>()
   private readonly sentPatterns = new Set<string>()
+  // The server replays retained topics when it receives a subscribe frame, and
+  // the wire has no unsubscribe — so a pattern is only ever sent once per
+  // connection. Keeping the retained values here is what lets a second local
+  // subscriber to an already-sent pattern still catch up.
+  private readonly retained = new Map<string, BusMessage>()
   private nextReplyId = 1
   private readonly url: string
   private readonly replyPrefix: string
@@ -69,15 +75,26 @@ export class BusClient {
     this.sendRaw({ type, data, retain: true })
   }
 
+  // A pattern already sent gets its retained values from the local copy: asking
+  // the server again would add a second subscription for the same socket and
+  // every later message would arrive twice.
   subscribe(pattern: string, handler: BusHandler): () => void {
     const entry: SubscriptionEntry = { pattern, handler }
     this.subscriptions.add(entry)
-    if (!this.sentPatterns.has(pattern)) {
+    if (this.sentPatterns.has(pattern)) {
+      this.replayRetained(entry)
+    } else {
       this.sentPatterns.add(pattern)
       this.sendRaw({ subscribe: [pattern] })
     }
     return () => {
       this.subscriptions.delete(entry)
+    }
+  }
+
+  private replayRetained(entry: SubscriptionEntry): void {
+    for (const message of [...this.retained.values()]) {
+      deliverIfMatching(entry, message)
     }
   }
 
@@ -112,6 +129,9 @@ export class BusClient {
     const message = parseFrame(raw)
     if (message === null) {
       return
+    }
+    if (message.retain === true) {
+      this.retained.set(message.type, message)
     }
     for (const entry of [...this.subscriptions]) {
       deliverIfMatching(entry, message)

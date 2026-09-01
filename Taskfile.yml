@@ -1,6 +1,9 @@
 # Taskfile for neoshell. Requires go-task (https://taskfile.dev).
 #
 #   task run     run the TS host (spawns the render host, mounts extensions)
+#   task dev     the same against a vite dev server: a saved view is hot
+#                replaced in place, extension backends remount, and the host
+#                restarts on its own edits
 #   task build   compile the render host, daemons, and the notifications bridge
 #
 # The host spawns the render host, so the render host must be built first.
@@ -48,6 +51,12 @@ tasks:
     cmds:
       - go build -o neoshell-notifyd .
 
+  trayd:build:
+    desc: Build the StatusNotifierItem tray bridge (Go)
+    dir: apps/extensions/systray/daemon
+    cmds:
+      - go build -o neoshell-trayd .
+
   views:build:
     desc: Build the neoshell default views (Svelte + Tailwind → dist)
     dir: apps/extensions
@@ -67,15 +76,27 @@ tasks:
       - cargo build --release
 
   build:
-    desc: Build the render host, daemons, the notifications bridge, and the views
-    deps: [render:build, bg:build, notifyd:build, views:build]
+    desc: Build the render host, daemons, the D-Bus bridges, and the views
+    deps: [render:build, bg:build, notifyd:build, trayd:build, views:build]
 
   run:
     desc: Run the host (spawns the render host, mounts extensions and views)
-    deps: [render:build, notifyd:build, views:build]
+    deps: [render:build, notifyd:build, trayd:build, views:build]
     dir: apps/host
     cmds:
       - bun src/main.ts
+
+  dev:
+    desc: Run the host against the views dev server (HMR on save, host restarts on its own changes)
+    deps: [render:build, notifyd:build, trayd:build]
+    cmds:
+      - bun scripts/dev.ts
+
+  views:dev:
+    desc: Serve the views from source with HMR (started by `task dev`)
+    dir: apps/extensions
+    cmds:
+      - bun run dev:views
 
   host:headless:
     desc: Run the host without the render host (tests, remote development)
@@ -91,10 +112,19 @@ tasks:
     cmds:
       - bun src/emit.ts {{.CLI_ARGS}}
 
-  test:
-    desc: Run every test suite (kernel, host, surface, extensions, views check)
+  lint:
+    desc: Lint TS/JS with oxlint and Svelte markup with ESLint
     cmds:
-      - cd packages/kernel && bun test
+      - bun run lint
+
+  lint:fix:
+    desc: Apply oxlint and ESLint autofixes
+    cmds:
+      - bun run lint:fix
+
+  test:
+    desc: Run every test suite (host, surface, extensions, views check)
+    cmds:
       - cd apps/host && bun test
       - cd packages/surface && bun test
       - cd apps/extensions && bun test
@@ -127,3 +157,4 @@ tasks:
       - cd apps/bg && cargo clean
       - cd apps/settings && cargo clean
       - rm -f apps/extensions/notifications/daemon/neoshell-notifyd
+      - rm -f apps/extensions/systray/daemon/neoshell-trayd

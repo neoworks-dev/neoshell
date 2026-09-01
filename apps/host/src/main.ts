@@ -1,10 +1,11 @@
 import { homedir, userInfo } from 'node:os'
 import { join } from 'node:path'
-import { Kernel } from '@neoshell/kernel'
+import { Context } from '@neoworks/extension-system'
 import { assetsPlugin } from './plugins/assets.js'
 import { busPlugin } from './plugins/bus.js'
 import { configPlugin } from './plugins/config.js'
 import { extensionsPlugin } from './plugins/extensions.js'
+import { hotReloadPlugin } from './plugins/hotReload.js'
 import { httpPlugin } from './plugins/http.js'
 import { renderHostPlugin } from './plugins/renderHost.js'
 import { surfacePagePlugin } from './plugins/surfacePage.js'
@@ -12,46 +13,50 @@ import { surfacesPlugin } from './plugins/surfaces.js'
 import { unixSocketPlugin } from './plugins/unixSocket.js'
 import { viewTreePlugin } from './plugins/viewTree.js'
 
-// neoshell-host: the kernel root. Mounts the built-in runtime plugins — bus,
-// config, transports, render host — and nothing feature-shaped. Runs alongside
-// the Go core during migration, on its own port and socket.
+// neoshell-host: the kernel's root context. Mounts the built-in runtime
+// plugins — bus, config, transports, render host — and nothing feature-shaped.
+// Runs alongside the Go core during migration, on its own port and socket.
 
 function main(): void {
-  const kernel = new Kernel()
+  const root = new Context()
   const extensionsDir = envString('NEOSHELL_EXTENSIONS', 'apps/extensions')
-  kernel.mount(busPlugin)
-  kernel.mount(configPlugin, { path: defaultConfigPath() })
-  kernel.mount(unixSocketPlugin, { socketPath: join(runtimeDir(), 'neoshell-host.sock') })
-  kernel.mount(httpPlugin, {
+  root.plugin(busPlugin)
+  root.plugin(configPlugin, { path: defaultConfigPath() })
+  root.plugin(unixSocketPlugin, { socketPath: join(runtimeDir(), 'neoshell-host.sock') })
+  root.plugin(httpPlugin, {
     port: envNumber('NEOSHELL_HOST_PORT', 9877),
     // Extension bundles are the plugin dirs: /plugins/<id>/ serves <ext>/dist.
     pluginsDir: envString('NEOSHELL_PLUGINS', extensionsDir),
   })
-  kernel.mount(assetsPlugin)
-  kernel.mount(surfacePagePlugin)
-  kernel.mount(surfacesPlugin)
-  kernel.mount(extensionsPlugin, { extensionsDir })
-  kernel.mount(viewTreePlugin, { extensionsDir })
-  mountRenderHostIfEnabled(kernel)
-  installSignalHandlers(kernel)
+  root.plugin(assetsPlugin)
+  root.plugin(surfacePagePlugin)
+  root.plugin(surfacesPlugin)
+  root.plugin(extensionsPlugin, { extensionsDir })
+  root.plugin(viewTreePlugin, {
+    extensionsDir,
+    viewsDevOrigin: envString('NEOSHELL_VIEWS_DEV', ''),
+  })
+  root.plugin(hotReloadPlugin, { extensionsDir })
+  mountRenderHostIfEnabled(root)
+  installSignalHandlers(root)
   console.log('neoshell-host running')
 }
 
 // The host owns the render host by default; NEOSHELL_HOST_RENDER=0 runs
 // headless (tests, remote development).
-function mountRenderHostIfEnabled(kernel: Kernel): void {
+function mountRenderHostIfEnabled(root: Context): void {
   if (process.env.NEOSHELL_HOST_RENDER === '0') {
     return
   }
-  kernel.mount(renderHostPlugin, {
+  root.plugin(renderHostPlugin, {
     binaryPath: envString('NEOSHELL_RENDER_BIN', 'apps/render-host/neoshell-render'),
     socketPath: join(runtimeDir(), 'neoshell-render.sock'),
   })
 }
 
-function installSignalHandlers(kernel: Kernel): void {
+function installSignalHandlers(root: Context): void {
   const shutdown = () => {
-    void kernel.dispose().then(() => process.exit(0))
+    void root.fiber.dispose().then(() => process.exit(0))
   }
   process.on('SIGINT', shutdown)
   process.on('SIGTERM', shutdown)

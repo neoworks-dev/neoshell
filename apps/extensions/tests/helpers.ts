@@ -1,4 +1,4 @@
-import type { Plugin } from '@neoshell/kernel'
+import type { Plugin } from '@neoworks/extension-system'
 import type { BusMessage } from '../lib/bus.js'
 
 // FakeBus: in-memory bus with exact-match dispatch — bundled extensions
@@ -53,7 +53,7 @@ export class FakeBus {
   }
 }
 
-export function busProvider(bus: FakeBus): Plugin {
+export function busProvider(bus: FakeBus): Plugin.Object {
   return {
     name: 'fake-bus',
     apply(context) {

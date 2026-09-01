@@ -1,4 +1,5 @@
-import type { Plugin } from '@neoshell/kernel'
+import type { Plugin } from '@neoworks/extension-system'
+import { requireService } from '../lib/services.js'
 import { registerFunction, RetainedTopics } from '../lib/bus.js'
 import type { BusMessage, BusService } from '../lib/bus.js'
 
@@ -21,11 +22,11 @@ interface AppearanceConfig {
 
 const RECONNECT_DEFAULT_MS = 2000
 
-const appearanceExtension: Plugin<AppearanceConfig | undefined> = {
+const appearanceExtension: Plugin.Object<AppearanceConfig | undefined> = {
   name: 'appearance',
   inject: ['bus'],
   apply(context, config) {
-    const bus = context.require<BusService>('bus')
+    const bus = requireService<BusService>(context, 'bus')
     const socketPath = resolveSocketPath(config)
     const reconnectMs = resolveReconnectMs(config)
     const retained = new RetainedTopics(bus)
