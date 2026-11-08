@@ -9,6 +9,9 @@ import Dock from './Dock.svelte'
 import Wallpaper from './Wallpaper.svelte'
 import Desktop from './Desktop.svelte'
 import WidgetGallery from './WidgetGallery.svelte'
+import NotchSettings from './NotchSettings.svelte'
+import NookMedia from './NookMedia.svelte'
+import NookCalendar from './NookCalendar.svelte'
 
 // neoshell default views — the neoworks profile's surface set. Registration is
 // an effect, so a view type leaves the registry with the extension and the
@@ -27,6 +30,9 @@ const plugin: Plugin.Object = {
     context.effect(() => ui.register('neoshell.wallpaper', Wallpaper))
     context.effect(() => ui.register('neoshell.desktop', Desktop))
     context.effect(() => ui.register('neoshell.widgetgallery', WidgetGallery))
+    context.effect(() => ui.register('neoshell.notch.settings', NotchSettings))
+    context.effect(() => ui.register('neoshell.nook.media', NookMedia))
+    context.effect(() => ui.register('neoshell.nook.calendar', NookCalendar))
   },
 }
 

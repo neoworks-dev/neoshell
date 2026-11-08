@@ -7,6 +7,10 @@ import { Bus } from './host/bus.js'
 import { ViewRegistry } from './host/plugins/views.js'
 import Smoke from './Smoke.svelte'
 import SmokeCard from './SmokeCard.svelte'
+import NookMedia from './extensions/neoshell/NookMedia.svelte'
+import NookCalendar from './extensions/neoshell/NookCalendar.svelte'
+import NotchSettings from './extensions/neoshell/NotchSettings.svelte'
+import { notchWidgetCatalog, settingsCatalog } from './host/plugins/extensions.js'
 
 // Builds every view in the shell once, in a plain window, and exits. `tsc`
 // cannot see a GTK setter that does not exist — the typings run behind the
@@ -39,6 +43,13 @@ bus.retain('widgets.catalog', {
     },
   ],
 })
+
+// The Nook's widgets and the Settings window's tabs, from the real manifests.
+registry.register('neoshell.nook.media', NookMedia)
+registry.register('neoshell.nook.calendar', NookCalendar)
+registry.register('neoshell.notch.settings', NotchSettings)
+bus.retain('notch.catalog', { widgets: notchWidgetCatalog() })
+bus.retain('settings.catalog', { sections: settingsCatalog() })
 
 bus.retain('hypr.monitors', [{ width: 1920, height: 1080 }])
 
@@ -130,10 +141,12 @@ bus.retain('bluetooth.devices', [
 // effect, which runs after this module does, and only a retained topic
 // replays for a late subscriber.
 bus.retain('quicksettings:open', {})
+bus.retain('notch:open', {})
+bus.retain('settings:open', { section: 'notch' })
 bus.retain('widgets:gallery', { open: true })
 
 GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
-  print('neoshell: built every view — the tray, the gallery and both widget cards — without error')
+  print('neoshell: built every view — the tray, the gallery, both widget cards, the notch and settings — without error')
   System.exit(0)
   return GLib.SOURCE_REMOVE
 })

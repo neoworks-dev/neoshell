@@ -12,6 +12,7 @@ import neoshellViews from './neoshell/views.js'
 import lockBackend from './lock/backend.js'
 import lockViews from './lock/views.js'
 import quicksettingsViews from './quicksettings/views.js'
+import settingsViews from './settings/views.js'
 import weatherViews from './weather/views.js'
 import airQualityViews from './airquality/views.js'
 
@@ -31,11 +32,38 @@ export interface WidgetDeclaration {
   defaultSize: string
 }
 
+// A tab in the Settings window. The window draws only the tab; everything
+// under it is the registered view `view`, so an extension's settings page can
+// hold whatever it needs.
+export interface SettingsDeclaration {
+  id: string
+  title: string
+  // A theme icon name.
+  icon: string
+  view: string
+  // Lower comes first; ties keep declaration order.
+  order?: number
+}
+
+// A widget the notch's Nook can show. Its width is counted in cells, which
+// the user sets per widget within minCells..maxCells.
+export interface NotchWidgetDeclaration {
+  type: string
+  name: string
+  // A theme icon name.
+  icon: string
+  defaultCells: number
+  minCells: number
+  maxCells: number
+}
+
 export interface ExtensionManifest {
   id: string
   inject?: string[]
   provides?: string[]
   widgets?: WidgetDeclaration[]
+  settings?: SettingsDeclaration[]
+  notchWidgets?: NotchWidgetDeclaration[]
 }
 
 export interface ExtensionModule {
@@ -74,7 +102,31 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     backend: bluetoothBackend as Plugin.Object,
   },
   neoshell: {
-    manifest: { id: 'neoshell', inject: ['bus', 'ui'] },
+    manifest: {
+      id: 'neoshell',
+      inject: ['bus', 'ui'],
+      settings: [
+        { id: 'notch', title: 'Notch', icon: 'view-grid-symbolic', view: 'neoshell.notch.settings', order: 10 },
+      ],
+      notchWidgets: [
+        {
+          type: 'neoshell.nook.media',
+          name: 'Media Player',
+          icon: 'audio-x-generic-symbolic',
+          defaultCells: 5,
+          minCells: 4,
+          maxCells: 8,
+        },
+        {
+          type: 'neoshell.nook.calendar',
+          name: 'Calendar',
+          icon: 'x-office-calendar-symbolic',
+          defaultCells: 5,
+          minCells: 4,
+          maxCells: 7,
+        },
+      ],
+    },
     views: neoshellViews,
   },
   lock: {
@@ -85,6 +137,10 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
   quicksettings: {
     manifest: { id: 'quicksettings', inject: ['bus', 'ui'] },
     views: quicksettingsViews,
+  },
+  settings: {
+    manifest: { id: 'settings', inject: ['bus', 'ui'] },
+    views: settingsViews,
   },
   // The two widget providers. Their `widgets` declarations are what the
   // gallery lists — read from the manifest rather than from the mount list, so

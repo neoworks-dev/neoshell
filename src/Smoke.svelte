@@ -8,6 +8,9 @@
   import Weather from './extensions/weather/Weather.svelte'
   import AirQuality from './extensions/airquality/AirQuality.svelte'
   import LockSurface from './extensions/lock/LockSurface.svelte'
+  import Notch from './extensions/neoshell/Notch.svelte'
+  import NotchSettings from './extensions/neoshell/NotchSettings.svelte'
+  import SettingsWindow from './extensions/settings/SettingsWindow.svelte'
   import { MAX_UNIT_PX, sizePx, spanOf } from './extensions/neoshell/freeform'
   import type { BluetoothState, NetworkState } from './extensions/quicksettings/types'
 
@@ -125,6 +128,15 @@
           </gtkbox>
         </gtkbox>
       {/each}
+      <!-- The notch opened on its Nook (notch:open is retained), and both
+           pages of its settings. -->
+      <gtkbox class="ui-dark" orientation="vertical" spacing={16} valign="start">
+        <Notch {bus} {registry} args={{}} id="smoke.notch" />
+      </gtkbox>
+      <gtkbox class="ui-light" orientation="vertical" spacing={16} width={720} valign="start">
+        <NotchSettings {bus} {registry} args={{}} id="smoke.notch.general" />
+        <NotchSettings {bus} {registry} args={{ page: 'widgets' }} id="smoke.notch.widgets" />
+      </gtkbox>
       <!-- One monitor's lock surface, in a box instead of a session-lock
            window: the compositor lock is what the smoke must never take. -->
       <gtkbox width={960} height={540}>
@@ -133,3 +145,6 @@
     </gtkbox>
   </gtkscrolledwindow>
 </gtkwindow>
+
+<!-- A window of its own; settings:open is retained, so it opens. -->
+<SettingsWindow {bus} {registry} args={{}} id="smoke.settings" />

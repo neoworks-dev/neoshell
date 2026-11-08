@@ -23,6 +23,7 @@ export const ICONS: Record<string, string> = {
   volumeMuted: 'audio-volume-muted-symbolic',
   sun: 'display-brightness-symbolic',
   power: 'system-shutdown-symbolic',
+  settings: 'emblem-system-symbolic',
   chevronRight: 'go-next-symbolic',
   chevronLeft: 'go-previous-symbolic',
   chevronDown: 'pan-down-symbolic',

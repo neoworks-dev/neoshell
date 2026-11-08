@@ -199,36 +199,21 @@ button.workspace.urgent {
   );
 }
 
-/* Events move the island sideways only; height changes just once, when the
-   island is deliberately opened. */
+/* The island's one curve: quick, with a small settle at the end. Width and
+   height share it, so the sides keep pace with the middle. */
 .island {
   background-color: var(--base-100);
   color: var(--base-content);
   border-radius: 0 0 10px 10px;
+  box-shadow: 0 8px 20px -6px alpha(#000000, 0.55);
   font-size: 12px;
   transition:
-    min-width 260ms cubic-bezier(0.32, 1.24, 0.5, 1),
-    min-height 260ms cubic-bezier(0.32, 1.24, 0.5, 1);
+    min-width 180ms cubic-bezier(0.25, 1.1, 0.4, 1),
+    min-height 180ms cubic-bezier(0.25, 1.1, 0.4, 1),
+    border-radius 180ms cubic-bezier(0.25, 1.1, 0.4, 1);
 }
 
-/* Everything the open state resizes runs on the island's own curve and
-   duration. Left to snap, the header would reach its full 64px while the
-   island around it was still a third of the way open, which reads as the
-   content jumping and the notch crawling after it. */
-.island-header,
-.island-art,
-.island-title,
-.level-meter {
-  transition:
-    min-width 260ms cubic-bezier(0.32, 1.24, 0.5, 1),
-    min-height 260ms cubic-bezier(0.32, 1.24, 0.5, 1),
-    padding 260ms cubic-bezier(0.32, 1.24, 0.5, 1),
-    border-radius 260ms cubic-bezier(0.32, 1.24, 0.5, 1),
-    font-size 260ms cubic-bezier(0.32, 1.24, 0.5, 1);
-}
-
-.island-header-small { padding: 0 12px; min-height: 30px; }
-.island-header-large { padding: 4px 16px 0 16px; min-height: 64px; }
+.island-header { padding: 0 12px; min-height: 30px; }
 
 /* Hovering only grows the island; the header itself never tints, so the
    theme's button states have to be neutralised explicitly. */
@@ -251,32 +236,12 @@ button.workspace.urgent {
 .island-detail { color: alpha(#fafafa, 0.5); }
 
 .island-art-small { min-width: 20px; min-height: 20px; border-radius: 6px; background-color: alpha(#fafafa, 0.1); }
-.island-art-large { min-width: 48px; min-height: 48px; border-radius: 8px; background-color: alpha(#fafafa, 0.1); }
 
 .island-title { font-weight: 500; }
-.island-title-large { font-size: 15px; font-weight: 600; }
-
-/* Mounted at the moment the island opens, so a transition has nothing to
-   start from — an animation runs on its own from the first frame. */
-.island-subtitle {
-  font-size: 13px;
-  color: alpha(#fafafa, 0.6);
-  animation: island-fade-in 260ms ease-out;
-}
-
-@keyframes island-fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-.island-expanded { padding: 0 16px 16px 16px; }
-.island-expanded-detail { font-size: 13px; color: alpha(#fafafa, 0.7); }
-.island-expanded-id { font-size: 10px; letter-spacing: 1px; color: alpha(#fafafa, 0.3); }
 
 /* Four bars bouncing in sequence. A paused player freezes them mid-stride. */
 .level-meter { color: var(--accent); }
 .level-meter-small { min-height: 12px; }
-.level-meter-large { min-height: 16px; }
 
 .level-bar {
   min-width: 2px;
@@ -312,34 +277,95 @@ button.workspace.urgent {
   transition: min-width 200ms;
 }
 
-/* Both times are the same width — an elapsed side narrower than the remaining
-   side would push the track off centre and out of line with the transport. */
-.scrub-time { min-width: 48px; font-size: 11px; color: alpha(#fafafa, 0.5); }
+/* ── notch: the Nook ──────────────────────────────────────────────────── */
 
-.scrub-track {
-  min-height: 6px;
-  border-radius: 3px;
-  background-color: alpha(#fafafa, 0.15);
+/* Mounted the moment the island opens; it fades in over the island's own
+   180ms rather than popping in at full contrast. Padding mirrors
+   NOOK_PADDING and the header NOOK_HEADER_HEIGHT in Notch.svelte. */
+.nook-panel {
+  padding: 0 16px 16px 16px;
+  animation: nook-fade-in 180ms ease-out;
 }
 
-.scrub-played {
-  min-height: 6px;
-  border-radius: 3px;
-  background-color: alpha(#fafafa, 0.7);
-  transition: min-width 500ms linear;
+@keyframes nook-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
-.control {
+.nook-header { min-height: 44px; }
+
+button.nook-tab {
+  min-height: 28px;
+  padding: 0 12px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  border-radius: 999px;
+  color: alpha(#fafafa, 0.6);
+  background-color: transparent;
+  font-weight: 500;
+}
+
+button.nook-tab:hover { color: var(--base-content); background-color: alpha(#fafafa, 0.08); }
+button.nook-tab.nook-tab-selected { color: var(--base-content); background-color: alpha(#fafafa, 0.14); }
+
+separator.nook-divider {
+  min-width: 1px;
+  margin: 8px 12px;
+  background-color: alpha(#fafafa, 0.12);
+}
+
+.nook-empty,
+.tray-empty { color: alpha(#fafafa, 0.45); font-size: 13px; }
+
+.tray-shelf {
+  border: 1px dashed alpha(#fafafa, 0.2);
+  border-radius: 14px;
+  color: alpha(#fafafa, 0.45);
+}
+
+/* Media widget */
+.nook-media-art {
+  border-radius: 14px;
+  background-color: alpha(#fafafa, 0.1);
+  color: alpha(#fafafa, 0.4);
+}
+
+.nook-media-title { font-size: 15px; font-weight: 600; }
+.nook-media-album { color: alpha(#fafafa, 0.6); font-size: 12px; font-weight: 500; }
+.nook-media-artist { color: alpha(#fafafa, 0.45); font-size: 12px; }
+.nook-media-controls { margin-top: 6px; }
+
+button.nook-control {
   padding: 4px;
   border-radius: var(--radius-box);
-  transition: background-color 150ms;
+  color: var(--base-content);
+  background-color: transparent;
 }
 
-.control:hover { background-color: alpha(#fafafa, 0.1); }
-/* Element in the selector: the bar-wide button reset pins a colour at
-   element-plus-class specificity, and these have to beat it. */
-button.control-active { color: var(--accent); }
-button.control-idle { color: alpha(#fafafa, 0.85); }
+button.nook-control:hover { background-color: alpha(#fafafa, 0.1); }
+button.nook-control:disabled { color: alpha(#fafafa, 0.3); }
+
+/* Calendar widget */
+.nook-month { font-size: 22px; font-weight: 700; }
+
+button.nook-day {
+  padding: 2px 0;
+  border-radius: var(--radius-box);
+  background-color: transparent;
+  color: alpha(#fafafa, 0.45);
+}
+
+button.nook-day:hover { background-color: alpha(#fafafa, 0.08); }
+.nook-day-head { font-size: 9px; font-weight: 600; letter-spacing: 0.5px; }
+.nook-day-number { font-size: 15px; font-weight: 600; }
+
+button.nook-day.nook-day-weekend { color: alpha(#f87171, 0.55); }
+button.nook-day.nook-day-today { color: var(--info); }
+button.nook-day.nook-day-chosen { color: var(--base-content); }
+button.nook-day.nook-day-chosen .nook-day-number { font-size: 19px; }
+
+.nook-agenda { color: alpha(#fafafa, 0.5); }
+.nook-agenda-empty { font-size: 13px; }
 
 /* ── dock ─────────────────────────────────────────────────────────────── */
 
@@ -1386,3 +1412,63 @@ button.qs-row-action:hover {
 .lock-hint-error {
   color: var(--error);
 }
+
+/* ── settings window ──────────────────────────────────────────────────── */
+
+/* The window and its controls are @neoworks/gtk-ui; these are the pages'
+   own pieces, on the same --ui-* tokens so they follow light and dark. */
+.settings-content { margin: 20px 28px 28px 28px; }
+.settings-missing { color: var(--ui-text-muted); }
+
+/* Notch → Customize widgets: the open notch, drawn small, over a strip that
+   stands in for the wallpaper. Black in both schemes, like the notch. */
+.nook-preview-backdrop {
+  padding: 18px 24px 22px 24px;
+  border-radius: var(--ui-radius-card);
+  background-image: linear-gradient(135deg, var(--ui-lake-6), var(--ui-pine-6));
+}
+
+.nook-preview {
+  padding: 10px;
+  border-radius: 0 0 22px 22px;
+  background-color: #000000;
+  box-shadow: 0 8px 20px -6px alpha(#000000, 0.55);
+}
+
+.nook-preview-block {
+  min-height: 72px;
+  border-radius: 14px;
+  background-color: #1c1c1f;
+  color: #fafafa;
+}
+
+.nook-preview-name { font-weight: 600; font-size: 12px; }
+.nook-preview-empty { color: alpha(#fafafa, 0.5); padding: 26px 40px; }
+
+.nook-config-card {
+  padding: 8px 12px 8px 8px;
+  border-radius: var(--ui-radius-card);
+  background-color: var(--ui-sunken);
+}
+
+.nook-config-card.nook-config-card-chosen {
+  background-color: color-mix(in oklch, var(--ui-focus) 22%, var(--ui-surface));
+}
+
+button.nook-config-pick {
+  padding: 0;
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.nook-config-icon {
+  min-width: 34px;
+  min-height: 34px;
+  border-radius: 9px;
+  background-color: var(--ui-focus);
+  color: #ffffff;
+}
+
+.nook-config-icon image { margin: 8px; }
+.nook-config-name { color: var(--ui-text); font-weight: 600; }
+.nook-config-cells { color: var(--ui-text-muted); font-size: 12px; }

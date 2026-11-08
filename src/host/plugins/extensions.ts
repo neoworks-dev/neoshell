@@ -2,7 +2,12 @@ import type { Context, Fiber, Plugin } from '@neoworks/extension-system'
 import { requireService } from '../services.js'
 import type { Bus } from '../bus.js'
 import { EXTENSIONS } from '../../extensions/index.js'
-import type { ExtensionModule, WidgetDeclaration } from '../../extensions/index.js'
+import type {
+  ExtensionManifest,
+  NotchWidgetDeclaration,
+  SettingsDeclaration,
+  WidgetDeclaration,
+} from '../../extensions/index.js'
 
 // extensionsPlugin is the loader: it reads the mount list from config (the
 // "extensions" key — flat, Cordis-shaped) and mounts each enabled extension as
@@ -23,6 +28,10 @@ import type { ExtensionModule, WidgetDeclaration } from '../../extensions/index.
 // That is what the desktop's widget gallery lists. It is read from every
 // installed manifest rather than from the mount list, so a widget appears in
 // the gallery because its extension is present, not because it is running.
+// Settings tabs and Nook widgets are aggregated the same way:
+//
+//   settings.catalog  {sections: [{id, title, icon, view, order?}]}
+//   notch.catalog     {widgets: [{type, name, icon, defaultCells, minCells, maxCells}]}
 
 interface ExtensionEntry {
   id: string
@@ -45,22 +54,40 @@ export const extensionsPlugin: Plugin.Object = {
       }),
     )
     context.effect(() => bus.retain('widgets.catalog', { widgets: widgetCatalog() }))
+    context.effect(() => bus.retain('settings.catalog', { sections: settingsCatalog() }))
+    context.effect(() => bus.retain('notch.catalog', { widgets: notchWidgetCatalog() }))
   },
 }
 
 export function widgetCatalog(): WidgetDeclaration[] {
-  const widgets: WidgetDeclaration[] = []
-  for (const extension of Object.values(EXTENSIONS)) {
-    widgets.push(...declarationsOf(extension))
-  }
-  return widgets
+  return collect((manifest) => manifest.widgets)
 }
 
-function declarationsOf(extension: ExtensionModule): WidgetDeclaration[] {
-  if (extension.manifest.widgets === undefined) {
-    return []
+export function settingsCatalog(): SettingsDeclaration[] {
+  const sections = collect((manifest) => manifest.settings)
+  return sections.sort((first, second) => orderOf(first) - orderOf(second))
+}
+
+export function notchWidgetCatalog(): NotchWidgetDeclaration[] {
+  return collect((manifest) => manifest.notchWidgets)
+}
+
+function collect<T>(pick: (manifest: ExtensionManifest) => T[] | undefined): T[] {
+  const declarations: T[] = []
+  for (const extension of Object.values(EXTENSIONS)) {
+    const picked = pick(extension.manifest)
+    if (picked !== undefined) {
+      declarations.push(...picked)
+    }
   }
-  return extension.manifest.widgets
+  return declarations
+}
+
+function orderOf(section: SettingsDeclaration): number {
+  if (section.order === undefined) {
+    return 0
+  }
+  return section.order
 }
 
 class ExtensionLoader {

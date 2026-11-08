@@ -1,18 +1,33 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { subscribeTo } from '../../lib/bus'
   import type { ViewProps } from "../../host/plugins/views";
-  import { recordOf } from "../../lib/record";
+  import { arrayOf, recordOf } from "../../lib/record";
+  import { Settings } from "../../lib/settings.svelte";
+  import { resolve } from "../../tree";
+  import type { NotchWidgetDeclaration } from "../index";
+  import {
+    NOOK_KEY,
+    NOOK_ROW_HEIGHT,
+    enabledEntries,
+    nookEntries,
+    nookWidth,
+    widgetWidth,
+  } from "./nook";
+  import type { NookEntry } from "./nook";
 
-  // The notch: a black cutout welded to the top edge, centred over the bar. It
-  // renders one island entry at a time — the highest-priority member of a
-  // stack fed by island:show / island:dismiss plus the built-in producers
-  // below (focused window, volume, media).
+  // The notch: a black cutout welded to the top edge, centred over the bar.
+  // Collapsed, it renders one island entry at a time — the highest-priority
+  // member of a stack fed by island:show / island:dismiss plus the built-in
+  // producers below (focused window, volume, media). Open, it is the Nook: a
+  // row of widgets configured in Settings → Notch, and the Tray.
   //
   //   island:show    {id, priority?, label, detail?, progress?, tone?, ttlMs?}
   //   island:dismiss {id}
+  //   notch:open / notch:close / notch:toggle
   //
-  // Hovering only nudges the island a few pixels wider, to say it is
-  // clickable; a click is what opens it.
+  // It opens on click or hover (notch.openOn) and closes when the pointer
+  // leaves it. A right click opens its settings.
 
   interface IslandEntry {
     id: string;
@@ -22,12 +37,6 @@
     progress: number;
     tone: string;
     art: string;
-  }
-
-  interface MediaState {
-    status: string;
-    length: number;
-    shuffle: boolean;
   }
 
   interface Size {
@@ -50,11 +59,24 @@
     empty: { width: 128, height: BAR_HEIGHT },
     rest: { width: 272, height: BAR_HEIGHT },
     active: { width: 320, height: BAR_HEIGHT },
-    expanded: { width: 380, height: 116 },
-    expandedMedia: { width: 380, height: 164 },
   };
 
   const HOVER_GROWTH: Size = { width: 12, height: 3 };
+
+  // Mirrors .nook-panel and .nook-header in the stylesheet.
+  const NOOK_PADDING = 16;
+  const NOOK_HEADER_HEIGHT = 44;
+  const EMPTY_NOOK_WIDTH = 320;
+  const PROGRESS_MARGIN = 16;
+
+  // The window never resizes: it is the stage the island animates inside.
+  // Room for the fillets either side, and for the island's shadow.
+  const FILLET_WIDTH = 10;
+  const SHADOW_ROOM: Size = { width: 16, height: 28 };
+
+  const HOVER_OPEN_DELAY_MS = 150;
+  const LEAVE_CLOSE_DELAY_MS = 350;
+  const SECONDARY_BUTTON = 3;
 
   const TONE_CLASS: Record<string, string> = {
     neutral: "tone-neutral",
@@ -64,44 +86,56 @@
     error: "tone-error",
   };
 
-  // Phosphor has no GTK equivalent; these are the closest symbolic icons the
-  // theme ships.
-  const ICONS = {
-    shuffle: "media-playlist-shuffle-symbolic",
-    previous: "media-skip-backward-symbolic",
-    next: "media-skip-forward-symbolic",
-    play: "media-playback-start-symbolic",
-    pause: "media-playback-pause-symbolic",
-  };
+  const TABS = [
+    { id: "nook", label: "Nook", icon: "view-grid-symbolic" },
+    { id: "tray", label: "Tray", icon: "folder-symbolic" },
+  ];
 
-  // GTK has no percentage widths, so fills are sized against the island's
-  // known content width rather than their parent. Both mirror .island-expanded
-  // and .scrub-time in the stylesheet.
-  const ISLAND_PADDING = 16;
-  const SCRUB_TIME_WIDTH = 48;
-  const SCRUB_ROW_SPACING = 10;
+  let { bus, registry }: ViewProps = $props();
 
-  const PROGRESS_TRACK_WIDTH = 380 - 2 * ISLAND_PADDING;
-  const SCRUB_TRACK_WIDTH = PROGRESS_TRACK_WIDTH -
-    2 * (SCRUB_TIME_WIDTH + SCRUB_ROW_SPACING);
-
-  let { bus }: ViewProps = $props();
+  const settings = new Settings(untrack(() => bus));
 
   let entries = $state<IslandEntry[]>([]);
   let hovered = $state(false);
   let opened = $state(false);
-  let media = $state<MediaState>({ status: "", length: 0, shuffle: false });
-  let position = $state(0);
+  let tab = $state("nook");
+  let mediaStatus = $state("");
+  let catalog = $state<NotchWidgetDeclaration[]>([]);
+  // The registry is outside Svelte's reactivity; a Nook widget whose view
+  // registers after the notch is up is picked up by bumping this.
+  let generation = $state(0);
 
   const dismissTimers = new Map<string, number>();
   let lastVolumeLevel = "";
-  let lastTrackTitle = "";
-  let openedId = "";
+  let pointerTimer: number | null = null;
 
   const current = $derived(topEntry(entries));
   const isMedia = $derived(current !== null && current.id === MEDIA_ID);
-  const mode = $derived(modeOf(current, opened, isMedia));
-  const size = $derived(grownSize(SIZES[mode], mode, hovered));
+  const mode = $derived(modeOf(current, opened));
+  const nook = $derived(nookEntries(catalog, settings.value(NOOK_KEY)));
+  const shownWidgets = $derived(enabledEntries(nook));
+  const openSize = $derived(openSizeOf(nook));
+  const size = $derived(sizeOf(mode, hovered, openSize));
+  const stage = $derived(stageOf(openSize));
+  const openOn = $derived(settings.string("notch.openOn", "click"));
+
+  $effect(() => settings.connect());
+
+  $effect(() =>
+    subscribeTo(bus, "notch.catalog", (message) => {
+      catalog = arrayOf(recordOf(message.data).widgets).map(declarationOf);
+    })
+  );
+
+  $effect(() =>
+    registry.onChange(() => {
+      generation += 1;
+    })
+  );
+
+  $effect(() => subscribeTo(bus, "notch:open", () => (opened = true)));
+  $effect(() => subscribeTo(bus, "notch:close", () => (opened = false)));
+  $effect(() => subscribeTo(bus, "notch:toggle", () => (opened = !opened)));
 
   $effect(() =>
     subscribeTo(bus, "island:show", (message) => {
@@ -174,17 +208,7 @@
         dismiss(MEDIA_ID);
         return;
       }
-      // The playhead is polled, so a new track would otherwise show the
-      // previous one's elapsed time until the next tick lands.
-      if (title !== lastTrackTitle) {
-        position = 0;
-        lastTrackTitle = title;
-      }
-      media = {
-        status,
-        length: numberOf(record.length, 0),
-        shuffle: record.shuffle === true,
-      };
+      mediaStatus = status;
       show(
         entryOf({
           id: MEDIA_ID,
@@ -198,28 +222,12 @@
     })
   );
 
-  $effect(() =>
-    subscribeTo(bus, "media.position", (message) => {
-      position = numberOf(recordOf(message.data).position, 0);
-    })
-  );
-
   $effect(() => () => {
     for (const timer of dismissTimers.values()) {
       clearTimeout(timer);
     }
     dismissTimers.clear();
-  });
-
-  // Opening is a decision about one entry. A transient alert displacing it, or
-  // the entry expiring, ends that decision.
-  $effect(() => {
-    const id = idOf(current);
-    if (id === openedId) {
-      return;
-    }
-    openedId = id;
-    opened = false;
+    cancelPointerTimer();
   });
 
   function dismiss(id: string): void {
@@ -240,12 +248,38 @@
     dismissTimers.set(entry.id, setTimeout(() => dismiss(entry.id), ttlMs));
   }
 
-  function seekTo(press: { x: number; width: number }): void {
-    if (media.length <= 0 || press.width <= 0) {
+  function pointerEntered(): void {
+    hovered = true;
+    cancelPointerTimer();
+    if (openOn !== "hover" || opened) {
       return;
     }
-    const fraction = Math.min(Math.max(press.x / press.width, 0), 1);
-    void bus.call("media:seek", { seconds: fraction * media.length });
+    pointerTimer = setTimeout(() => (opened = true), HOVER_OPEN_DELAY_MS);
+  }
+
+  function pointerLeft(): void {
+    hovered = false;
+    cancelPointerTimer();
+    if (!opened) {
+      return;
+    }
+    pointerTimer = setTimeout(() => (opened = false), LEAVE_CLOSE_DELAY_MS);
+  }
+
+  function cancelPointerTimer(): void {
+    if (pointerTimer === null) {
+      return;
+    }
+    clearTimeout(pointerTimer);
+    pointerTimer = null;
+  }
+
+  function pressed(detail: { button: number }): void {
+    if (detail.button !== SECONDARY_BUTTON) {
+      return;
+    }
+    opened = false;
+    bus.publish("settings:open", { section: "notch" });
   }
 
   // The stack's winner is the highest priority, ties going to whatever arrived
@@ -260,19 +294,12 @@
     return best;
   }
 
-  function modeOf(
-    entry: IslandEntry | null,
-    isOpened: boolean,
-    mediaShowing: boolean,
-  ): string {
+  function modeOf(entry: IslandEntry | null, isOpened: boolean): string {
+    if (isOpened) {
+      return "open";
+    }
     if (entry === null) {
       return "empty";
-    }
-    if (isOpened && mediaShowing) {
-      return "expandedMedia";
-    }
-    if (isOpened) {
-      return "expanded";
     }
     if (entry.priority > PRIORITY_IDLE) {
       return "active";
@@ -280,15 +307,46 @@
     return "rest";
   }
 
+  function openSizeOf(layout: NookEntry[]): Size {
+    const content = Math.max(nookWidth(layout), EMPTY_NOOK_WIDTH);
+    return {
+      width: content + 2 * NOOK_PADDING,
+      height: NOOK_HEADER_HEIGHT + NOOK_ROW_HEIGHT + NOOK_PADDING,
+    };
+  }
+
   // The open island is already at its full size; growing it further on hover
   // would read as a second, accidental expansion.
-  function grownSize(base: Size, current: string, isHovered: boolean): Size {
-    if (!isHovered || current.startsWith("expanded")) {
+  function sizeOf(current: string, isHovered: boolean, open: Size): Size {
+    if (current === "open") {
+      return open;
+    }
+    const base = SIZES[current];
+    if (!isHovered) {
       return base;
     }
     return {
       width: base.width + HOVER_GROWTH.width,
       height: base.height + HOVER_GROWTH.height,
+    };
+  }
+
+  function stageOf(open: Size): Size {
+    const widest = Math.max(open.width, SIZES.active.width + HOVER_GROWTH.width);
+    return {
+      width: widest + 2 * FILLET_WIDTH + 2 * SHADOW_ROOM.width,
+      height: open.height + SHADOW_ROOM.height,
+    };
+  }
+
+  function declarationOf(record: Record<string, unknown>): NotchWidgetDeclaration {
+    return {
+      type: stringOf(record.type),
+      name: stringOf(record.name),
+      icon: stringOf(record.icon),
+      defaultCells: numberOf(record.defaultCells, 4),
+      minCells: numberOf(record.minCells, 3),
+      maxCells: numberOf(record.maxCells, 8),
     };
   }
 
@@ -376,18 +434,27 @@
     return `background-image: url("${art}"); background-size: cover; background-position: center;`;
   }
 
-  function playPauseIcon(state: MediaState): string {
-    if (state.status === "Playing") {
-      return ICONS.pause;
+  // Collapsed, the header fills the island. Open, the panel keeps its full
+  // width centred, so the growing island reveals it evenly on both sides.
+  function panelAlignment(isOpened: boolean): string {
+    if (isOpened) {
+      return "center";
     }
-    return ICONS.play;
+    return "fill";
   }
 
-  function headerClass(current: string): string {
-    if (current === "expandedMedia") {
-      return "island-header-large";
+  function pausedClass(playing: boolean): string {
+    if (playing) {
+      return "";
     }
-    return "island-header-small";
+    return "paused";
+  }
+
+  function tabClass(id: string, currentTab: string): string {
+    if (id === currentTab) {
+      return "nook-tab nook-tab-selected";
+    }
+    return "nook-tab";
   }
 
   function appNameOf(record: Record<string, unknown>): string {
@@ -396,13 +463,6 @@
       return initialClass;
     }
     return stringOf(record.class);
-  }
-
-  function idOf(entry: IslandEntry | null): string {
-    if (entry === null) {
-      return "";
-    }
-    return entry.id;
   }
 
   function stringOf(value: unknown): string {
@@ -433,95 +493,145 @@
     return TONE_CLASS[entry.tone];
   }
 
-  function progressWidth(entry: IslandEntry): number {
+  function progressWidth(entry: IslandEntry, islandWidth: number): number {
     const clamped = Math.min(Math.max(entry.progress, 0), 1);
-    return Math.round(clamped * PROGRESS_TRACK_WIDTH);
-  }
-
-  function playedWidth(state: MediaState, seconds: number): number {
-    if (state.length <= 0) {
-      return 0;
-    }
-    const fraction = Math.min(Math.max(seconds / state.length, 0), 1);
-    return Math.round(fraction * SCRUB_TRACK_WIDTH);
-  }
-
-  function remainingLabel(state: MediaState, seconds: number): string {
-    if (state.length <= 0) {
-      return "";
-    }
-    return `-${clockLabel(state.length - seconds)}`;
-  }
-
-  function clockLabel(seconds: number): string {
-    const whole = Math.max(Math.floor(seconds), 0);
-    const minutes = Math.floor(whole / 60);
-    return `${minutes}:${String(whole % 60).padStart(2, "0")}`;
+    return Math.round(clamped * (islandWidth - 2 * PROGRESS_MARGIN));
   }
 </script>
 
-<!-- The fillets are 10x10 patches pinned to the top edge; letting them fill
-     the island's height would spill the gradient's solid half down the
-     sides. -->
-<gtkbox orientation="horizontal" valign="start" halign="center">
-  <gtkbox class="notch-fillet-left" valign="start"></gtkbox>
+<!-- The stage: a fixed-size box the window takes its size from, so the layer
+     surface never resizes while the island animates inside it. A surface
+     resize goes through the compositor and lands a frame or more late, which
+     clipped the island's sides while its middle had already grown. Only the
+     island is in the input region; the rest of the stage is click-through. -->
+<gtkbox
+  class="notch-stage"
+  css="min-width: {stage.width}px; min-height: {stage.height}px;"
+  orientation="vertical"
+>
+  <!-- The fillets are 10x10 patches pinned to the top edge; letting them fill
+       the island's height would spill the gradient's solid half down the
+       sides. -->
+  <gtkbox orientation="horizontal" valign="start" halign="center">
+    <gtkbox class="notch-fillet-left" valign="start"></gtkbox>
 
-  <!-- Everything inside is an overlay child, which GTK does not measure: the
-       island's size is the transition's alone, so opening animates instead of
-       snapping to the content and then crawling the last few pixels. The
-       content keeps its natural size at the top edge throughout and the
-       growing island wipes it into view. -->
-  <gtkoverlay
-    class="island"
-    input
-    clip
-    css="min-width: {size.width}px; min-height: {size.height}px;"
-  >
-    <gtkpressable
-      overlay
-      valign="start"
-      orientation="vertical"
-      onhoverstart={() => (hovered = true)}
-      onhoverend={() => (hovered = false)}
-      css={islandCss(current, isMedia)}
+    <!-- Everything inside is an overlay child, which GTK does not measure: the
+         island's size is the transition's alone, so opening animates instead of
+         snapping to the content and then crawling the last few pixels. The
+         content keeps its natural size at the top edge throughout and the
+         growing island wipes it into view. -->
+    <gtkoverlay
+      class="island"
+      input
+      clip
+      css="min-width: {size.width}px; min-height: {size.height}px;"
     >
-      {#if current !== null}
-        <gtkbutton
-          class="island-header {headerClass(mode)}"
-          frame={false}
-          tooltip={current.label}
-          onclicked={() => (opened = !opened)}
-        >
-          {#if isMedia}
-            {@render mediaHeader(current, mode === "expandedMedia")}
-          {:else}
-            {@render plainHeader(current)}
-          {/if}
-        </gtkbutton>
-      {/if}
+      <gtkpressable
+        overlay
+        valign="start"
+        halign={panelAlignment(opened)}
+        orientation="vertical"
+        onhoverstart={pointerEntered}
+        onhoverend={pointerLeft}
+        onpress={(event) => pressed(event.detail)}
+        css={islandCss(current, isMedia || opened)}
+      >
+        {#if opened}
+          {@render nookPanel()}
+        {:else if current !== null}
+          <gtkbutton
+            class="island-header"
+            frame={false}
+            tooltip={current.label}
+            onclicked={() => (opened = true)}
+          >
+            {#if isMedia}
+              {@render mediaHeader(current)}
+            {:else}
+              {@render plainHeader(current)}
+            {/if}
+          </gtkbutton>
+        {:else}
+          <gtkbutton
+            class="island-header"
+            frame={false}
+            css="min-height: {BAR_HEIGHT}px;"
+            onclicked={() => (opened = true)}
+          ></gtkbutton>
+        {/if}
+      </gtkpressable>
 
-      <!-- Mounted only while open. A crossfading Revealer would keep measuring
-           its child while hidden and the island could never collapse back to
-           bar height. -->
-      {#if mode === "expandedMedia"}
-        {@render scrubber()}
+      {#if !opened && current !== null && current.progress >= 0}
+        <gtkbox overlay class="progress-track" valign="end">
+          <gtkbox
+            class="progress-fill {toneClass(current)}"
+            css="min-width: {progressWidth(current, size.width)}px;"></gtkbox>
+        </gtkbox>
       {/if}
-      {#if mode === "expanded" && current !== null}
-        {@render expandedDetail(current)}
-      {/if}
-    </gtkpressable>
+    </gtkoverlay>
 
-    {#if current !== null && current.progress >= 0 && !mode.startsWith("expanded")}
-      <gtkbox overlay class="progress-track" valign="end">
-        <gtkbox
-          class="progress-fill {toneClass(current)}"
-          css="min-width: {progressWidth(current)}px;"></gtkbox>
-      </gtkbox>
-    {/if}
-  </gtkoverlay>
-
-  <gtkbox class="notch-fillet-right" valign="start"></gtkbox>
+    <gtkbox class="notch-fillet-right" valign="start"></gtkbox>
+  </gtkbox>
 </gtkbox>
+
+<!-- Laid out at the open size from the first frame and wiped into view by the
+     growing island, like the collapsed header. -->
+{#snippet nookPanel()}
+  <gtkbox
+    class="nook-panel"
+    orientation="vertical"
+    css="min-width: {openSize.width - 2 * NOOK_PADDING}px;"
+  >
+    <gtkbox class="nook-header" orientation="horizontal" spacing={6}>
+      {#each TABS as item (item.id)}
+        <gtkbutton class={tabClass(item.id, tab)} frame={false} onclicked={() => (tab = item.id)}>
+          <gtkbox orientation="horizontal" spacing={6}>
+            <gtkicon icon={item.icon} size={14}></gtkicon>
+            <gtklabel>{item.label}</gtklabel>
+          </gtkbox>
+        </gtkbutton>
+      {/each}
+    </gtkbox>
+
+    {#if tab === "nook"}
+      {@render nookRow()}
+    {:else}
+      {@render trayShelf()}
+    {/if}
+  </gtkbox>
+{/snippet}
+
+{#snippet nookRow()}
+  <gtkbox orientation="horizontal" spacing={0} css="min-height: {NOOK_ROW_HEIGHT}px;">
+    {#each shownWidgets as entry, index (entry.type)}
+      {@const Widget = resolve(registry, entry.type, generation)}
+      {#if index > 0}
+        <gtkseparator class="nook-divider" orientation="vertical"></gtkseparator>
+      {/if}
+      <gtkbox css="min-width: {widgetWidth(entry.cells)}px;">
+        {#if Widget !== undefined}
+          <Widget {bus} {registry} args={{ cells: entry.cells }} id={entry.type} />
+        {/if}
+      </gtkbox>
+    {:else}
+      <gtklabel class="nook-empty" hexpand>No widgets — right-click to add some</gtklabel>
+    {/each}
+  </gtkbox>
+{/snippet}
+
+<!-- Files dragged here wait for a drop elsewhere. Drag and drop is not wired
+     yet; the shelf is only its empty state. -->
+{#snippet trayShelf()}
+  <gtkbox
+    class="tray-shelf"
+    orientation="vertical"
+    spacing={6}
+    css="min-height: {NOOK_ROW_HEIGHT}px;"
+  >
+    <gtkicon icon="folder-download-symbolic" size={24} vexpand valign="end"></gtkicon>
+    <gtklabel class="tray-empty" vexpand valign="start">Drop files here to keep them handy</gtklabel>
+  </gtkbox>
+{/snippet}
 
 {#snippet plainHeader(entry: IslandEntry)}
   <gtkbox orientation="horizontal" spacing={10} hexpand>
@@ -531,47 +641,28 @@
     <gtklabel class="island-label" hexpand halign="start" ellipsize="end">
       {entry.label}
     </gtklabel>
-    {#if entry.detail !== "" && !mode.startsWith("expanded")}
+    {#if entry.detail !== ""}
       <gtklabel class="island-detail" tabular>{entry.detail}</gtklabel>
     {/if}
   </gtkbox>
 {/snippet}
 
-<!-- Collapsed and open share this row: sleeve on the left, title in the
-     middle, level meter on the right. Only the scale changes. -->
-{#snippet mediaHeader(entry: IslandEntry, large: boolean)}
+<!-- Sleeve on the left, title in the middle, level meter on the right. -->
+{#snippet mediaHeader(entry: IslandEntry)}
   <gtkbox orientation="horizontal" spacing={12} hexpand>
-    <gtkbox
-      class="island-art {large ? 'island-art-large' : 'island-art-small'}"
-      css={artCss(entry.art)}
-      valign="center"></gtkbox>
-    <gtkbox orientation="vertical" spacing={4} hexpand valign="center">
-      <gtklabel
-        class="island-title {large ? 'island-title-large' : ''}"
-        halign="start"
-        ellipsize="end"
-      >
-        {entry.label}
-      </gtklabel>
-      <!-- The only part of the header that appears rather than grows, so it
-           fades in over the same 260ms the rest spends resizing. -->
-      {#if large && entry.detail !== ""}
-        <gtklabel class="island-subtitle" halign="start" ellipsize="end">
-          {entry.detail}
-        </gtklabel>
-      {/if}
-    </gtkbox>
-    {@render levelMeter(large, media.status === "Playing")}
+    <gtkbox class="island-art island-art-small" css={artCss(entry.art)} valign="center"></gtkbox>
+    <gtklabel class="island-title" hexpand halign="start" valign="center" ellipsize="end">
+      {entry.label}
+    </gtklabel>
+    {@render levelMeter(mediaStatus === "Playing")}
   </gtkbox>
 {/snippet}
 
 <!-- Four bars bouncing in sequence: the "audio is coming out of here" mark on
      the header's right edge. A paused player freezes them mid-stride. -->
-{#snippet levelMeter(large: boolean, playing: boolean)}
+{#snippet levelMeter(playing: boolean)}
   <gtkbox
-    class="level-meter {large ? 'level-meter-large' : 'level-meter-small'} {playing
-      ? ''
-      : 'paused'}"
+    class="level-meter level-meter-small {pausedClass(playing)}"
     orientation="horizontal"
     spacing={2}
     valign="center"
@@ -580,70 +671,4 @@
       <gtkbox class="level-bar level-bar-{bar}"></gtkbox>
     {/each}
   </gtkbox>
-{/snippet}
-
-{#snippet expandedDetail(entry: IslandEntry)}
-  <gtkbox orientation="vertical" spacing={4} class="island-expanded">
-    {#if entry.detail !== ""}
-      <gtklabel class="island-expanded-detail" halign="start">
-        {entry.detail}
-      </gtklabel>
-    {/if}
-    <gtklabel class="island-expanded-id" halign="start">
-      {entry.id.toUpperCase()}
-    </gtklabel>
-  </gtkbox>
-{/snippet}
-
-{#snippet scrubber()}
-  <gtkbox orientation="vertical" spacing={12} class="island-expanded">
-    <gtkbox orientation="horizontal" spacing={10}>
-      <gtklabel class="scrub-time" tabular>{clockLabel(position)}</gtklabel>
-      <gtkpressable
-        class="scrub-track"
-        hexpand
-        valign="center"
-        onpress={(event) => seekTo(event.detail)}
-      >
-        <gtkbox
-          class="scrub-played"
-          css="min-width: {playedWidth(media, position)}px;"></gtkbox>
-      </gtkpressable>
-      <gtklabel class="scrub-time" tabular>
-        {remainingLabel(media, position)}
-      </gtklabel>
-    </gtkbox>
-    {@render transport()}
-  </gtkbox>
-{/snippet}
-
-<!-- A CenterBox, not two expanding columns: a Box splits its slack evenly
-     between them, so the shuffle button's own width pushed the transport group
-     half its width off the centre line and out of line with the scrub track. -->
-{#snippet transport()}
-  <gtkcenterbox orientation="horizontal">
-    <gtkbox
-      place="start"
-      orientation="horizontal"
-      halign="start"
-      valign="center"
-    >
-      {@render control(ICONS.shuffle, 20, media.shuffle, "media:shuffle")}
-    </gtkbox>
-    <gtkbox place="center" orientation="horizontal" spacing={24}>
-      {@render control(ICONS.previous, 22, false, "media:previous")}
-      {@render control(playPauseIcon(media), 26, false, "media:playPause")}
-      {@render control(ICONS.next, 22, false, "media:next")}
-    </gtkbox>
-  </gtkcenterbox>
-{/snippet}
-
-{#snippet control(icon: string, pixels: number, active: boolean, action: string)}
-  <gtkbutton
-    class="control {active ? 'control-active' : 'control-idle'}"
-    frame={false}
-    onclicked={() => void bus.call(action, {})}
-  >
-    <gtkicon {icon} size={pixels}></gtkicon>
-  </gtkbutton>
 {/snippet}

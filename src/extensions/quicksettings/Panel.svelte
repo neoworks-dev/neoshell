@@ -124,6 +124,11 @@
     powerMenuOpen = false
   }
 
+  function openSettings(): void {
+    close()
+    bus.publish('settings:open', {})
+  }
+
   function close(): void {
     setOpen(false)
   }
@@ -437,6 +442,14 @@
             <gtkicon icon={iconName('power')} size={16}></gtkicon>
             <gtkicon icon={iconName('chevronDown')} size={12}></gtkicon>
           </gtkbox>
+        </gtkbutton>
+        <gtkbutton
+          class="qs-power-button"
+          frame={false}
+          tooltip="Settings"
+          onclicked={openSettings}
+        >
+          <gtkicon icon={iconName('settings')} size={16}></gtkicon>
         </gtkbutton>
         <gtkbox hexpand></gtkbox>
         {#if batteryPercent >= 0}

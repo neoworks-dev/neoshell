@@ -135,6 +135,13 @@ const DEFAULT_TREE: TreeNode[] = [
     args: { detached: true },
   },
   {
+    id: 'settings',
+    type: 'settings.window',
+    // Detached: a regular application window, created on settings:open and
+    // destroyed on close, not a layer surface kept mapped.
+    args: { detached: true },
+  },
+  {
     id: 'widgetgallery',
     type: 'neoshell.widgetgallery',
     args: {
