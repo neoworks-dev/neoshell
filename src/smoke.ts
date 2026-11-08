@@ -52,6 +52,16 @@ bus.retain('notch.catalog', { widgets: notchWidgetCatalog() })
 bus.retain('settings.catalog', { sections: settingsCatalog() })
 
 bus.retain('hypr.monitors', [{ width: 1920, height: 1080 }])
+bus.retain('calendar.sources', {
+  sources: [{ id: 'cal-smoke', name: 'Smoke', status: 'ok', message: '', eventCount: 2 }],
+})
+bus.retain('calendar.events', {
+  events: [
+    { id: 'a', calendarId: 'cal-smoke', title: 'All day', allDay: true, start: Date.now() - 3_600_000, end: Date.now() + 3_600_000 },
+    { id: 'b', calendarId: 'cal-smoke', title: 'Timed', allDay: false, start: Date.now(), end: Date.now() + 1_800_000 },
+  ],
+  updatedAt: Date.now(),
+})
 
 // The two widget cards, with the series the medium and large sizes draw —
 // their bar arithmetic only runs once there is something to scale.

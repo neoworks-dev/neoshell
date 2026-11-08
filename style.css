@@ -403,6 +403,18 @@ button.nook-day.nook-day-chosen .nook-day-number { font-size: 19px; }
 .nook-agenda { color: alpha(#fafafa, 0.5); }
 .nook-agenda-empty { font-size: 13px; }
 
+.nook-day-dot { min-width: 4px; min-height: 4px; margin-top: 2px; border-radius: 2px; }
+button.nook-day.nook-day-busy .nook-day-dot { background-color: alpha(#fafafa, 0.45); }
+
+.nook-event-color { min-width: 3px; border-radius: 2px; }
+.nook-event-color-0 { background-color: #60a5fa; }
+.nook-event-color-1 { background-color: #f472b6; }
+.nook-event-color-2 { background-color: #34d399; }
+.nook-event-color-3 { background-color: #fbbf24; }
+.nook-event-color-4 { background-color: #a78bfa; }
+.nook-event-title { font-size: 12px; font-weight: 600; }
+.nook-event-time { font-size: 11px; color: alpha(#fafafa, 0.5); min-width: 52px; }
+
 /* ── dock ─────────────────────────────────────────────────────────────── */
 
 /* rounded-2xl border border-base-content/10 bg-base-200/40 px-2 py-1.5 */
@@ -1455,6 +1467,7 @@ button.qs-row-action:hover {
    own pieces, on the same --ui-* tokens so they follow light and dark. */
 .settings-content { margin: 20px 28px 28px 28px; }
 .settings-missing { color: var(--ui-text-muted); }
+label.settings-hint { color: var(--ui-text-muted); font-size: var(--ui-text-caption); }
 
 /* Notch → Customize widgets: the open notch, drawn small, over a strip that
    stands in for the wallpaper. Black in both schemes, like the notch. */

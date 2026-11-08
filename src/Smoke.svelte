@@ -14,6 +14,7 @@
   import GLib from 'gi://GLib'
   import SettingsWindow from './extensions/settings/SettingsWindow.svelte'
   import DisplaysSettings from './extensions/settings/DisplaysSettings.svelte'
+  import CalendarSettings from './extensions/calendar/CalendarSettings.svelte'
   import { MAX_UNIT_PX, sizePx, spanOf } from './extensions/neoshell/freeform'
   import type { BluetoothState, NetworkState } from './extensions/quicksettings/types'
 
@@ -151,6 +152,7 @@
         <NotchSettings {bus} {registry} args={{}} id="smoke.notch.general" />
         <NotchSettings {bus} {registry} args={{ page: 'widgets' }} id="smoke.notch.widgets" />
         <DisplaysSettings {bus} {registry} args={{}} id="smoke.displays" />
+        <CalendarSettings {bus} {registry} args={{}} id="smoke.calendar" />
       </gtkbox>
       <!-- One monitor's lock surface, in a box instead of a session-lock
            window: the compositor lock is what the smoke must never take. -->

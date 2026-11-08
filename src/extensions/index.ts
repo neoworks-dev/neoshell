@@ -3,6 +3,8 @@ import hyprBackend from './hypr/backend.js'
 import systemBackend from './system/backend.js'
 import appsBackend from './apps/backend.js'
 import mediaBackend from './media/backend.js'
+import calendarBackend from './calendar/backend.js'
+import calendarViews from './calendar/views.js'
 import filesBackend from './files/backend.js'
 import networkBackend from './network/backend.js'
 import bluetoothBackend from './bluetooth/backend.js'
@@ -88,6 +90,17 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
   media: {
     manifest: { id: 'media', inject: ['bus'] },
     backend: mediaBackend as Plugin.Object,
+  },
+  calendar: {
+    manifest: {
+      id: 'calendar',
+      inject: ['bus', 'ui'],
+      settings: [
+        { id: 'calendar', title: 'Calendar', icon: 'x-office-calendar-symbolic', view: 'calendar.settings', order: 20 },
+      ],
+    },
+    backend: calendarBackend as Plugin.Object,
+    views: calendarViews,
   },
   files: {
     manifest: { id: 'files', inject: ['bus'] },
