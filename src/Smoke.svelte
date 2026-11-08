@@ -10,6 +10,8 @@
   import LockSurface from './extensions/lock/LockSurface.svelte'
   import Notch from './extensions/neoshell/Notch.svelte'
   import NotchSettings from './extensions/neoshell/NotchSettings.svelte'
+  import TrayShelf from './extensions/neoshell/TrayShelf.svelte'
+  import GLib from 'gi://GLib'
   import SettingsWindow from './extensions/settings/SettingsWindow.svelte'
   import { MAX_UNIT_PX, sizePx, spanOf } from './extensions/neoshell/freeform'
   import type { BluetoothState, NetworkState } from './extensions/quicksettings/types'
@@ -23,6 +25,14 @@
   // password prompt, the connection details) is ordinary labels and an entry.
 
   let { bus, registry }: { bus: BusService; registry: ViewRegistry } = $props()
+
+  // A file, a folder and a path that no longer exists: the three tiles the
+  // Tray draws.
+  const TRAY_PATHS = [
+    GLib.build_filenamev([GLib.get_current_dir(), 'style.css']),
+    GLib.build_filenamev([GLib.get_current_dir(), 'src']),
+    '/nonexistent/neoshell-smoke.txt',
+  ]
 
   const networkState: NetworkState = {
     available: true,
@@ -132,6 +142,9 @@
            pages of its settings. -->
       <gtkbox class="ui-dark" orientation="vertical" spacing={16} valign="start">
         <Notch {bus} {registry} args={{}} id="smoke.notch" />
+        <gtkbox class="island" width={560}>
+          <TrayShelf paths={TRAY_PATHS} height={112} dragOver onopen={() => {}} onremove={() => {}} />
+        </gtkbox>
       </gtkbox>
       <gtkbox class="ui-light" orientation="vertical" spacing={16} width={720} valign="start">
         <NotchSettings {bus} {registry} args={{}} id="smoke.notch.general" />

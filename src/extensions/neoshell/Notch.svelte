@@ -2,7 +2,7 @@
   import { untrack } from 'svelte'
   import { subscribeTo } from '../../lib/bus'
   import type { ViewProps } from "../../host/plugins/views";
-  import { arrayOf, recordOf } from "../../lib/record";
+  import { arrayOf, recordOf, stringListOf } from "../../lib/record";
   import { Settings } from "../../lib/settings.svelte";
   import { resolve } from "../../tree";
   import type { NotchWidgetDeclaration } from "../index";
@@ -15,6 +15,8 @@
     widgetWidth,
   } from "./nook";
   import type { NookEntry } from "./nook";
+  import { STAGED_KEY, withPaths, withoutPath } from "./trayFiles";
+  import TrayShelf from "./TrayShelf.svelte";
 
   // The notch: a black cutout welded to the top edge, centred over the bar.
   // Collapsed, it renders one island entry at a time — the highest-priority
@@ -27,7 +29,8 @@
   //   notch:open / notch:close / notch:toggle
   //
   // It opens on click or hover (notch.openOn) and closes when the pointer
-  // leaves it. A right click opens its settings.
+  // leaves it. A right click opens its settings. Dragging files over it opens
+  // the Tray, and dropping them keeps them there.
 
   interface IslandEntry {
     id: string;
@@ -76,6 +79,9 @@
 
   const HOVER_OPEN_DELAY_MS = 150;
   const LEAVE_CLOSE_DELAY_MS = 350;
+  // After a drop the pointer may be over the notch without the motion
+  // controller knowing; unless it reports a hover by then, the notch closes.
+  const AFTER_DROP_CLOSE_DELAY_MS = 2500;
   const SECONDARY_BUTTON = 3;
 
   const TONE_CLASS: Record<string, string> = {
@@ -99,6 +105,7 @@
   let hovered = $state(false);
   let opened = $state(false);
   let tab = $state("nook");
+  let dragOver = $state(false);
   let mediaStatus = $state("");
   let catalog = $state<NotchWidgetDeclaration[]>([]);
   // The registry is outside Svelte's reactivity; a Nook widget whose view
@@ -118,6 +125,7 @@
   const size = $derived(sizeOf(mode, hovered, openSize));
   const stage = $derived(stageOf(openSize));
   const openOn = $derived(settings.string("notch.openOn", "click"));
+  const staged = $derived(stringListOf(settings.value(STAGED_KEY)));
 
   $effect(() => settings.connect());
 
@@ -272,6 +280,52 @@
     }
     clearTimeout(pointerTimer);
     pointerTimer = null;
+  }
+
+  function dragEntered(): void {
+    cancelPointerTimer();
+    dragOver = true;
+    tab = "tray";
+    opened = true;
+  }
+
+  // GTK also reports a leave once a drop has finished, and the drop already
+  // scheduled its own close.
+  function dragLeft(): void {
+    const hadDrag = dragOver;
+    dragOver = false;
+    if (!hadDrag || pointerTimer !== null) {
+      return;
+    }
+    pointerTimer = setTimeout(() => (opened = false), LEAVE_CLOSE_DELAY_MS);
+  }
+
+  function dropped(detail: { paths: string[] }): void {
+    dragOver = false;
+    cancelPointerTimer();
+    if (detail.paths.length > 0) {
+      settings.set(STAGED_KEY, withPaths(staged, detail.paths));
+    }
+    pointerTimer = setTimeout(closeUnlessHovered, AFTER_DROP_CLOSE_DELAY_MS);
+  }
+
+  function closeUnlessHovered(): void {
+    pointerTimer = null;
+    if (!hovered) {
+      opened = false;
+    }
+  }
+
+  function openFile(path: string): void {
+    void bus.call("files:open", { path });
+  }
+
+  function removeFile(path: string): void {
+    settings.set(STAGED_KEY, withoutPath(staged, path));
+  }
+
+  function clearTray(): void {
+    settings.set(STAGED_KEY, []);
   }
 
   function pressed(detail: { button: number }): void {
@@ -525,6 +579,9 @@
       input
       clip
       css="min-width: {size.width}px; min-height: {size.height}px;"
+      ondropenter={dragEntered}
+      ondropleave={dragLeft}
+      ondrop={(event) => dropped(event.detail)}
     >
       <gtkpressable
         overlay
@@ -591,6 +648,10 @@
           </gtkbox>
         </gtkbutton>
       {/each}
+      <gtkbox hexpand></gtkbox>
+      {#if tab === "tray" && staged.length > 0}
+        <gtkbutton class="nook-tab" frame={false} onclicked={clearTray}>Clear</gtkbutton>
+      {/if}
     </gtkbox>
 
     {#if tab === "nook"}
@@ -619,18 +680,14 @@
   </gtkbox>
 {/snippet}
 
-<!-- Files dragged here wait for a drop elsewhere. Drag and drop is not wired
-     yet; the shelf is only its empty state. -->
 {#snippet trayShelf()}
-  <gtkbox
-    class="tray-shelf"
-    orientation="vertical"
-    spacing={6}
-    css="min-height: {NOOK_ROW_HEIGHT}px;"
-  >
-    <gtkicon icon="folder-download-symbolic" size={24} vexpand valign="end"></gtkicon>
-    <gtklabel class="tray-empty" vexpand valign="start">Drop files here to keep them handy</gtklabel>
-  </gtkbox>
+  <TrayShelf
+    paths={staged}
+    height={NOOK_ROW_HEIGHT}
+    {dragOver}
+    onopen={openFile}
+    onremove={removeFile}
+  />
 {/snippet}
 
 {#snippet plainHeader(entry: IslandEntry)}

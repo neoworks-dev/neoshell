@@ -318,10 +318,45 @@ separator.nook-divider {
 .tray-empty { color: alpha(#fafafa, 0.45); font-size: 13px; }
 
 .tray-shelf {
+  padding: 6px;
   border: 1px dashed alpha(#fafafa, 0.2);
   border-radius: 14px;
   color: alpha(#fafafa, 0.45);
+  transition: background-color 150ms, border-color 150ms;
 }
+
+/* A drag carrying files is over the notch. */
+.tray-shelf.tray-shelf-target {
+  border-color: alpha(#fafafa, 0.55);
+  background-color: alpha(#fafafa, 0.06);
+}
+
+.tray-tile {
+  min-width: 76px;
+  padding: 8px 6px 6px 6px;
+  border-radius: 12px;
+  color: var(--base-content);
+}
+
+.tray-tile:hover { background-color: alpha(#fafafa, 0.08); }
+.tray-tile.tray-tile-missing { opacity: 0.4; }
+
+.tray-thumbnail { border-radius: 8px; }
+.tray-name { font-size: 11px; color: alpha(#fafafa, 0.8); }
+
+/* Element in the selector: .island button pins a transparent background at
+   element-plus-class specificity. */
+.island button.tray-remove {
+  min-width: 18px;
+  min-height: 18px;
+  margin: 2px;
+  padding: 0;
+  border-radius: 999px;
+  background-color: alpha(#3f3f46, 0.95);
+  color: alpha(#fafafa, 0.8);
+}
+
+.island button.tray-remove:hover { background-color: #52525b; color: var(--base-content); }
 
 /* Media widget */
 .nook-media-art {
