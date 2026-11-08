@@ -54,7 +54,9 @@ export class Settings {
   }
 
   set(key: string, value: unknown): void {
-    void this.bus.call('config:set', { key, value }, WRITE_TIMEOUT_MS)
+    this.bus.call('config:set', { key, value }, WRITE_TIMEOUT_MS).catch((error: unknown) => {
+      console.error(`settings: writing ${key} failed:`, error)
+    })
   }
 }
 
