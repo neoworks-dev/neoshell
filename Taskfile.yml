@@ -33,6 +33,18 @@ tasks:
     cmds:
       - tools/windowcapture/build.sh
 
+  quickshare:
+    desc: Build the optional Quick Share helper (Rust, rqs_lib, GPL-3.0)
+    dir: helpers/quickshare
+    sources:
+      - Cargo.toml
+      - Cargo.lock
+      - src/**/*.rs
+    generates:
+      - target/release/neoshell-quickshare
+    cmds:
+      - cargo build --release
+
   build:
     desc: Bundle the shell into a single ESM file GJS can run
     deps: [install]

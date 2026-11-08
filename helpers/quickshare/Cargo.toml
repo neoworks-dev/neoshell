@@ -1,0 +1,24 @@
+[package]
+name = "neoshell-quickshare"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "Quick Share (Nearby Share) helper for neoshell, speaking JSON lines over stdio"
+publish = false
+
+[[bin]]
+name = "neoshell-quickshare"
+path = "src/main.rs"
+
+[dependencies]
+rqs_lib = { git = "https://github.com/ignotusbucius/open-quickshare", rev = "fb9c8f9502e5313e3d788aa3498659773ef12d28", features = ["experimental"] }
+anyhow = "1.0"
+log = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.43", features = ["macros", "rt-multi-thread", "io-std", "io-util", "signal", "sync", "time"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
