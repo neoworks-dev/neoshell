@@ -20,6 +20,9 @@ import type { Bus } from '../bus.js'
 //   exclusiveSize  space the compositor keeps clear for it
 //   margin         gap between the window and the edges it anchors to
 //   blur           ask Hyprland for a layer blur rule
+//   monitors       "all" or "main" (the default): where the window goes unless
+//                  config's displays.surfaces.<id> says otherwise
+//   label          what Settings → Displays calls the surface
 //
 // Everything else in args stays what it always was: static configuration the
 // view itself reads.
@@ -38,6 +41,7 @@ const DEFAULT_TREE: TreeNode[] = [
     id: 'bar',
     type: 'neoshell.topbar',
     args: {
+      label: 'Menu bar',
       layer: 'top',
       anchors: ['top', 'left', 'right'],
       keyboard: 'ondemand',
@@ -60,6 +64,7 @@ const DEFAULT_TREE: TreeNode[] = [
     // Anchored on one edge only, so the compositor centres it horizontally and
     // it takes exactly the width the island asks for.
     args: {
+      label: 'Notch',
       layer: 'top',
       anchors: ['top'],
       keyboard: 'none',
@@ -73,6 +78,7 @@ const DEFAULT_TREE: TreeNode[] = [
     // neither takes input nor covers what is under it; the panel itself hangs
     // below the bar at the right-hand end.
     args: {
+      label: 'Quick settings',
       layer: 'top',
       anchors: ['top', 'bottom', 'left', 'right'],
       keyboard: 'ondemand',
@@ -87,6 +93,7 @@ const DEFAULT_TREE: TreeNode[] = [
     // Edge to edge along the bottom: the hot strip that reveals the dock has to
     // cover the whole edge, and the panel centres itself inside the window.
     args: {
+      label: 'Dock',
       layer: 'top',
       anchors: ['bottom', 'left', 'right'],
       keyboard: 'none',
@@ -101,6 +108,8 @@ const DEFAULT_TREE: TreeNode[] = [
     // the wallpaper was a separate daemon painting its own surface, which a GTK
     // picture on the background layer replaces.
     args: {
+      label: 'Wallpaper',
+      monitors: 'all',
       layer: 'background',
       anchors: ['top', 'bottom', 'left', 'right'],
       keyboard: 'none',
@@ -114,6 +123,8 @@ const DEFAULT_TREE: TreeNode[] = [
     // anything is written the seed is never consulted again, so removing a
     // widget in the gallery makes it stay removed.
     args: {
+      label: 'Desktop',
+      monitors: 'all',
       layer: 'background',
       anchors: ['top', 'bottom', 'left', 'right'],
       // Widgets have their own settings, and a text field on a layer that
@@ -145,6 +156,7 @@ const DEFAULT_TREE: TreeNode[] = [
     id: 'widgetgallery',
     type: 'neoshell.widgetgallery',
     args: {
+      label: 'Widget gallery',
       layer: 'top',
       anchors: ['bottom'],
       keyboard: 'ondemand',

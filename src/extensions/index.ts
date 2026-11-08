@@ -139,7 +139,13 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     views: quicksettingsViews,
   },
   settings: {
-    manifest: { id: 'settings', inject: ['bus', 'ui'] },
+    manifest: {
+      id: 'settings',
+      inject: ['bus', 'ui'],
+      settings: [
+        { id: 'displays', title: 'Displays', icon: 'video-display-symbolic', view: 'settings.displays', order: 0 },
+      ],
+    },
     views: settingsViews,
   },
   // The two widget providers. Their `widgets` declarations are what the

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { subscribeTo } from '../../lib/bus'
   import type { ViewProps } from '../../host/plugins/views'
-  import { recordOf } from '../../lib/record'
+  import { monitorSizeOf } from '../../lib/placement'
+  import { recordOf, stringOf } from '../../lib/record'
   import ContextMenu from './ContextMenu.svelte'
   import DesktopIcons from './DesktopIcons.svelte'
   import WidgetSlot from './WidgetSlot.svelte'
@@ -11,10 +12,11 @@
   import { dragOf, pressOf, SECONDARY_BUTTON } from './gestures'
 
   // The desktop: the background-layer view that owns everything behind the
-  // windows — the desktop folder's icons and the widget grid. Icons and widgets
-  // share one grid, so this node also owns what spans both: the rubber band
-  // that selects icons, the background context menu, and the widget placement
-  // both halves resolve against.
+  // windows — the desktop folder's icons and the widget grid. There is one per
+  // monitor it is placed on; only the main display's shows the folder's icons.
+  // Icons and widgets share one grid, so this node also owns what spans both:
+  // the rubber band that selects icons, the background context menu, and the
+  // widget placement both halves resolve against.
   //
   // Everything is an overlay child positioned by margins. GTK has no absolute
   // positioning and a Gtk.Fixed reads its coordinates once at insertion, so an
@@ -41,8 +43,23 @@
   // registers after the desktop is up is picked up by bumping this.
   let generation = $state(0)
 
+  // An empty connector is a desktop that was not placed by monitor at all,
+  // which counts as the main one.
+  const monitor = $derived(stringOf(recordOf(args).monitor))
+  const isMain = $derived(recordOf(args).mainMonitor !== false)
+
   $effect(() => {
-    store.setSeeds(recordOf(args).widgets)
+    store.setMonitor(monitor, isMain)
+  })
+
+  // The view tree's seed widgets are the main desktop's; another monitor's
+  // starts empty.
+  $effect(() => {
+    if (isMain) {
+      store.setSeeds(recordOf(args).widgets)
+      return
+    }
+    store.setSeeds([])
   })
 
   $effect(() =>
@@ -63,6 +80,9 @@
   $effect(() =>
     subscribeTo(bus, 'widgets:add', (message) => {
       const request = recordOf(message.data)
+      if (!addsHere(request)) {
+        return
+      }
       store.addWidget(String(request.type), String(request.size), droppedPoint(request))
     }),
   )
@@ -82,14 +102,21 @@
   })
 
   function applyMonitor(data: unknown): void {
-    if (!Array.isArray(data) || data.length === 0) {
+    const size = monitorSizeOf(data, monitor)
+    if (size === null) {
       return
     }
-    const monitor = recordOf(data[0])
-    if (typeof monitor.width !== 'number' || typeof monitor.height !== 'number') {
-      return
+    store.setViewport(size.width, size.height)
+  }
+
+  // The gallery names the monitor it is on; a request without one is the main
+  // desktop's.
+  function addsHere(request: Record<string, unknown>): boolean {
+    const target = stringOf(request.monitor)
+    if (target === '') {
+      return isMain
     }
-    store.setViewport(monitor.width, monitor.height)
+    return target === monitor
   }
 
   // The gallery is a different window, so a widget dragged onto the desktop
@@ -174,6 +201,22 @@
   async function backgroundMenu(): Promise<MenuItem[]> {
     return [
       { label: 'Edit Widgets', action: () => store.openGallery() },
+      ...iconItems(),
+      { separator: true },
+      { label: 'Change Wallpaper', children: await wallpaperItems() },
+      {
+        label: 'Lock Desktop',
+        checked: store.desktopLocked,
+        action: () => store.setDesktopLocked(!store.desktopLocked),
+      },
+    ]
+  }
+
+  function iconItems(): MenuItem[] {
+    if (!isMain) {
+      return []
+    }
+    return [
       { separator: true },
       { label: 'New Folder', action: newFolder },
       { separator: true },
@@ -194,13 +237,6 @@
       },
       { label: 'Clean Up Icons', action: () => store.cleanUpIcons() },
       { label: 'Select All', action: () => store.selectAll() },
-      { separator: true },
-      { label: 'Change Wallpaper', children: await wallpaperItems() },
-      {
-        label: 'Lock Desktop',
-        checked: store.desktopLocked,
-        action: () => store.setDesktopLocked(!store.desktopLocked),
-      },
     ]
   }
 
@@ -283,7 +319,9 @@
   {/each}
 
   <!-- Icons come after the widgets so a dragged icon travels over them. -->
-  <DesktopIcons {bus} {store} />
+  {#if isMain}
+    <DesktopIcons {bus} {store} />
+  {/if}
 
   {#if band !== null}
     <gtkbox

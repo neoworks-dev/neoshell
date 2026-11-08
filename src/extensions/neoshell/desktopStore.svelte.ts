@@ -16,6 +16,7 @@ import {
 } from './desktopLayout'
 import type { DesktopEntry, Layout, WidgetPlacement, WidgetSeed } from './desktopLayout'
 import { recordOf } from '../../lib/record.js'
+import { valueAt } from '../../lib/settings.svelte.js'
 import type { BusService as BusLike } from '../../lib/bus.js'
 
 // DesktopStore is the desktop's reactive state: the folder's entries, what is
@@ -30,6 +31,10 @@ import type { BusService as BusLike } from '../../lib/bus.js'
 // Config is also the record of which widgets exist: widgets.<id> carries the
 // type, so the gallery can add one and the context menu can remove it. The
 // view tree's seed only applies to a desktop that has never been arranged.
+//
+// A desktop on a monitor other than the main one holds widgets only: the
+// folder's icons stay on the main display, and its widgets live under
+// desktop.screens.<connector>.widgets so two desktops never write one map.
 //
 // Writes are debounced because a resolve settles in several steps (the folder
 // arrives, then the config), and only the settled answer is worth storing.
@@ -54,6 +59,7 @@ export type { DesktopEntry, WidgetPlacement }
 
 const CALL_TIMEOUT_MS = 10000
 const PERSIST_DEBOUNCE_MS = 250
+const MAIN_WIDGETS_KEY = 'widgets'
 
 export class DesktopStore {
   entries = $state<DesktopEntry[]>([])
@@ -73,6 +79,9 @@ export class DesktopStore {
   private readonly listeners = new Set<() => void>()
   private readonly bus: BusLike
   private persistTimer: ReturnType<typeof setTimeout> | null = null
+  private widgetsKey = $state(MAIN_WIDGETS_KEY)
+  private showsIcons = $state(true)
+  private lastSnapshot: unknown = {}
 
   constructor(bus: BusLike) {
     this.bus = bus
@@ -115,6 +124,13 @@ export class DesktopStore {
     this.notify()
   }
 
+  // Which monitor's desktop this is; see the top of the file.
+  setMonitor(connector: string, isMain: boolean): void {
+    this.showsIcons = isMain
+    this.widgetsKey = widgetsKeyFor(connector, isMain)
+    this.applyConfig(this.lastSnapshot)
+  }
+
   // The seed is the desktop node's args, so it arrives with the view rather
   // than over the bus.
   setSeeds(value: unknown): void {
@@ -133,10 +149,11 @@ export class DesktopStore {
   }
 
   applyConfig(snapshot: unknown): void {
+    this.lastSnapshot = snapshot
     const root = recordOf(snapshot)
     const desktop = recordOf(root.desktop)
-    this.storedIcons = storedPointsOf(root.icons, this.unit)
-    this.storedWidgets = storedWidgetsOf(root.widgets)
+    this.storedIcons = this.storedIconsOf(root.icons)
+    this.storedWidgets = storedWidgetsOf(valueAt(root, this.widgetsKey))
     this.desktopLocked = desktop.locked === true
     this.sortMode = sortModeOf(desktop.sort)
     this.notify()
@@ -313,7 +330,7 @@ export class DesktopStore {
   // stopped moving.
   schedulePersist(layout: Layout): void {
     this.cancelPersist()
-    if (!this.folderLoaded) {
+    if (this.showsIcons && !this.folderLoaded) {
       return
     }
     this.persistTimer = setTimeout(() => {
@@ -345,8 +362,17 @@ export class DesktopStore {
   }
 
   private persist(layout: Layout): void {
-    this.persistIcons(layout)
+    if (this.showsIcons) {
+      this.persistIcons(layout)
+    }
     this.persistWidgets(layout)
+  }
+
+  private storedIconsOf(value: unknown): Record<string, Point> {
+    if (!this.showsIcons) {
+      return {}
+    }
+    return storedPointsOf(value, this.unit)
   }
 
   private persistIcons(layout: Layout): void {
@@ -391,7 +417,7 @@ export class DesktopStore {
 
   private writeWidgets(next: Record<string, Record<string, unknown>>): void {
     this.storedWidgets = next
-    void this.bus.call('config:set', { key: 'widgets', value: next }, CALL_TIMEOUT_MS)
+    void this.bus.call('config:set', { key: this.widgetsKey, value: next }, CALL_TIMEOUT_MS)
     this.notify()
   }
 
@@ -409,6 +435,13 @@ export class DesktopStore {
       this.selection = next
     }
   }
+}
+
+function widgetsKeyFor(connector: string, isMain: boolean): string {
+  if (isMain || connector === '') {
+    return MAIN_WIDGETS_KEY
+  }
+  return `desktop.screens.${connector}.widgets`
 }
 
 function pointRecord(point: Point | undefined): Record<string, unknown> {

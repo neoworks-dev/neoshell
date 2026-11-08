@@ -13,6 +13,7 @@
   import TrayShelf from './extensions/neoshell/TrayShelf.svelte'
   import GLib from 'gi://GLib'
   import SettingsWindow from './extensions/settings/SettingsWindow.svelte'
+  import DisplaysSettings from './extensions/settings/DisplaysSettings.svelte'
   import { MAX_UNIT_PX, sizePx, spanOf } from './extensions/neoshell/freeform'
   import type { BluetoothState, NetworkState } from './extensions/quicksettings/types'
 
@@ -149,6 +150,7 @@
       <gtkbox class="ui-light" orientation="vertical" spacing={16} width={720} valign="start">
         <NotchSettings {bus} {registry} args={{}} id="smoke.notch.general" />
         <NotchSettings {bus} {registry} args={{ page: 'widgets' }} id="smoke.notch.widgets" />
+        <DisplaysSettings {bus} {registry} args={{}} id="smoke.displays" />
       </gtkbox>
       <!-- One monitor's lock surface, in a box instead of a session-lock
            window: the compositor lock is what the smoke must never take. -->

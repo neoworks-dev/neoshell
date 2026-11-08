@@ -1,6 +1,7 @@
 <script lang="ts">
   import { subscribeTo } from '../../lib/bus'
   import type { ViewProps } from '../../host/plugins/views'
+  import { monitorSizeOf } from '../../lib/placement'
   import { recordOf, stringOf } from '../../lib/record'
   import WidgetPreview from './WidgetPreview.svelte'
 
@@ -38,7 +39,11 @@
     description: string
   }
 
-  let { bus, registry }: ViewProps = $props()
+  let { bus, registry, args }: ViewProps = $props()
+
+  // The monitor this gallery is on: its size is the gallery's, and a widget
+  // added here lands on that monitor's desktop.
+  const monitor = $derived(stringOf(recordOf(args).monitor))
 
   let open = $state(false)
   let catalog = $state<CatalogEntry[]>([])
@@ -82,14 +87,11 @@
   )
 
   function applyMonitor(data: unknown): void {
-    if (!Array.isArray(data) || data.length === 0) {
+    const size = monitorSizeOf(data, monitor)
+    if (size === null) {
       return
     }
-    const monitor = recordOf(data[0])
-    if (typeof monitor.width !== 'number' || typeof monitor.height !== 'number') {
-      return
-    }
-    viewport = { width: monitor.width, height: monitor.height }
+    viewport = size
   }
 
   function close(): void {
@@ -98,7 +100,7 @@
   }
 
   function add(entry: CatalogEntry): void {
-    bus.publish('widgets:add', { type: entry.type, size: PREVIEW_SIZE })
+    bus.publish('widgets:add', { type: entry.type, size: PREVIEW_SIZE, monitor })
     close()
   }
 
