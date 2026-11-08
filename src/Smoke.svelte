@@ -11,6 +11,7 @@
   import Notch from './extensions/neoshell/Notch.svelte'
   import NotchSettings from './extensions/neoshell/NotchSettings.svelte'
   import TrayShelf from './extensions/neoshell/TrayShelf.svelte'
+  import QuickSharePanel from './extensions/neoshell/QuickSharePanel.svelte'
   import GLib from 'gi://GLib'
   import SettingsWindow from './extensions/settings/SettingsWindow.svelte'
   import DisplaysSettings from './extensions/settings/DisplaysSettings.svelte'
@@ -145,6 +146,7 @@
       <gtkbox class="ui-dark" orientation="vertical" spacing={16} valign="start">
         <Notch {bus} {registry} args={{}} id="smoke.notch" />
         <gtkbox class="island" width={560}>
+          <QuickSharePanel {bus} height={112} ondragenter={() => {}} onhold={() => {}} />
           <TrayShelf paths={TRAY_PATHS} height={112} dragOver onopen={() => {}} onremove={() => {}} />
         </gtkbox>
       </gtkbox>

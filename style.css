@@ -332,6 +332,45 @@ separator.nook-divider {
   background-color: alpha(#fafafa, 0.06);
 }
 
+/* Quick Share, left of the shelf */
+.quickshare-panel {
+  padding: 6px;
+  border: 1px dashed alpha(#fafafa, 0.2);
+  border-radius: 14px;
+  color: alpha(#fafafa, 0.6);
+  transition: background-color 150ms, border-color 150ms;
+}
+
+.quickshare-panel.quickshare-panel-target {
+  border-color: alpha(#60a5fa, 0.7);
+  background-color: alpha(#60a5fa, 0.1);
+}
+
+.quickshare-title { font-size: 12px; font-weight: 600; color: var(--base-content); }
+.quickshare-hint { font-size: 11px; color: alpha(#fafafa, 0.5); }
+.quickshare-pin { font-size: 13px; font-weight: 600; color: var(--base-content); }
+
+.island button.quickshare-receive,
+.island button.quickshare-device,
+.island button.quickshare-action,
+.island button.quickshare-close {
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: alpha(#fafafa, 0.7);
+  background-color: alpha(#fafafa, 0.08);
+}
+
+.island button.quickshare-device { padding: 5px 8px; font-size: 12px; color: var(--base-content); }
+.island button.quickshare-close { padding: 3px; background-color: transparent; }
+.island button.quickshare-accept { color: #0b0b0d; background-color: #fafafa; }
+.island button.quickshare-receive:hover,
+.island button.quickshare-device:hover,
+.island button.quickshare-action:hover { background-color: alpha(#fafafa, 0.16); }
+
+progressbar.quickshare-progress trough { min-height: 4px; border-radius: 2px; background-color: alpha(#fafafa, 0.12); }
+progressbar.quickshare-progress progress { min-height: 4px; border-radius: 2px; background-color: #60a5fa; }
+
 .tray-tile {
   min-width: 76px;
   padding: 8px 6px 6px 6px;

@@ -63,7 +63,7 @@
   }
 </script>
 
-<gtkbox class={shelfClass(dragOver)} orientation="vertical" css="min-height: {height}px;">
+<gtkbox class={shelfClass(dragOver)} orientation="vertical" hexpand css="min-height: {height}px;">
   {#if tiles.length === 0}
     <gtkbox orientation="vertical" spacing={6} vexpand valign="center">
       <gtkicon icon="folder-download-symbolic" size={24}></gtkicon>

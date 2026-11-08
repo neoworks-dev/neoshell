@@ -7,6 +7,7 @@
     SegmentedButton,
     Slider,
     Switch,
+    TextField,
   } from '@neoworks/gtk-ui'
   import { untrack } from 'svelte'
   import { subscribeTo } from '../../lib/bus'
@@ -47,6 +48,8 @@
   const chosen = $derived(chosenEntry(entries, chosenType))
   const chosenWidget = $derived(widgetFor(chosen))
   const openOn = $derived(settings.string('notch.openOn', 'click'))
+  const receiving = $derived(settings.string('quickshare.visibility', 'invisible') === 'visible')
+  const deviceName = $derived(settings.string('quickshare.deviceName', ''))
 
   $effect(() => settings.connect())
 
@@ -62,6 +65,14 @@
       return wanted
     }
     return 'general'
+  }
+
+  function setReceiving(on: boolean): void {
+    if (on) {
+      settings.set('quickshare.visibility', 'visible')
+      return
+    }
+    settings.set('quickshare.visibility', 'invisible')
   }
 
   function save(next: NookEntry[]): void {
@@ -174,6 +185,26 @@
           size="sm"
           onchange={(value) => settings.set('notch.openOn', value)}
         />
+      {/snippet}
+    </ListRow>
+  </Card>
+
+  <SectionHeader title="Quick Share" description="Send and receive files with Android phones nearby." level={4} />
+  <Card padding="none">
+    <ListRow title="Receiving" subtitle="Visible to everyone nearby while on">
+      {#snippet trailing()}
+        <Switch label="Receiving" hideLabel checked={receiving} onchange={setReceiving} />
+      {/snippet}
+    </ListRow>
+    <ListRow title="Device name" subtitle="What phones see; Enter saves it. Empty uses the host name.">
+      {#snippet trailing()}
+        <gtkbox css="min-width: 220px;">
+          <TextField
+            label="Device name"
+            value={deviceName}
+            onsubmit={(name) => settings.set('quickshare.deviceName', name.trim())}
+          />
+        </gtkbox>
       {/snippet}
     </ListRow>
   </Card>

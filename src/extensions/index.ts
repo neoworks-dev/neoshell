@@ -5,6 +5,7 @@ import appsBackend from './apps/backend.js'
 import mediaBackend from './media/backend.js'
 import calendarBackend from './calendar/backend.js'
 import calendarViews from './calendar/views.js'
+import quickShareBackend from './quickshare/backend.js'
 import filesBackend from './files/backend.js'
 import networkBackend from './network/backend.js'
 import bluetoothBackend from './bluetooth/backend.js'
@@ -101,6 +102,10 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     },
     backend: calendarBackend as Plugin.Object,
     views: calendarViews,
+  },
+  quickshare: {
+    manifest: { id: 'quickshare', inject: ['bus'] },
+    backend: quickShareBackend as Plugin.Object,
   },
   files: {
     manifest: { id: 'files', inject: ['bus'] },

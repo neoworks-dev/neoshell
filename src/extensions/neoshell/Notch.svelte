@@ -17,6 +17,7 @@
   import type { NookEntry } from "./nook";
   import { deleteCachedCopy, downloadDropped } from "./trayDownloads";
   import { STAGED_KEY, withPaths, withoutPath } from "./trayFiles";
+  import QuickSharePanel from "./QuickSharePanel.svelte";
   import TrayShelf from "./TrayShelf.svelte";
 
   // The notch: a black cutout welded to the top edge, centred over the bar.
@@ -70,7 +71,8 @@
   // Mirrors .nook-panel and .nook-header in the stylesheet.
   const NOOK_PADDING = 16;
   const NOOK_HEADER_HEIGHT = 44;
-  const EMPTY_NOOK_WIDTH = 320;
+  const EMPTY_NOOK_WIDTH = 420;
+  const QUICKSHARE_WIDTH = 150;
   const PROGRESS_MARGIN = 16;
 
   // The window never resizes: it is the stage the island animates inside.
@@ -101,6 +103,11 @@
   let { bus, registry }: ViewProps = $props();
 
   const settings = new Settings(untrack(() => bus));
+  // Incoming shares the notch already opened for.
+  const askedTransfers = new Set<string>();
+  // Quick Share is waiting on a choice — a device to send to, or an incoming
+  // share to answer — so the notch does not close by itself.
+  let heldOpen = $state(false);
 
   let entries = $state<IslandEntry[]>([]);
   let hovered = $state(false);
@@ -145,6 +152,19 @@
   $effect(() => subscribeTo(bus, "notch:open", () => (opened = true)));
   $effect(() => subscribeTo(bus, "notch:close", () => (opened = false)));
   $effect(() => subscribeTo(bus, "notch:toggle", () => (opened = !opened)));
+
+  // Files that arrived over Quick Share join the Tray, and a share waiting for
+  // an answer opens the Tray, where it is asked.
+  $effect(() =>
+    subscribeTo(bus, "quickshare:received", (message) => {
+      keepFiles(stringListOf(recordOf(message.data).paths));
+    })
+  );
+  $effect(() =>
+    subscribeTo(bus, "quickshare.state", (message) => {
+      showNewRequests(arrayOf(recordOf(message.data).transfers));
+    })
+  );
 
   $effect(() =>
     subscribeTo(bus, "island:show", (message) => {
@@ -272,7 +292,7 @@
     if (!opened) {
       return;
     }
-    pointerTimer = setTimeout(() => (opened = false), LEAVE_CLOSE_DELAY_MS);
+    pointerTimer = setTimeout(closeAutomatically, LEAVE_CLOSE_DELAY_MS);
   }
 
   function cancelPointerTimer(): void {
@@ -298,7 +318,7 @@
     if (!hadDrag || pointerTimer !== null) {
       return;
     }
-    pointerTimer = setTimeout(() => (opened = false), LEAVE_CLOSE_DELAY_MS);
+    pointerTimer = setTimeout(closeAutomatically, LEAVE_CLOSE_DELAY_MS);
   }
 
   function dropped(detail: { paths: string[]; uris: string[]; image: string }): void {
@@ -307,6 +327,42 @@
     keepFiles(detail.paths);
     void downloadDropped(detail.uris, detail.image).then(keepFiles);
     pointerTimer = setTimeout(closeUnlessHovered, AFTER_DROP_CLOSE_DELAY_MS);
+  }
+
+  function closeAutomatically(): void {
+    pointerTimer = null;
+    if (heldOpen) {
+      return;
+    }
+    opened = false;
+  }
+
+  function holdOpen(hold: boolean): void {
+    if (hold === heldOpen) {
+      return;
+    }
+    heldOpen = hold;
+    cancelPointerTimer();
+    if (hold) {
+      tab = "tray";
+      opened = true;
+      return;
+    }
+    if (!hovered) {
+      pointerTimer = setTimeout(closeAutomatically, LEAVE_CLOSE_DELAY_MS);
+    }
+  }
+
+  function showNewRequests(transfers: Record<string, unknown>[]): void {
+    const waiting = transfers.filter((transfer) => transfer.state === "waitingForUserConsent");
+    const fresh = waiting.filter((transfer) => !askedTransfers.has(String(transfer.id)));
+    if (fresh.length === 0) {
+      return;
+    }
+    fresh.forEach((transfer) => askedTransfers.add(String(transfer.id)));
+    cancelPointerTimer();
+    tab = "tray";
+    opened = true;
   }
 
   function keepFiles(paths: string[]): void {
@@ -319,7 +375,7 @@
   function closeUnlessHovered(): void {
     pointerTimer = null;
     if (!hovered) {
-      opened = false;
+      closeAutomatically();
     }
   }
 
@@ -690,14 +746,23 @@
   </gtkbox>
 {/snippet}
 
+<!-- Quick Share on the left, the shelf taking the rest. Each takes its own
+     drops; the island's drop target only covers what is left around them. -->
 {#snippet trayShelf()}
-  <TrayShelf
-    paths={staged}
-    height={NOOK_ROW_HEIGHT}
-    {dragOver}
-    onopen={openFile}
-    onremove={removeFile}
-  />
+  <gtkbox orientation="horizontal" spacing={8}>
+    <gtkbox hexpand={false} css="min-width: {QUICKSHARE_WIDTH}px;">
+      <QuickSharePanel {bus} height={NOOK_ROW_HEIGHT} ondragenter={dragEntered} onhold={holdOpen} />
+    </gtkbox>
+    <gtkbox hexpand>
+      <TrayShelf
+        paths={staged}
+        height={NOOK_ROW_HEIGHT}
+        {dragOver}
+        onopen={openFile}
+        onremove={removeFile}
+      />
+    </gtkbox>
+  </gtkbox>
 {/snippet}
 
 {#snippet plainHeader(entry: IslandEntry)}
