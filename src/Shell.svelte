@@ -57,7 +57,10 @@
   {:else if isDetached(args)}
     <ViewNode {node} {bus} {registry} {generation} />
   {:else}
+    <!-- ui-dark scopes @neoworks/gtk-ui's tokens: shell surfaces are dark
+         whatever the system scheme. -->
     <gtkwindow
+      class="ui-dark"
       namespace={namespaceOf(node)}
       layer={layerOf(args)}
       anchor={anchorOf(args)}
