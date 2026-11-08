@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["gjs-esm-types"]
+  },
+  "include": [
+    "src",
+    "node_modules/@neoworks/svelte-gtk4/gi.d.ts",
+    "node_modules/@neoworks/svelte-gtk4/gjs-globals.d.ts"
+  ]
+}
