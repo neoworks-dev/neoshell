@@ -42,8 +42,9 @@
    is never mapped, its input region never reaches the compositor, and if it
    was showing something before it keeps showing it. A closed tray or gallery
    is exactly that window. One hundredth of an alpha is a real paint and still
-   invisible; the blur rules ignore anything under 0.1. */
-window {
+   invisible; the blur rules ignore anything under 0.1. A gtk-ui Window is an
+   ordinary toplevel and paints its own canvas. */
+window:not(.ui-window) {
   background-color: alpha(#000000, 0.01);
   color: var(--base-content);
   font-size: 13px;
