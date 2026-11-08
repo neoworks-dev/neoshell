@@ -42,10 +42,60 @@ export function deleteCachedCopy(path: string): void {
   }
 }
 
+// What a browser drop becomes in the Tray. A dragged picture is usually inside
+// a link, and the link is what the uri-list carries: on Google's results it is
+// /imgres, whose imgurl parameter is the full-size original. So the original
+// comes first, then the picture the browser says was dragged (`image`), and
+// only then the plain URIs, a link dropped on its own. Each candidate that
+// fails to download falls back to the next.
+export async function downloadDropped(uris: string[], image: string): Promise<string[]> {
+  const originals = uris.map(googleOriginalOf).filter((uri) => uri !== '')
+  if (originals.length > 0 || image !== '') {
+    const path = await downloadFirst([...originals, image].filter((uri) => uri !== ''))
+    if (path !== null) {
+      return [path]
+    }
+  }
+  return downloadAll(uris)
+}
+
 // The downloaded files' paths, in drop order; a URI that fails is left out.
 export async function downloadAll(uris: string[]): Promise<string[]> {
   const paths = await Promise.all(uris.map(downloadOrNull))
   return paths.filter((path): path is string => path !== null)
+}
+
+async function downloadFirst(candidates: string[]): Promise<string | null> {
+  for (const uri of candidates) {
+    const path = await downloadOrNull(uri)
+    if (path !== null) {
+      return path
+    }
+  }
+  return null
+}
+
+function googleOriginalOf(uri: string): string {
+  let parsed: GLib.Uri
+  try {
+    parsed = GLib.Uri.parse(uri, GLib.UriFlags.NONE)
+  } catch {
+    return ''
+  }
+  const host = String(parsed.get_host())
+  if (!/^(www\.)?google\.[a-z.]+$/.test(host) || parsed.get_path() !== '/imgres') {
+    return ''
+  }
+  return queryValueOf(String(parsed.get_query()), 'imgurl')
+}
+
+function queryValueOf(query: string, key: string): string {
+  for (const pair of query.split('&')) {
+    if (pair.startsWith(`${key}=`)) {
+      return decodeURIComponent(pair.slice(key.length + 1))
+    }
+  }
+  return ''
 }
 
 async function downloadOrNull(uri: string): Promise<string | null> {

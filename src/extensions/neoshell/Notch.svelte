@@ -15,7 +15,7 @@
     widgetWidth,
   } from "./nook";
   import type { NookEntry } from "./nook";
-  import { deleteCachedCopy, downloadAll } from "./trayDownloads";
+  import { deleteCachedCopy, downloadDropped } from "./trayDownloads";
   import { STAGED_KEY, withPaths, withoutPath } from "./trayFiles";
   import TrayShelf from "./TrayShelf.svelte";
 
@@ -301,11 +301,11 @@
     pointerTimer = setTimeout(() => (opened = false), LEAVE_CLOSE_DELAY_MS);
   }
 
-  function dropped(detail: { paths: string[]; uris: string[] }): void {
+  function dropped(detail: { paths: string[]; uris: string[]; image: string }): void {
     dragOver = false;
     cancelPointerTimer();
     keepFiles(detail.paths);
-    void downloadAll(detail.uris).then(keepFiles);
+    void downloadDropped(detail.uris, detail.image).then(keepFiles);
     pointerTimer = setTimeout(closeUnlessHovered, AFTER_DROP_CLOSE_DELAY_MS);
   }
 
