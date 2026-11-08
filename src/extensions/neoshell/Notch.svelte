@@ -15,6 +15,7 @@
     widgetWidth,
   } from "./nook";
   import type { NookEntry } from "./nook";
+  import { deleteCachedCopy, downloadAll } from "./trayDownloads";
   import { STAGED_KEY, withPaths, withoutPath } from "./trayFiles";
   import TrayShelf from "./TrayShelf.svelte";
 
@@ -300,13 +301,19 @@
     pointerTimer = setTimeout(() => (opened = false), LEAVE_CLOSE_DELAY_MS);
   }
 
-  function dropped(detail: { paths: string[] }): void {
+  function dropped(detail: { paths: string[]; uris: string[] }): void {
     dragOver = false;
     cancelPointerTimer();
-    if (detail.paths.length > 0) {
-      settings.set(STAGED_KEY, withPaths(staged, detail.paths));
-    }
+    keepFiles(detail.paths);
+    void downloadAll(detail.uris).then(keepFiles);
     pointerTimer = setTimeout(closeUnlessHovered, AFTER_DROP_CLOSE_DELAY_MS);
+  }
+
+  function keepFiles(paths: string[]): void {
+    if (paths.length === 0) {
+      return;
+    }
+    settings.set(STAGED_KEY, withPaths(staged, paths));
   }
 
   function closeUnlessHovered(): void {
@@ -322,10 +329,13 @@
 
   function removeFile(path: string): void {
     settings.set(STAGED_KEY, withoutPath(staged, path));
+    deleteCachedCopy(path);
   }
 
   function clearTray(): void {
+    const removed = staged;
     settings.set(STAGED_KEY, []);
+    removed.forEach(deleteCachedCopy);
   }
 
   function pressed(detail: { button: number }): void {
