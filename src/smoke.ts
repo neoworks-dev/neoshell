@@ -77,7 +77,9 @@ bus.retain('config', {
       { id: 'task-b', title: 'Water the plants', done: true, day: smokeDay },
     ],
   },
+  weather: { place: 'Smoke', cards: { 'smoke.weather.medium': { place: 'Elsewhere', units: 'imperial' } } },
 })
+bus.retain('weather.cards', { cards: [{ id: 'smoke.weather.medium', size: 'medium' }] })
 
 bus.retain('pomodoro.state', { durationSeconds: 1500, remainingSeconds: 1234, running: true, endsAt: Date.now() + 1_234_000 })
 
@@ -460,6 +462,7 @@ const REMOTE_CARDS: [string, string][] = [
   ['smoke-remote-github-medium', 'Smoke issue title'],
   ['smoke-remote-github-large', 'Smoke notification'],
   ['smoke-remote-githubsettings', 'Repositories'],
+  ['smoke-remote-weathersettings', 'Medium card 1'],
   ['smoke-remote-bar', new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date())],
 ]
 

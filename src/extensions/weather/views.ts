@@ -5,8 +5,9 @@ import { remoteView } from '../../host/clients/remoteView.js'
 
 // weather views: the desktop card, registered as weather.card — the type the
 // widget declaration in the extension registry names, and what the gallery
-// lists and the desktop places. The card itself runs as the weather client
-// (client.ts); what it may do on the bus is the manifest's `client`.
+// lists and the desktop places — and its Settings page. Both run as the
+// weather client (client.ts); what it may do on the bus is the manifest's
+// `client`.
 
 const plugin: Plugin.Object = {
   name: 'weather-views',
@@ -14,6 +15,7 @@ const plugin: Plugin.Object = {
   apply(context) {
     const ui = requireService<ViewRegistry>(context, 'ui')
     context.effect(() => ui.register('weather.card', remoteView('weather', 'card')))
+    context.effect(() => ui.register('weather.settings', remoteView('weather', 'settings')))
   },
 }
 

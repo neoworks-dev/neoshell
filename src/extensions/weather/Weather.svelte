@@ -3,7 +3,6 @@
   import type { ViewProps } from '../../host/plugins/views'
   import { widgetBoxOf } from '../../lib/widget'
   import WeatherSummary from './WeatherSummary.svelte'
-  import WeatherSettings from './WeatherSettings.svelte'
   import HourlyStrip from './HourlyStrip.svelte'
   import DailyList from './DailyList.svelte'
   import { currentOf, skyOf } from './lib'
@@ -20,6 +19,8 @@
   // size was the only signal that reached it. The slot renders the card itself
   // here and the store already holds the size, so it arrives as a prop — which
   // is also how a change from the widget's context menu gets here.
+  //
+  // Place and units are set in Settings → Weather, which the gear opens.
 
   const CALL_TIMEOUT_MS = 10000
   // What the day rows have left for their range bar once the card's padding,
@@ -29,7 +30,6 @@
   let { bus, args, id }: ViewProps = $props()
 
   let current = $state<WeatherCurrent | null>(null)
-  let editing = $state(false)
 
   const box = $derived(widgetBoxOf(args))
   const comingDays = $derived(comingDaysOf(current))
@@ -48,47 +48,8 @@
     })
   })
 
-  // The whole card entry is written at once so the backend reconfigures on one
-  // republish rather than on one per field. Place and units are all a card
-  // owns; everything else about it stays with the shared section.
-  //
-  // A cleared field writes no place at all rather than an empty one, so the
-  // card goes back to following the shared location instead of losing it.
-  function save(place: string, imperial: boolean): void {
-    editing = false
-    void bus.call(
-      'config:set',
-      { key: `weather.cards.${id}`, value: { ...placeEntry(place), units: unitsOf(imperial) } },
-      CALL_TIMEOUT_MS,
-    )
-  }
-
-  function placeEntry(place: string): Record<string, string> {
-    if (place === '') {
-      return {}
-    }
-    return { place }
-  }
-
-  function unitsOf(imperial: boolean): string {
-    if (imperial) {
-      return 'imperial'
-    }
-    return 'metric'
-  }
-
-  function editedPlace(state: WeatherCurrent | null): string {
-    if (state === null) {
-      return ''
-    }
-    return state.place
-  }
-
-  function editedImperial(state: WeatherCurrent | null): boolean {
-    if (state === null) {
-      return false
-    }
-    return state.unit === '°F'
+  function openSettings(): void {
+    bus.publish('settings:open', { section: 'weather' })
   }
 
   // A card with nothing to show yet keeps a neutral sky.
@@ -111,14 +72,7 @@
 
 <gtkoverlay class={cardClass} hexpand vexpand>
   <gtkbox orientation="vertical" spacing={10} hexpand vexpand>
-    {#if editing}
-      <WeatherSettings
-        place={editedPlace(current)}
-        imperial={editedImperial(current)}
-        onsave={save}
-        oncancel={() => (editing = false)}
-      />
-    {:else if current === null}
+    {#if current === null}
       <gtkbox orientation="vertical" spacing={4}>
         <gtklabel class="card-title" halign="start">Weather</gtklabel>
         <gtklabel class="card-hint" halign="start" wrap xalign={0}>
@@ -141,16 +95,14 @@
   <!-- The gear is always drawn rather than revealed on hover: GTK has no
        :hover on an ancestor to key a child's opacity off, and a control that
        only exists while the pointer is over it cannot be found by touch. -->
-  {#if !editing}
-    <gtkbutton
-      overlay
-      class="card-gear"
-      frame={false}
-      icon="emblem-system-symbolic"
-      halign="end"
-      valign="start"
-      tooltip="Edit Weather"
-      onclicked={() => (editing = true)}
-    ></gtkbutton>
-  {/if}
+  <gtkbutton
+    overlay
+    class="card-gear"
+    frame={false}
+    icon="emblem-system-symbolic"
+    halign="end"
+    valign="start"
+    tooltip="Weather settings"
+    onclicked={openSettings}
+  ></gtkbutton>
 </gtkoverlay>

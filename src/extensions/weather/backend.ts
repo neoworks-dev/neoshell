@@ -13,6 +13,8 @@ import {
 } from '../../lib/openMeteo.js'
 import type { Location } from '../../lib/openMeteo.js'
 import { startPolling } from '../../lib/poll.js'
+import { placedCardsOf } from './placed.js'
+import type { PlacedCard } from './placed.js'
 
 // weather: current conditions for one place as a retained bus topic, from the
 // Open-Meteo forecast API.
@@ -20,6 +22,8 @@ import { startPolling } from '../../lib/poll.js'
 //   weather:watch    {id} → {ok}
 //   weather.current/<id>  {place, temperature, unit, code, description, isDay,
 //                          high, low, hours, days, updatedAt}
+//   weather.cards    {cards: [{id, size}]}  the cards placed on the desktops,
+//                    for the Settings page
 //
 // hours and days carry the series the wider card sizes show; the small card
 // reads none of them. Both are published on every poll because the size is a
@@ -123,6 +127,7 @@ class WeatherCards {
   private readonly mountConfig: WeatherConfig
   private readonly cards = new Map<string, WeatherCard>()
   private section: Record<string, unknown> = {}
+  private placedKey = ''
 
   constructor(topics: RetainedTopics, mountConfig: WeatherConfig | undefined) {
     this.topics = topics
@@ -153,6 +158,17 @@ class WeatherCards {
     for (const [id, card] of this.cards) {
       card.configure(this.optionsFor(id))
     }
+    this.publishPlaced(placedCardsOf(snapshot))
+  }
+
+  // Config republishes on every drag; the list only goes out when it changed.
+  private publishPlaced(placed: PlacedCard[]): void {
+    const key = JSON.stringify(placed)
+    if (key === this.placedKey) {
+      return
+    }
+    this.placedKey = key
+    this.topics.set('weather.cards', { cards: placed })
   }
 
   async refresh(): Promise<void> {

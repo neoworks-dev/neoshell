@@ -1532,38 +1532,6 @@ button.qs-row-action:hover {
   padding-top: 10px;
 }
 
-/* ── weather card: settings face ──────────────────────────────────────── */
-
-.card-settings-entry {
-  font-size: 13px;
-  min-height: 0;
-  padding: 2px 8px;
-  background-color: alpha(#000000, 0.6);
-  border: 1px solid alpha(#fafafa, 0.28);
-  border-radius: 8px;
-}
-
-.card-settings-entry:focus-within {
-  border-color: alpha(#fafafa, 0.4);
-}
-
-.card-settings-button {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 8px;
-  border: 1px solid alpha(#fafafa, 0.28);
-}
-
-.card-settings-button:hover {
-  background-color: alpha(#fafafa, 0.1);
-}
-
-.card-settings-button.primary {
-  background-color: var(--primary);
-  color: var(--base-100);
-  border-color: transparent;
-}
-
 /* ── GitHub cards ─────────────────────────────────────────────────────── */
 
 .gh-header-icon,

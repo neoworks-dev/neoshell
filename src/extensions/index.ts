@@ -571,12 +571,23 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           defaultSize: 'small',
         },
       ],
+      settings: [
+        {
+          id: 'weather',
+          title: 'Weather',
+          icon: 'weather-few-clouds-symbolic',
+          view: 'weather.settings',
+          order: 22,
+          group: 'shell',
+          keywords: ['location', 'city', 'place', 'units', 'celsius', 'fahrenheit', 'forecast'],
+        },
+      ],
       client: {
         permissions: {
-          subscribe: ['weather.current/*'],
+          subscribe: ['weather.current/*', 'weather.cards'],
           call: ['weather:watch', 'config:set'],
-          publish: [],
-          configKeys: ['weather.cards.*'],
+          publish: ['settings:open'],
+          configKeys: ['weather.*'],
         },
       },
     },
