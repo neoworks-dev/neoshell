@@ -8,6 +8,7 @@ import type { Bus } from './host/bus.js'
 export const SMOKE_CARD_TEXTS: [string, string][] = [
   ['smoke-remote-containers-card', 'smoke-crash'],
   ['smoke-remote-aiusage-card', 'Claude Code'],
+  ['smoke-remote-email-card', 'Smoke Sender'],
 ]
 
 /** [css class of the box, a tooltip it must have drawn]. */
@@ -17,6 +18,37 @@ export function retainSmokeCards(bus: Bus): void {
   retainGallery(bus)
   retainContainers(bus)
   retainAiUsage(bus)
+  retainEmail(bus)
+}
+
+// Two accounts, one of them failing, and more unread than there are rows.
+function retainEmail(bus: Bus): void {
+  const message = (index: number, from: string, subject: string, ageMinutes: number): Record<string, unknown> => ({
+    id: `smoke:${index}`,
+    account: 'smoke',
+    accountName: 'Smoke',
+    from,
+    address: `sender${index}@example.com`,
+    subject,
+    time: Date.now() - ageMinutes * 60_000,
+  })
+  bus.retain('email.inbox', {
+    accounts: [
+      { id: 'smoke', name: 'Smoke', user: 'me@example.com', status: 'ok', message: '', unread: 9 },
+      { id: 'broken', name: 'Broken', user: 'old@example.com', status: 'error', message: 'The server refused the sign-in.', unread: 0 },
+    ],
+    messages: [
+      message(1, 'Smoke Sender', 'A subject long enough that the row has to cut it off somewhere', 4),
+      message(2, 'Anna Meyer', 'Lunch?', 50),
+      message(3, 'Ärne Ünal', '(no subject)', 400),
+      message(4, 'GitHub', 'Run failed', 2000),
+      message(5, 'Stripe', 'Receipt', 3000),
+      message(6, 'Linear', 'Assigned to you', 9000),
+      message(7, 'Dad', 'Photos', 12000),
+    ],
+    unread: 9,
+    updatedAt: Date.now(),
+  })
 }
 
 // Both agents, one window past its limit and one without a limit, and one

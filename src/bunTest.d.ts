@@ -11,10 +11,14 @@ declare module 'bun:test' {
     toBeFalsy(): void
     toBeGreaterThan(value: number): void
     toBeLessThan(value: number): void
+    toBeGreaterThanOrEqual(value: number): void
+    toBeLessThanOrEqual(value: number): void
+    toThrow(message?: string): void
     toBeCloseTo(value: number, digits?: number): void
     toContain(item: unknown): void
     toMatch(pattern: RegExp | string): void
     not: Matchers
+    rejects: { toThrow(message?: string): Promise<void> }
   }
 
   export function describe(name: string, body: () => void): void

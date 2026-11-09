@@ -1693,6 +1693,40 @@ button.qs-row-action:hover {
 .container-more { margin-top: 2px; }
 .container-footer-error { color: var(--error); }
 
+/* ── email card ───────────────────────────────────────────────────────── */
+
+.mail-row {
+  padding: 5px 4px;
+  border-radius: 10px;
+  transition: background-color 150ms;
+}
+
+.mail-row:hover { background-color: alpha(#fafafa, 0.06); }
+
+/* A round monogram in a colour taken from the sender's address, so the same
+   sender is always the same colour. */
+.mail-avatar { border-radius: 15px; }
+
+.mail-initial {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mail-avatar.avatar-0 { background-color: alpha(#60a5fa, 0.22); color: #60a5fa; }
+.mail-avatar.avatar-1 { background-color: alpha(#4ade80, 0.22); color: #4ade80; }
+.mail-avatar.avatar-2 { background-color: alpha(#fbbf24, 0.22); color: #fbbf24; }
+.mail-avatar.avatar-3 { background-color: alpha(#f87171, 0.22); color: #f87171; }
+.mail-avatar.avatar-4 { background-color: alpha(#a78bfa, 0.22); color: #a78bfa; }
+.mail-avatar.avatar-5 { background-color: alpha(#f472b6, 0.22); color: #f472b6; }
+
+/* The refresh button turns while the mailboxes are being asked. */
+.mail-refreshing { animation: mail-spin 900ms linear infinite; }
+
+@keyframes mail-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 /* ── AI usage card ────────────────────────────────────────────────────── */
 
 .usage-agent { padding: 2px 0; }
