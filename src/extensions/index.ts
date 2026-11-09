@@ -318,6 +318,9 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           defaultSize: 'small',
         },
       ],
+      client: {
+        permissions: { subscribe: ['airquality.current'], call: [], publish: [], configKeys: [] },
+      },
     },
     backend: airQualityBackend as Plugin.Object,
     views: airQualityViews,
