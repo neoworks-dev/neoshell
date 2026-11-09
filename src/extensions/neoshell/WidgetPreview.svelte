@@ -40,11 +40,13 @@
   }
 
   // The scaled card is anchored to the wrapper's top-left by shifting it back
-  // by half of what scaling about the centre moved it.
+  // by half of what scaling about the centre moved it. Fixed-point, so a
+  // value near zero never comes out in exponent notation, which a client's
+  // inline style may not carry.
   function scaleCss(factor: number, unscaled: { width: number; height: number }): string {
-    const dx = (unscaled.width * (factor - 1)) / 2
-    const dy = (unscaled.height * (factor - 1)) / 2
-    return `transform: translate(${dx}px, ${dy}px) scale(${factor});`
+    const dx = ((unscaled.width * (factor - 1)) / 2).toFixed(3)
+    const dy = ((unscaled.height * (factor - 1)) / 2).toFixed(3)
+    return `transform: translate(${dx}px, ${dy}px) scale(${factor.toFixed(4)});`
   }
 </script>
 
