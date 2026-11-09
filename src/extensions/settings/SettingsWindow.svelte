@@ -1,12 +1,11 @@
 <script lang="ts">
-  import { IconButton, TopAppBar, Window } from '@neoworks/gtk-ui'
+  import { HistoryButtons, IconButton, NavigationDrawer, Search, TopAppBar, Window } from '@neoworks/gtk-ui'
   import { subscribeTo } from '../../lib/bus'
   import { recordOf, stringOf } from '../../lib/record'
   import type { ViewProps } from '../../host/plugins/views'
   import { resolve } from '../../tree'
   import { History } from './history.svelte'
-  import SettingsSidebar from './SettingsSidebar.svelte'
-  import { groupsOf, matching, sectionsOf } from './sections'
+  import { matching, navSectionsOf, sectionsOf } from './sections'
   import type { Section } from './sections'
 
   // The unified Settings window. It knows nothing about any one setting: every
@@ -43,7 +42,7 @@
   let generation = $state(0)
 
   const compact = $derived(windowWidth > 0 && windowWidth < COMPACT_WIDTH)
-  const shown = $derived(groupsOf(matching(sections, query)))
+  const shown = $derived(navSectionsOf(matching(sections, query)))
   const selected = $derived(selectedSection(sections, history.current))
   const Page = $derived(viewFor(selected, generation))
 
@@ -123,7 +122,11 @@
       <gtkbox class="settings-root" orientation="horizontal">
         {#if showsSidebar(compact, pageShown)}
           <gtkbox class="settings-sidebar" hexpand={compact} css="min-width: {SIDEBAR_WIDTH}px;">
-            <SettingsSidebar groups={shown} current={idOf(selected)} onselect={choose} bind:query />
+            <NavigationDrawer sections={shown} current={idOf(selected)} onselect={choose}>
+              {#snippet header()}
+                <Search placeholder="Search" size="sm" bind:value={query} />
+              {/snippet}
+            </NavigationDrawer>
           </gtkbox>
         {/if}
         {#if showsPage(compact, pageShown)}
@@ -161,21 +164,11 @@
   {#if compact}
     <IconButton icon="go-previous-symbolic" label="All settings" size="sm" onclick={() => (pageShown = false)} />
   {:else}
-    <gtkbox class="settings-history">
-      <IconButton
-        icon="go-previous-symbolic"
-        label="Back"
-        size="sm"
-        disabled={!history.canGoBack}
-        onclick={() => history.back()}
-      />
-      <IconButton
-        icon="go-next-symbolic"
-        label="Forward"
-        size="sm"
-        disabled={!history.canGoForward}
-        onclick={() => history.forward()}
-      />
-    </gtkbox>
+    <HistoryButtons
+      canGoBack={history.canGoBack}
+      canGoForward={history.canGoForward}
+      onback={() => history.back()}
+      onforward={() => history.forward()}
+    />
   {/if}
 {/snippet}
