@@ -5,8 +5,9 @@ import GLib from 'gi://GLib'
 import Gtk from 'gi://Gtk?version=4.0'
 import System from 'system'
 import { Bus } from './host/bus.js'
-import { EXTENSIONS } from './extensions/index.js'
+import { declaredClient, EXTENSIONS } from './extensions/index.js'
 import { startClients } from './host/clients/index.js'
+import { remoteView } from './host/clients/remoteView.js'
 import { ViewRegistry } from './host/plugins/views.js'
 import Smoke from './Smoke.svelte'
 import SmokeCard from './SmokeCard.svelte'
@@ -29,7 +30,7 @@ const EXIT_AFTER_MS = 2000
 
 const bus = new Bus()
 const registry = new ViewRegistry()
-startClients(bus, (name) => EXTENSIONS[name].manifest.client)
+startClients(bus, registry, (name) => declaredClient(EXTENSIONS, name))
 
 // The gallery lists what the catalog holds and previews each entry with the
 // registered view for its type, so a catalog with no provider behind it would
@@ -92,6 +93,11 @@ bus.retain('system.cpu', {
 })
 
 bus.retain('hypr.monitors', [{ width: 1920, height: 1080 }])
+// The bar's workspaces and status items: the clock is the bar client's own
+// view, embedded back into it through the host.
+bus.retain('hypr.workspaces', [{ id: 1, name: 'smoke-one', windows: 1 }, { id: 2, name: '2', windows: 0 }])
+bus.retain('status.catalog', { items: [{ id: 'clock', label: 'Date and time', icon: 'neoshell.clock', order: 100 }] })
+registry.register('neoshell.clock', remoteView('neoshell-bar', 'clock'))
 bus.retain('calendar.sources', {
   sources: [{ id: 'cal-smoke', name: 'Smoke', status: 'ok', message: '', eventCount: 2 }],
 })
@@ -223,6 +229,8 @@ const REMOTE_CARDS: [string, string][] = [
   // Formatted in the client with the host's locale profile, which has to come
   // out as the host's own Intl writes it.
   ['smoke-remote-agenda', new Intl.DateTimeFormat(undefined, { weekday: 'long' }).format(new Date())],
+  ['smoke-remote-bar', 'smoke-one'],
+  ['smoke-remote-bar', new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date())],
 ]
 
 function remoteCardShows(boxClass: string, text: string): boolean {

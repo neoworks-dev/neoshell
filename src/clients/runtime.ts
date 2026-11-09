@@ -3,22 +3,17 @@ import { RemoteBus } from '../lib/remoteBus.js'
 import type { BusAnswer, BusRequest } from '../lib/remoteBus.js'
 import type { LocaleProfile } from '../lib/localeProfile.js'
 import { installDateTimeFormat, setLocaleProfile } from './intl.js'
+import { clientRegistry } from './registry.js'
 
 // What every shell client's entry calls: its views by name, each mounted with
 // the props a view in the shell gets. The bus is the client's connection to
-// the host's; the registry is an empty one, since a client renders no views
-// but its own. The host's first message is its locale, for the
+// the host's; the registry answers every type with an embed of the host's
+// view (registry.ts). The host's first message is its locale, for the
 // Intl.DateTimeFormat views format with.
 
 // Installed while this module evaluates, before the views' modules do: some
 // build their formats at the top level.
 installDateTimeFormat()
-
-const emptyRegistry = {
-  resolve: () => undefined,
-  onChange: () => () => {},
-  register: () => () => {},
-}
 
 export interface ClientGreeting {
   locale: LocaleProfile
@@ -27,7 +22,7 @@ export interface ClientGreeting {
 export function startShellClient(views: Record<string, unknown>): void {
   const bus = new RemoteBus((request: BusRequest) => sendApp(request))
   startClient(views, {
-    props: () => ({ bus, registry: emptyRegistry }),
+    props: () => ({ bus, registry: clientRegistry }),
     onApp: (data) => receive(bus, data),
   })
 }

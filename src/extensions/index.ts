@@ -1,4 +1,5 @@
 import type { Plugin } from '@neoworks/extension-system'
+import { clientNameParts } from '../host/clients/index.js'
 import type { ClientDeclaration } from '../host/clients/index.js'
 import hyprBackend from './hypr/backend.js'
 import systemBackend from './system/backend.js'
@@ -101,6 +102,28 @@ export interface ExtensionManifest {
   // Views that run as a client: their bundle is built from the extension's
   // client.ts, and this is everything that client may do on the bus.
   client?: ClientDeclaration
+  // An extension with several clients, each built from clients/<name>.ts and
+  // run as "<extension>-<name>", so one failing takes only its own views down.
+  clients?: Record<string, ClientDeclaration>
+}
+
+/** The declaration behind a client name, "weather" or "neoshell-bar". */
+export function declaredClient(
+  extensions: Record<string, ExtensionModule>,
+  name: string,
+): ClientDeclaration | undefined {
+  const { extension, part } = clientNameParts(name)
+  const found = extensions[extension]
+  if (found === undefined) {
+    return undefined
+  }
+  if (part === '') {
+    return found.manifest.client
+  }
+  if (found.manifest.clients === undefined) {
+    return undefined
+  }
+  return found.manifest.clients[part]
 }
 
 export interface ExtensionModule {
@@ -180,6 +203,26 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
         { id: 'battery', label: 'Battery', icon: 'neoshell.battery', order: 70, when: 'system.battery' },
         { id: 'clock', label: 'Date and time', icon: 'neoshell.clock', order: 100 },
       ],
+      clients: {
+        bar: {
+          permissions: {
+            subscribe: [
+              'hypr.workspaces',
+              'hypr.activeworkspace',
+              'hypr.windows',
+              'hypr.event',
+              'status.catalog',
+              'status.open',
+              'system.battery',
+            ],
+            // hypr:dispatch also runs commands; the bar only switches workspaces.
+            call: [{ type: 'hypr:dispatch', fields: { dispatcher: ['workspace'] } }],
+            publish: ['status:toggle'],
+            configKeys: [],
+            embed: ['*.icon', 'neoshell.clock', 'neoshell.battery'],
+          },
+        },
+      },
       notchWidgets: [
         {
           type: 'neoshell.nook.media',

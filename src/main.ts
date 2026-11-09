@@ -14,7 +14,7 @@ import { viewTreePlugin } from './host/plugins/viewTree.js'
 import { joinPath, runtimeDirectory } from './gjs/fs.js'
 import { startClients } from './host/clients/index.js'
 import type { ClientDeclaration } from './host/clients/index.js'
-import { EXTENSIONS } from './extensions/index.js'
+import { declaredClient, EXTENSIONS } from './extensions/index.js'
 import Shell from './Shell.svelte'
 
 // neoshell: one GJS process holding the kernel, the bus, every extension
@@ -32,7 +32,7 @@ const registry = new ViewRegistry()
 
 const root = new Context()
 // Before any view renders: a view that runs as a client mounts through it.
-startClients(bus, clientDeclarationOf)
+startClients(bus, registry, clientDeclarationOf)
 mount(runtimePlugin, { bus, registry })
 mount(configPlugin, { path: configPath() })
 mount(unixSocketPlugin, { socketPath: joinPath(runtimeDirectory(), 'neoshell-host.sock') })
@@ -52,13 +52,8 @@ function mount(plugin: Plugin.Object<any>, config?: unknown): void {
   })
 }
 
-// A client is named after the extension it belongs to.
 function clientDeclarationOf(name: string): ClientDeclaration | undefined {
-  const extension = EXTENSIONS[name]
-  if (extension === undefined) {
-    return undefined
-  }
-  return extension.manifest.client
+  return declaredClient(EXTENSIONS, name)
 }
 
 function configPath(): string {
