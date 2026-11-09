@@ -20,6 +20,7 @@ import type { Bus } from '../bus.js'
 //   exclusiveSize  space the compositor keeps clear for it
 //   margin         gap between the window and the edges it anchors to
 //   blur           ask Hyprland for a layer blur rule
+//   blurIgnoreAlpha  pixels at or under this alpha are not blurred (0.1)
 //   monitors       "all" or "main" (the default): where the window goes unless
 //                  config's displays.surfaces.<id> says otherwise
 //   label          what Settings → Displays calls the surface
@@ -36,6 +37,8 @@ interface TreeNode {
 
 // The neoworks default profile. Ordinary config — a user's "views" key
 // replaces it wholesale.
+const DEFAULT_BLUR_IGNORE_ALPHA = 0.1
+
 const DEFAULT_TREE: TreeNode[] = [
   {
     id: 'bar',
@@ -80,6 +83,8 @@ const DEFAULT_TREE: TreeNode[] = [
       offsetTop: 36,
       placedWith: 'bar',
       blur: true,
+      // Between the menu box's shadow (≤ 0.6) and its fill (0.72).
+      blurIgnoreAlpha: 0.65,
     },
   },
   {
@@ -177,7 +182,8 @@ export const viewTreePlugin: Plugin.Object = {
 
 class ViewTreePublisher {
   private readonly bus: Bus
-  private clearRetained: () => void = () => {}
+  private clearViews: () => void = () => {}
+  private clearRules: () => void = () => {}
   private lastSignature = ''
 
   constructor(bus: Bus) {
@@ -191,37 +197,44 @@ class ViewTreePublisher {
       return
     }
     this.lastSignature = signature
-    this.clearRetained()
-    this.clearRetained = this.bus.retain('views', tree)
-    this.requestBlur(tree)
+    this.clearViews()
+    this.clearViews = this.bus.retain('views', tree)
+    this.clearRules()
+    this.clearRules = this.bus.retain('hypr.layerrules', { rules: blurRulesOf(tree) })
   }
 
   withdraw(): void {
-    this.clearRetained()
-    this.clearRetained = () => {}
+    this.clearViews()
+    this.clearRules()
+    this.clearViews = () => {}
+    this.clearRules = () => {}
     this.lastSignature = ''
   }
+}
 
-  // The compositor blurs by layer namespace, and the shell names each window
-  // "neoshell.<node id>" — so asking for blur is a layer rule per node,
-  // published for whatever compositor bridge is listening.
-  private requestBlur(tree: TreeNode[]): void {
-    for (const node of tree) {
-      this.requestBlurForNode(node)
-    }
-  }
-
-  private requestBlurForNode(node: TreeNode): void {
-    if (argsOf(node).blur !== true || node.id === undefined) {
-      return
-    }
-    this.bus.publish('hypr:layerrule', {
+// The compositor blurs by layer namespace, and the shell names each window
+// "neoshell.<node id>" — so asking for blur is a layer rule per node. They are
+// retained, not sent: the compositor bridge may mount later, and applies them
+// again whenever the compositor reloads its config and drops them.
+function blurRulesOf(tree: TreeNode[]): Record<string, unknown>[] {
+  return tree
+    .filter((node) => argsOf(node).blur === true && node.id !== undefined)
+    .map((node) => ({
       namespace: `neoshell.${node.id}`,
       blur: true,
       blurPopups: true,
-      ignoreAlpha: 0.1,
-    })
+      ignoreAlpha: ignoreAlphaOf(argsOf(node)),
+    }))
+}
+
+// Pixels at or under this alpha are not blurred behind. A surface with a drop
+// shadow sets it above the shadow's alpha, or the blur spreads under the
+// shadow and past the panel's edge.
+function ignoreAlphaOf(args: Record<string, unknown>): number {
+  if (typeof args.blurIgnoreAlpha === 'number') {
+    return args.blurIgnoreAlpha
   }
+  return DEFAULT_BLUR_IGNORE_ALPHA
 }
 
 function treeOf(snapshot: unknown): TreeNode[] {

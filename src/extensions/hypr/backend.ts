@@ -20,6 +20,9 @@ import { request, streamLines } from '../../gjs/socket.js'
 //   hypr:keyword  {name, value}              → {ok} | {error}
 //   hypr:layerrule {namespace, blur?, blurPopups?, ignoreAlpha?}
 //                                            → {ok} | {error}
+//   hypr.layerrules {rules: [{namespace, …}]}  retained by others; applied
+//                                            on start and after every config
+//                                            reload, which drops runtime rules
 //   hypr:request  {command}                  → {reply} | {error}
 //   hypr:capture  {address, width, height}   → {texture} | {error}   in-process only
 //
@@ -56,6 +59,7 @@ const hyprExtension: Plugin.Object<HyprConfig | undefined> = {
     registerFunction(context, bus, 'hypr:layerrule', (data) => runLayerRule(client, data))
     registerFunction(context, bus, 'hypr:request', (data) => runRequest(client, data))
     registerFunction(context, bus, 'hypr:capture', (data) => captureWindow(data))
+    context.effect(() => applyRetainedLayerRules(bus, client))
     context.provide('hypr', client)
   },
 }
@@ -264,6 +268,32 @@ interface LayerRuleArgs {
   blur?: boolean
   blurPopups?: boolean
   ignoreAlpha?: number
+}
+
+function applyRetainedLayerRules(bus: BusService, client: HyprClient): () => void {
+  let rules: unknown[] = []
+  const applyAll = () => {
+    for (const rule of rules) {
+      void runLayerRule(client, rule)
+    }
+  }
+  const stopRules = bus.subscribe('hypr.layerrules', (message) => {
+    const listed = (message.data as { rules?: unknown }).rules
+    rules = []
+    if (Array.isArray(listed)) {
+      rules = listed
+    }
+    applyAll()
+  })
+  const stopReloads = bus.subscribe('hypr.event', (message) => {
+    if ((message.data as { event?: unknown }).event === 'configreloaded') {
+      applyAll()
+    }
+  })
+  return () => {
+    stopRules()
+    stopReloads()
+  }
 }
 
 async function runLayerRule(client: HyprClient, data: unknown): Promise<unknown> {
