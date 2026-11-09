@@ -13,10 +13,7 @@
   import Weather from './extensions/weather/Weather.svelte'
   import AirQuality from './extensions/airquality/AirQuality.svelte'
   import LockSurface from './extensions/lock/LockSurface.svelte'
-  import NotchSettings from './extensions/neoshell/NotchSettings.svelte'
   import SettingsWindow from './extensions/settings/SettingsWindow.svelte'
-  import DisplaysSettings from './extensions/settings/DisplaysSettings.svelte'
-  import CalendarSettings from './extensions/calendar/CalendarSettings.svelte'
   import { MAX_UNIT_PX, sizePx, spanOf } from './extensions/neoshell/freeform'
   import type { BluetoothState, NetworkState } from './extensions/quicksettings/types'
   import { remoteView } from './host/clients/remoteView'
@@ -32,6 +29,9 @@
   const RemoteDock = remoteView('neoshell-dock', 'dock')
   const RemoteDesktop = remoteView('neoshell-desktop', 'desktop')
   const RemoteGallery = remoteView('neoshell-gallery', 'gallery')
+  const RemoteNotchSettings = remoteView('neoshell-settings', 'notch')
+  const RemoteDisplaysSettings = remoteView('settings', 'displays')
+  const RemoteCalendarSettings = remoteView('calendar', 'settings')
 
   // The smoke harness's markup: every view added for the quick settings tray
   // and the widget gallery, built once in a plain window.
@@ -214,11 +214,18 @@
           <RemoteDock {bus} {registry} args={{}} id="smoke.dock" />
         </gtkbox>
       </gtkbox>
+      <!-- The Settings pages, each run as its extension's client. -->
       <gtkbox class="ui-light" orientation="vertical" spacing={16} width={720} valign="start">
-        <NotchSettings {bus} {registry} args={{}} id="smoke.notch.general" />
-        <NotchSettings {bus} {registry} args={{ page: 'widgets' }} id="smoke.notch.widgets" />
-        <DisplaysSettings {bus} {registry} args={{}} id="smoke.displays" />
-        <CalendarSettings {bus} {registry} args={{}} id="smoke.calendar" />
+        <gtkbox class="smoke-remote-notchsettings" orientation="vertical">
+          <RemoteNotchSettings {bus} {registry} args={{}} id="smoke.notch.general" />
+          <RemoteNotchSettings {bus} {registry} args={{ page: 'widgets' }} id="smoke.notch.widgets" />
+        </gtkbox>
+        <gtkbox class="smoke-remote-displays" orientation="vertical">
+          <RemoteDisplaysSettings {bus} {registry} args={{}} id="smoke.displays" />
+        </gtkbox>
+        <gtkbox class="smoke-remote-calendarsettings" orientation="vertical">
+          <RemoteCalendarSettings {bus} {registry} args={{}} id="smoke.calendar" />
+        </gtkbox>
       </gtkbox>
       <!-- One monitor's lock surface, in a box instead of a session-lock
            window: the compositor lock is what the smoke must never take. -->

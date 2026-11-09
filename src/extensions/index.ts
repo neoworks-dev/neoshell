@@ -201,6 +201,16 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           keywords: ['events', 'ics', 'ical', 'google'],
         },
       ],
+      // The settings page. Calendar URLs go to the backend, which keeps them
+      // in the keyring; the page only ever sees the sources' names and status.
+      client: {
+        permissions: {
+          subscribe: ['calendar.sources'],
+          call: ['calendar:add', 'calendar:remove'],
+          publish: [],
+          configKeys: [],
+        },
+      },
     },
     backend: calendarBackend as Plugin.Object,
     views: calendarViews,
@@ -331,6 +341,20 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
             publish: ['widgets:gallery'],
             configKeys: ['widgets', 'icons', 'desktop.*'],
             embed: ['neoshell.wallpaper', '@widgets'],
+          },
+        },
+        settings: {
+          permissions: {
+            subscribe: ['notch.catalog'],
+            call: ['config:set'],
+            publish: [],
+            configKeys: [
+              'notch.nook',
+              'notch.openOn',
+              'quickshare.visibility',
+              'quickshare.deviceName',
+              'quickshare.trusted',
+            ],
           },
         },
         gallery: {
@@ -479,6 +503,14 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           keywords: ['monitor', 'screen', 'main display'],
         },
       ],
+      client: {
+        permissions: {
+          subscribe: ['views', 'displays.connected'],
+          call: ['config:set'],
+          publish: [],
+          configKeys: ['displays.*'],
+        },
+      },
     },
     views: settingsViews,
   },

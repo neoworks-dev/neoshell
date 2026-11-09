@@ -3,8 +3,6 @@
   import type { SelectOption } from '@neoworks/gtk-ui'
   import { untrack } from 'svelte'
   import { subscribeTo } from '../../lib/bus'
-  import { Displays } from '../../lib/displays.svelte'
-  import type { Display } from '../../lib/displays.svelte'
   import {
     DISPLAYS_KEY,
     EVERY_DISPLAY,
@@ -12,7 +10,7 @@
     mainConnectorOf,
     placementOf,
   } from '../../lib/placement'
-  import { recordOf, stringOf } from '../../lib/record'
+  import { arrayOf, recordOf, stringOf } from '../../lib/record'
   import { Settings } from '../../lib/settings.svelte'
   import type { ViewProps } from '../../host/plugins/views'
   import { idOf, isDetached, nodesOf } from '../../tree'
@@ -20,7 +18,8 @@
 
   // Settings → Displays: which monitor is the main one, and where each surface
   // of the view tree goes (lib/placement.ts). Detached nodes — the lock screen,
-  // this window — place themselves and are not listed.
+  // this window — place themselves and are not listed. The displays are the
+  // shell's (displays.connected): this page runs as a client.
 
   interface Surface {
     id: string
@@ -28,16 +27,21 @@
     args: Record<string, unknown>
   }
 
+  interface Display {
+    connector: string
+    description: string
+  }
+
   let { bus }: ViewProps = $props()
 
   const settings = new Settings(untrack(() => bus))
-  const displays = new Displays()
 
   let surfaces = $state<Surface[]>([])
+  let displays = $state.raw<Display[]>([])
 
   const section = $derived(recordOf(settings.value(DISPLAYS_KEY)))
-  const main = $derived(mainConnectorOf(section, displays.connectors()))
-  const mainOptions = $derived(displays.list.map(displayOption))
+  const main = $derived(mainConnectorOf(section, displays.map((display) => display.connector)))
+  const mainOptions = $derived(displays.map(displayOption))
   const placementOptions = $derived([
     { value: EVERY_DISPLAY, label: 'Every display' },
     { value: MAIN_DISPLAY, label: 'Main display' },
@@ -45,7 +49,15 @@
   ])
 
   $effect(() => settings.connect())
-  $effect(() => displays.connect())
+
+  $effect(() =>
+    subscribeTo(bus, 'displays.connected', (message) => {
+      displays = arrayOf(recordOf(message.data).displays).map((record) => ({
+        connector: stringOf(record.connector),
+        description: stringOf(record.description),
+      }))
+    }),
+  )
 
   $effect(() =>
     subscribeTo(bus, 'views', (message) => {
