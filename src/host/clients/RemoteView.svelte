@@ -50,20 +50,10 @@
     }
   })
 
-  // Only what survives JSON reaches a client; a callback in args does not.
+  // The client gets plain data; a function in args, like a menu's close,
+  // reaches it as a callback into this process.
   function propsOf(currentArgs: unknown, currentId: string): Record<string, unknown> {
-    return { args: plainArgs(currentArgs), id: currentId }
-  }
-
-  function plainArgs(value: unknown): unknown {
-    if (value === undefined) {
-      return null
-    }
-    try {
-      return JSON.parse(JSON.stringify(value))
-    } catch {
-      return null
-    }
+    return { args: currentArgs, id: currentId }
   }
 
   function retry(): void {

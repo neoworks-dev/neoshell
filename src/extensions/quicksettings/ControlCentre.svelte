@@ -1,11 +1,9 @@
 <script lang="ts">
-  import GLib from 'gi://GLib'
   import { untrack } from 'svelte'
   import { errorOf, subscribeTo } from '../../lib/bus'
   import { arrayOf, numberOf, recordOf, stringListOf, stringOf } from '../../lib/record'
   import { Settings } from '../../lib/settings.svelte'
   import type { ViewProps } from '../../host/plugins/views'
-  import { thumbnailTexture } from '../neoshell/trayFiles'
   import SliderRow from './SliderRow.svelte'
   import WifiPage from './WifiPage.svelte'
   import BluetoothPage from './BluetoothPage.svelte'
@@ -15,13 +13,14 @@
   // The Control Centre: the quick settings status item's menu. Every block is
   // there only when what it controls exists on this machine — its backend has
   // published, or its tool is installed — so nothing on it is a dead switch.
+  // Who is logged in, the avatar and the album art come from the host as
+  // quicksettings.account and media.artwork, as picture handles.
 
   const COMMAND_TIMEOUT_MS = 5000
   const RADIO_TIMEOUT_MS = 15000
   const WIDTH = 344
   const AVATAR_SIZE = 44
   const ART_SIZE = 44
-  const SCREENSHOT_COMMAND = 'grim -g "$(slurp)"'
   const POWER_ACTIONS = [
     { action: 'lock', label: 'Lock', icon: 'system-lock-screen-symbolic' },
     { action: 'logout', label: 'Log out', icon: 'system-log-out-symbolic' },
@@ -40,18 +39,18 @@
   interface Track {
     title: string
     artist: string
-    art: string
     playing: boolean
   }
 
   let { bus, args }: ViewProps = $props()
 
   const settings = new Settings(untrack(() => bus))
-  const canScreenshot = hasPrograms(['grim', 'slurp'])
-  const realName = displayNameOf(GLib.get_real_name(), GLib.get_user_name())
-  const accountLabel = `${GLib.get_user_name()}@${GLib.get_host_name()}`
-  const avatar = thumbnailOrNull(GLib.build_filenamev([GLib.get_home_dir(), '.face']))
 
+  let canScreenshot = $state(false)
+  let realName = $state('')
+  let accountLabel = $state('')
+  let avatar = $state('')
+  let artwork = $state('')
   let page = $state<Page>('main')
   let network = $state<NetworkState | null>(null)
   let networks = $state<WifiNetwork[]>([])
@@ -68,10 +67,10 @@
   const receiving = $derived(settings.string('quickshare.visibility', 'invisible') === 'visible')
   const wifiPresent = $derived(network !== null && network.available)
   const wiredPresent = $derived(wired.available === true)
-  // Decoded once per track, not on every render.
-  const artTexture = $derived(artTextureOf(track))
 
   $effect(() => settings.connect())
+  $effect(() => subscribeTo(bus, 'quicksettings.account', (message) => applyAccount(message.data)))
+  $effect(() => subscribeTo(bus, 'media.artwork', (message) => (artwork = stringOf(recordOf(message.data).handle))))
   $effect(() => subscribeTo(bus, 'network.state', (message) => (network = networkStateOf(message.data))))
   $effect(() => subscribeTo(bus, 'network.networks', (message) => (networks = networksOf(message.data))))
   $effect(() => subscribeTo(bus, 'network.wired', (message) => (wired = recordOf(message.data))))
@@ -93,22 +92,12 @@
     }
   }
 
-  function hasPrograms(names: string[]): boolean {
-    return names.every((name) => GLib.find_program_in_path(name) !== null)
-  }
-
-  function displayNameOf(realNameValue: string, userName: string): string {
-    if (realNameValue === '' || realNameValue === 'Unknown') {
-      return userName
-    }
-    return realNameValue
-  }
-
-  function thumbnailOrNull(path: string) {
-    if (!GLib.file_test(path, GLib.FileTest.EXISTS)) {
-      return null
-    }
-    return thumbnailTexture(path, AVATAR_SIZE * 2)
+  function applyAccount(data: unknown): void {
+    const record = recordOf(data)
+    realName = stringOf(record.realName)
+    accountLabel = stringOf(record.accountLabel)
+    avatar = stringOf(record.avatar)
+    canScreenshot = record.canScreenshot === true
   }
 
   function initialOf(name: string): string {
@@ -132,7 +121,7 @@
 
   function captureScreen(): void {
     close()
-    void bus.call('hypr:dispatch', { dispatcher: 'exec', arg: SCREENSHOT_COMMAND }, COMMAND_TIMEOUT_MS)
+    void bus.call('quicksettings:screenshot', {}, COMMAND_TIMEOUT_MS)
   }
 
   function toggleWifi(): void {
@@ -309,24 +298,8 @@
     return {
       title,
       artist: stringOf(record.artist),
-      art: localArtOf(stringOf(record.artUrl)),
       playing: stringOf(record.status) === 'Playing',
     }
-  }
-
-  function artTextureOf(current: Track | null) {
-    if (current === null || current.art === '') {
-      return null
-    }
-    return thumbnailTexture(current.art, ART_SIZE * 2)
-  }
-
-  // Remote art would have to be downloaded first and is left out.
-  function localArtOf(artUrl: string): string {
-    if (!artUrl.startsWith('file://')) {
-      return ''
-    }
-    return decodeURIComponent(artUrl.slice('file://'.length))
   }
 
   function networkStateOf(data: unknown): NetworkState {
@@ -406,14 +379,15 @@
 
 {#snippet header()}
   <gtkbox orientation="horizontal" spacing={12}>
-    {#if avatar !== null}
+    {#if avatar !== ''}
       <gtkbox class="cc-avatar" clip valign="center">
-        <gtkpicture paintable={avatar} fit="cover" shrink width={AVATAR_SIZE} height={AVATAR_SIZE}></gtkpicture>
+        <gtkpicture handle={avatar} fit="cover" shrink width={AVATAR_SIZE} height={AVATAR_SIZE}></gtkpicture>
       </gtkbox>
     {:else}
       <gtkbox
         class="cc-avatar"
-        css="min-width: {AVATAR_SIZE}px; min-height: {AVATAR_SIZE}px;"
+        width={AVATAR_SIZE}
+        height={AVATAR_SIZE}
         valign="center"
         hexpand={false}
         homogeneous
@@ -514,13 +488,14 @@
     <gtkbox
       class="cc-art"
       clip
-      css="min-width: {ART_SIZE}px; min-height: {ART_SIZE}px;"
+      width={ART_SIZE}
+      height={ART_SIZE}
       valign="center"
       hexpand={false}
       homogeneous
     >
-      {#if artTexture !== null}
-        <gtkpicture paintable={artTexture} fit="cover" shrink width={ART_SIZE} height={ART_SIZE}></gtkpicture>
+      {#if artwork !== ''}
+        <gtkpicture handle={artwork} fit="cover" shrink width={ART_SIZE} height={ART_SIZE}></gtkpicture>
       {:else}
         <gtkicon icon="audio-x-generic-symbolic" size={20} hexpand vexpand></gtkicon>
       {/if}

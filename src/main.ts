@@ -1,6 +1,6 @@
 // The library must be imported before anything that pulls in Svelte's client
 // runtime: it installs the DOM globals that runtime reads at module scope.
-import { start } from '@neoworks/svelte-gtk4'
+import { setPaintableResolver, start } from '@neoworks/svelte-gtk4'
 import GLib from 'gi://GLib'
 import { Context } from '@neoworks/extension-system'
 import type { Plugin } from '@neoworks/extension-system'
@@ -14,6 +14,7 @@ import { viewTreePlugin } from './host/plugins/viewTree.js'
 import { joinPath, runtimeDirectory } from './gjs/fs.js'
 import { startClients } from './host/clients/index.js'
 import type { ClientDeclaration } from './host/clients/index.js'
+import { paintableOf } from './host/paintables.js'
 import { declaredClient, EXTENSIONS } from './extensions/index.js'
 import Shell from './Shell.svelte'
 
@@ -33,6 +34,7 @@ const registry = new ViewRegistry()
 const root = new Context()
 // Before any view renders: a view that runs as a client mounts through it.
 startClients(bus, registry, clientDeclarationOf)
+setPaintableResolver(paintableOf)
 mount(runtimePlugin, { bus, registry })
 mount(configPlugin, { path: configPath() })
 mount(unixSocketPlugin, { socketPath: joinPath(runtimeDirectory(), 'neoshell-host.sock') })
