@@ -364,7 +364,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
         // The wallpaper and the widgets are the host's views, embedded.
         desktop: {
           permissions: {
-            subscribe: ['desktop.entries', 'hypr.monitors', 'widgets:add', 'widgets:gallery'],
+            subscribe: ['desktop.entries', 'hypr.monitors', 'widgets:add', 'widgets:gallery', 'widgets:dragging'],
             call: ['desktop:*', 'config:set'],
             publish: ['widgets:gallery'],
             configKeys: ['widgets', 'icons', 'desktop.*'],
@@ -389,7 +389,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           permissions: {
             subscribe: ['widgets:gallery', 'widgets.catalog', 'hypr.monitors'],
             call: [],
-            publish: ['widgets:gallery', 'widgets:add'],
+            publish: ['widgets:gallery', 'widgets:add', 'widgets:dragging'],
             configKeys: [],
             embed: ['@widgets'],
           },

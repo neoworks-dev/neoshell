@@ -5,6 +5,7 @@
   import { recordOf, stringOf } from '../../lib/record'
   import { MAX_UNIT_PX, sizePx, spanOf } from './grid'
   import WidgetPreview from './WidgetPreview.svelte'
+  import { widgetDragText } from './widgetDrag'
 
   // The widget gallery: a frosted panel that rises in the bottom-left corner
   // and lists every widget the installed extensions declare, by category, as
@@ -12,9 +13,10 @@
   // desktop (the reveal backend hears widgets:gallery); Done puts the windows
   // back.
   //
-  // The panel and the desktop are two layer-shell windows, and a pointer grab
-  // does not cross between them, so a tile is clicked to add its widget: the
-  // desktop gathers it with the other widgets.
+  // A tile is dragged onto the desktop, or clicked to have the desktop gather
+  // it with the other widgets. The panel and the desktop are two layer-shell
+  // windows, which a pointer grab does not cross, so the drag is a Wayland
+  // one carrying the widget's type as text (widgetDrag.ts).
   //
   // While closed the panel draws nothing that takes input, so the corner of
   // the screen stays click-through.
@@ -112,6 +114,16 @@
 
   function add(entry: CatalogEntry): void {
     bus.publish('widgets:add', { type: entry.type, size: entry.defaultSize, monitor })
+  }
+
+  // The desktop learns what is being dragged before it is dropped, so it can
+  // show where it would land (widgetDrag.ts).
+  function announceDrag(entry: CatalogEntry): void {
+    bus.publish('widgets:dragging', { type: entry.type, size: entry.defaultSize })
+  }
+
+  function endDrag(): void {
+    bus.publish('widgets:dragging', {})
   }
 
   function readQuery(event: { target: { widget: { get_text(): string } } }): void {
@@ -276,7 +288,10 @@
                         orientation="vertical"
                         spacing={8}
                         tooltip={entry.description}
+                        drag-text={widgetDragText(entry.type)}
                         onpress={() => add(entry)}
+                        ondragoutbegin={() => announceDrag(entry)}
+                        ondragoutend={endDrag}
                       >
                         <WidgetPreview
                           {bus}
@@ -301,7 +316,7 @@
 
       <gtkbox class="gallery-footer" orientation="horizontal" spacing={12}>
         <gtklabel class="gallery-hint" hexpand halign="start" valign="center">
-          Click a widget to add it to the desktop.
+          Drag a widget onto the desktop, or click it to add it.
         </gtklabel>
         <gtkbutton class="gallery-done" frame={false} valign="center" onclicked={close}>Done</gtkbutton>
       </gtkbox>
