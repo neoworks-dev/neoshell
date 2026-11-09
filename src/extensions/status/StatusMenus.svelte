@@ -1,30 +1,32 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import { subscribeTo } from '../../lib/bus'
-  import { numberOf, recordOf, stringOf } from '../../lib/record'
+  import { Displays } from '../../lib/displays.svelte'
+  import { numberOf, recordOf } from '../../lib/record'
   import type { ViewProps } from '../../host/plugins/views'
-  import { resolve } from '../../tree'
+  import { anchorOf, keyboardOf, layerOf, resolve } from '../../tree'
   import { NO_MENU, openMenuOf, statusItemsOf } from './statusItems'
   import type { OpenMenu, StatusItem } from './statusItems'
 
   // The menu host: the one dropdown box every status item's menu is drawn in,
-  // hanging under the item's icon. The window spans the output, like the bar;
-  // while a menu is open a backdrop under the box takes any click elsewhere
-  // and closes it. A closed host keeps a zero-size input marker: an empty
-  // input region is what keeps the surface click-through, and a surface with
-  // no marked widget at all would claim every click.
+  // hanging under the item's icon. It is a detached node: the window exists
+  // only while a menu is open, on the monitor whose bar opened it, so a closed
+  // host holds no full-output surface. The window spans the output; a
+  // backdrop under the box takes any click elsewhere and closes it.
   //
-  //   args.monitor     the connector it was placed on; it answers that bar only
   //   args.offsetTop   the bar's height plus the gap the box hangs below it
+  //   args.layer, args.anchors, args.keyboard   the window's layer-shell setup
 
   const EDGE_GAP = 6
   // Matches .status-menu-closing's animation in style.css.
   const CLOSE_ANIMATION_MS = 120
 
-  let { bus, registry, args }: ViewProps = $props()
+  let { bus, registry, args, id }: ViewProps = $props()
 
-  const monitor = $derived(stringOf(recordOf(args).monitor))
-  const offsetTop = $derived(numberOf(recordOf(args).offsetTop, 36))
+  const displays = new Displays()
+
+  const windowArgs = $derived(recordOf(args))
+  const offsetTop = $derived(numberOf(windowArgs.offsetTop, 36))
 
   let items = $state<StatusItem[]>([])
   let current = $state<OpenMenu>(NO_MENU)
@@ -55,15 +57,18 @@
     }),
   )
 
+  $effect(() => displays.connect())
+
   // What is open is retained so each bar can mark its open icon.
   $effect(() => {
     const open = current
     return untrack(() => bus.retain('status.open', { id: open.id, monitor: open.monitor }))
   })
 
-  // A request for another monitor closes this one's menu: one menu at a time.
+  // One menu at a time: a request for another item or another monitor
+  // replaces the open one.
   function toggle(requested: OpenMenu): void {
-    if (requested.monitor !== monitor || requested.id === current.id) {
+    if (requested.id === current.id && requested.monitor === current.monitor) {
       close()
       return
     }
@@ -107,26 +112,38 @@
   }
 </script>
 
+<!-- A layer surface cannot change monitors, so a menu opened from another
+     bar gets a new window. -->
 {#if Menu !== undefined}
-  <gtkoverlay hexpand vexpand>
-    <gtkpressable class="menu-backdrop" hexpand vexpand input onpress={close}></gtkpressable>
-    <gtkbox
-      overlay
-      class={menuClass(closing)}
-      orientation="vertical"
-      halign="end"
-      valign="start"
-      margin-top={offsetTop}
-      margin-end={Math.max(EDGE_GAP, current.anchorEnd - EDGE_GAP)}
-      input
+  {#key current.monitor}
+    <gtkwindow
+      class="ui-dark"
+      namespace={`neoshell.${id}`}
+      monitor={displays.monitorFor(current.monitor)}
+      layer={layerOf(windowArgs)}
+      anchor={anchorOf(windowArgs)}
+      keyboard-mode={keyboardOf(windowArgs)}
+      decorated={false}
     >
-      {#key current.id}
-        <gtkbox class="status-menu-content" orientation="vertical">
-          <Menu {bus} {registry} args={{ monitor, close }} id={current.id} />
+      <gtkoverlay hexpand vexpand>
+        <gtkpressable class="menu-backdrop" hexpand vexpand input onpress={close}></gtkpressable>
+        <gtkbox
+          overlay
+          class={menuClass(closing)}
+          orientation="vertical"
+          halign="end"
+          valign="start"
+          margin-top={offsetTop}
+          margin-end={Math.max(EDGE_GAP, current.anchorEnd - EDGE_GAP)}
+          input
+        >
+          {#key current.id}
+            <gtkbox class="status-menu-content" orientation="vertical">
+              <Menu {bus} {registry} args={{ monitor: current.monitor, close }} id={current.id} />
+            </gtkbox>
+          {/key}
         </gtkbox>
-      {/key}
-    </gtkbox>
-  </gtkoverlay>
-{:else}
-  <gtkbox width={0} height={0} input></gtkbox>
+      </gtkoverlay>
+    </gtkwindow>
+  {/key}
 {/if}
