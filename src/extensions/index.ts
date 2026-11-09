@@ -6,6 +6,8 @@ import mediaBackend from './media/backend.js'
 import calendarBackend from './calendar/backend.js'
 import calendarViews from './calendar/views.js'
 import agendaViews from './agenda/views.js'
+import pomodoroBackend from './pomodoro/backend.js'
+import pomodoroViews from './pomodoro/views.js'
 import quickShareBackend from './quickshare/backend.js'
 import filesBackend from './files/backend.js'
 import networkBackend from './network/backend.js'
@@ -213,6 +215,15 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
       statusItems: [{ id: 'agenda', label: 'Agenda', icon: 'agenda.icon', menu: 'agenda.menu', order: 40 }],
     },
     views: agendaViews,
+  },
+  pomodoro: {
+    manifest: {
+      id: 'pomodoro',
+      inject: ['bus', 'ui'],
+      statusItems: [{ id: 'pomodoro', label: 'Pomodoro', icon: 'pomodoro.icon', menu: 'pomodoro.menu', order: 20 }],
+    },
+    backend: pomodoroBackend as Plugin.Object,
+    views: pomodoroViews,
   },
   // The bar's status area and the window its menus open in.
   status: {

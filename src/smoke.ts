@@ -62,6 +62,8 @@ bus.retain('config', {
   },
 })
 
+bus.retain('pomodoro.state', { durationSeconds: 1500, remainingSeconds: 1234, running: true, endsAt: Date.now() + 1_234_000 })
+
 bus.retain('hypr.monitors', [{ width: 1920, height: 1080 }])
 bus.retain('calendar.sources', {
   sources: [{ id: 'cal-smoke', name: 'Smoke', status: 'ok', message: '', eventCount: 2 }],

@@ -1585,6 +1585,108 @@ button.nook-config-pick {
 .nook-config-name { color: var(--ui-text); font-weight: 600; }
 .nook-config-cells { color: var(--ui-text-muted); font-size: 12px; }
 
+/* ── pomodoro ─────────────────────────────────────────────────────────── */
+
+/* The time left in the bar: a 16px outlined pill inside the 22px item. */
+.pomodoro-pill {
+  min-height: 14px;
+  padding: 0 5px;
+  border: 1px solid alpha(#fafafa, 0.5);
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.pomodoro-pill.pomodoro-pill-paused {
+  color: alpha(#fafafa, 0.55);
+  border-color: alpha(#fafafa, 0.3);
+}
+
+/* A Gtk.Scale drawn as a ruler: the trough is the strip, the handle a thin
+   line at the chosen minute, and a tick under the strip for every minute
+   with a longer one every fifth. */
+scale.pomo-ruler {
+  padding: 0;
+  min-height: 40px;
+}
+
+.pomo-ruler trough {
+  min-height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background-color: alpha(#fafafa, 0.07);
+}
+
+.pomo-ruler highlight {
+  min-height: 28px;
+  margin: 0;
+  border: none;
+  background-color: transparent;
+  background-image: none;
+}
+
+.pomo-ruler slider {
+  min-width: 2px;
+  min-height: 28px;
+  margin: 0;
+  border: none;
+  border-radius: 1px;
+  box-shadow: none;
+  background-image: none;
+  background-color: #fafafa;
+}
+
+.pomo-ruler marks indicator {
+  min-width: 1px;
+  min-height: 4px;
+  background-color: alpha(#fafafa, 0.3);
+}
+
+.pomo-ruler marks mark:nth-child(5n) indicator {
+  min-height: 8px;
+  background-color: alpha(#fafafa, 0.55);
+}
+
+.status-menu button.pomo-preset {
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: alpha(#fafafa, 0.7);
+}
+
+.status-menu button.pomo-preset:hover { background-color: alpha(#fafafa, 0.1); }
+.status-menu button.pomo-preset.pomo-preset-active {
+  background-color: alpha(#fafafa, 0.14);
+  color: var(--base-content);
+}
+
+.status-menu button.pomo-button {
+  min-height: 30px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  background-color: alpha(#fafafa, 0.1);
+  color: var(--base-content);
+}
+
+.status-menu button.pomo-button:hover { background-color: alpha(#fafafa, 0.16); }
+.status-menu button.pomo-button:disabled { opacity: 0.4; }
+.status-menu button.pomo-button.pomo-button-primary {
+  background-color: #f4f4f5;
+  color: #18181b;
+}
+
+.status-menu button.pomo-button.pomo-button-primary:hover { background-color: #ffffff; }
+
+.pomo-readout {
+  font-size: 40px;
+  font-weight: 300;
+  color: var(--base-content);
+}
+
 /* ── agenda ───────────────────────────────────────────────────────────── */
 
 .agenda-date { font-size: 13px; color: alpha(#fafafa, 0.7); }
