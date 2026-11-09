@@ -10,11 +10,15 @@ import { joinPath, readDirectory, readTextFile } from '../../gjs/fs.js'
 //   system.battery     {percent, charging, status}   30s poll over /sys
 //   system.volume      {volume, muted}               wpctl, re-read on pactl events
 //   system.brightness  {percent, available}          brightnessctl, 10s poll
+//   system.powerprofile {active, profiles}           power-profiles-daemon, 10s
+//                                                    poll; never published
+//                                                    without the daemon
 //
-//   system:setVolume      {volume}   → {ok} | {error}
-//   system:setMuted       {muted}    → {ok} | {error}
-//   system:setBrightness  {percent}  → {ok} | {error}
-//   system:power          {action}   → {ok} | {error}
+//   system:setVolume       {volume}   → {ok} | {error}
+//   system:setMuted        {muted}    → {ok} | {error}
+//   system:setBrightness   {percent}  → {ok} | {error}
+//   system:setPowerProfile {profile}  → {ok} | {error}
+//   system:power           {action}   → {ok} | {error}
 
 interface SystemConfig {
   batteryDir?: string
@@ -47,6 +51,14 @@ interface ResolvedConfig {
 }
 
 const BRIGHTNESS_POLL_MS = 10_000
+const POWER_PROFILE_POLL_MS = 10_000
+// The daemon's profiles in the order a cycling tile steps through them.
+const POWER_PROFILES = ['power-saver', 'balanced', 'performance']
+
+interface PowerProfileState {
+  active: string
+  profiles: string[]
+}
 
 // Session actions the power menu may ask for, mapped to the tool that performs
 // them. Anything not listed is refused rather than shelled out.
@@ -73,6 +85,7 @@ const systemExtension: Plugin.Object<SystemConfig | undefined> = {
     if (options.brightness) {
       startBrightnessPoller(context, bus)
     }
+    startPowerProfilePoller(context, bus)
     registerCommands(context, bus)
   },
 }
@@ -83,6 +96,7 @@ function registerCommands(context: Context, bus: BusService): void {
   registerFunction(context, bus, 'system:setVolume', (data) => setVolume(data))
   registerFunction(context, bus, 'system:setMuted', (data) => setMuted(data))
   registerFunction(context, bus, 'system:setBrightness', (data) => setBrightness(data))
+  registerFunction(context, bus, 'system:setPowerProfile', (data) => setPowerProfile(data))
   registerFunction(context, bus, 'system:power', (data) => runPowerAction(data))
 }
 
@@ -105,6 +119,14 @@ async function setBrightness(data: unknown): Promise<unknown> {
     return { error: 'percent must be 0..100' }
   }
   return replyOf(await run(['brightnessctl', 'set', `${percent}%`]))
+}
+
+async function setPowerProfile(data: unknown): Promise<unknown> {
+  const profile = (data as { profile?: unknown }).profile
+  if (typeof profile !== 'string' || !POWER_PROFILES.includes(profile)) {
+    return { error: `unknown power profile "${String(profile)}"` }
+  }
+  return replyOf(await run(['powerprofilesctl', 'set', profile]))
 }
 
 async function runPowerAction(data: unknown): Promise<unknown> {
@@ -238,6 +260,38 @@ function startBrightnessPoller(context: Context, bus: BusService): void {
       withdrawIfSet(withdraw)
     }
   })
+}
+
+function startPowerProfilePoller(context: Context, bus: BusService): void {
+  let withdraw: (() => void) | null = null
+  const publish = async () => {
+    const state = await readPowerProfile()
+    if (state === null) {
+      return
+    }
+    withdrawIfSet(withdraw)
+    withdraw = bus.retain('system.powerprofile', state)
+  }
+  context.effect(() => {
+    void publish()
+    const timer = setInterval(() => void publish(), POWER_PROFILE_POLL_MS)
+    return () => {
+      clearInterval(timer)
+      withdrawIfSet(withdraw)
+    }
+  })
+}
+
+// Machines without performance support list only two profiles; `list` shows
+// each one as "  name:" (the active one starred).
+async function readPowerProfile(): Promise<PowerProfileState | null> {
+  const active = (await output(['powerprofilesctl', 'get'])).trim()
+  if (active === '') {
+    return null
+  }
+  const listing = await output(['powerprofilesctl', 'list'])
+  const profiles = POWER_PROFILES.filter((profile) => listing.includes(`${profile}:`))
+  return { active, profiles }
 }
 
 async function readBrightness(): Promise<BrightnessState> {

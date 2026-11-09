@@ -4,11 +4,12 @@ import { registerFunction, RetainedTopics } from '../../lib/bus.js'
 import type { BusService } from '../../lib/bus.js'
 import { output, run, splitTerse, watchLines } from '../../gjs/proc.js'
 
-// network: Wi-Fi state and control over nmcli.
+// network: Wi-Fi state and control over nmcli, and whether Ethernet is up.
 //
 //   network.state     {available, enabled, connected, ssid, signal, secured,
 //                      device, ipv4, gateway, dns}
 //   network.networks  [{ssid, signal, secured, active, saved}]
+//   network.wired     {available, connected, device, connection}
 //
 //   network:scan       {}                 → {ok}
 //   network:connect    {ssid, password?}  → {ok} | {error}
@@ -31,6 +32,14 @@ export interface NetworkState {
   ipv4: string
   gateway: string
   dns: string[]
+}
+
+export interface WiredState {
+  available: boolean
+  connected: boolean
+  device: string
+  // The NetworkManager connection's name, "Wired connection 1".
+  connection: string
 }
 
 export interface WifiNetwork {
@@ -153,6 +162,7 @@ class NetworkPublisher {
     const networks = await readNetworks()
     this.topics.set('network.state', await readState(device))
     this.topics.set('network.networks', networks)
+    this.topics.set('network.wired', await readWired())
   }
 
   // nmcli monitor emits a burst of lines per transition; one refresh covers
@@ -221,6 +231,31 @@ function firstNonEmpty(primary: string, fallback: string): string {
     return primary
   }
   return fallback
+}
+
+async function readWired(): Promise<WiredState> {
+  const listing = await output(['nmcli', '-t', '-f', 'DEVICE,TYPE,STATE,CONNECTION', 'device'])
+  return wiredStateOf(listing)
+}
+
+// The first Ethernet device, preferring one that is connected.
+export function wiredStateOf(listing: string): WiredState {
+  const ethernet = nonEmptyLines(listing)
+    .map(splitTerse)
+    .filter((fields) => fields[1] === 'ethernet')
+  let chosen = ethernet.find((fields) => fields[2] === 'connected')
+  if (chosen === undefined) {
+    chosen = ethernet[0]
+  }
+  if (chosen === undefined) {
+    return { available: false, connected: false, device: '', connection: '' }
+  }
+  return {
+    available: true,
+    connected: chosen[2] === 'connected',
+    device: chosen[0],
+    connection: chosen[3],
+  }
 }
 
 async function wifiDevice(): Promise<string> {
