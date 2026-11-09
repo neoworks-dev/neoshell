@@ -1,7 +1,6 @@
 <script lang="ts">
   import { subscribeTo } from '../../lib/bus'
-  import { rectOf } from './freeform'
-  import type { Point, Rect } from './freeform'
+  import type { Point } from './grid'
   import type { DesktopEntry, DesktopStore, MenuItem } from './desktopStore.svelte'
   import type { BusService } from '../../lib/bus'
   import {
@@ -12,17 +11,17 @@
     SECONDARY_BUTTON,
   } from './gestures'
 
-  // The desktop folder's contents, placed free-form. A drag behaves the way a
-  // Finder desktop does: the selection is picked up as translucent copies that
-  // follow the pointer exactly, the originals stay where they are, and only the
-  // drop is snapped — to the screen edges and to whatever is already there —
-  // with the icons gliding from where they were let go to where they settle.
+  // The desktop folder's contents, on the grid they share with the widgets.
+  // A drag behaves the way a Finder desktop does: the selection is picked up as
+  // translucent copies that follow the pointer exactly and the originals stay
+  // where they are. The cells under the copies are pinned as the drag goes, so
+  // the desktop shows where they will land and moves what is there aside; the
+  // drop glides them in from where they were let go.
   //
   // Each icon is an overlay child of the desktop pushed into place by margins.
   // The host does the moving (`carry`): the selected icons themselves follow
   // the pointer, drawn as the translucent copies, while plain copies stand in
-  // at the points they left. Dropped, they glide from where they were let go
-  // to the points this view gives them — or jump back, when it refuses.
+  // at the points they left.
   //
   // Icon art comes from the icon theme by freedesktop name; an image file shows
   // itself, through the picture handle desktop.entries carries for it. Every
@@ -54,9 +53,6 @@
   const carryGroup = `desktop-icons-${instanceId}`
 
   let drag = $state<Drag | null>(null)
-  // A refused drop jumps back instead of gliding: nothing moved, as far as
-  // the desktop is concerned.
-  let snapBack = $state(false)
   let renameDraft = $state('')
   // Whether the most recent drag travelled. The release that ends it arrives
   // as a press too, and a press after a move must not reselect.
@@ -70,7 +66,6 @@
 
   const leftBehind = $derived(leftBehindEntries(drag))
   const carry = $derived(carryOf(store.desktopLocked))
-  const glideMs = $derived(glideOf(snapBack))
 
   function leftBehindEntries(current: Drag | null): DesktopEntry[] {
     if (current === null || !current.moved) {
@@ -84,13 +79,6 @@
       return ''
     }
     return carryGroup
-  }
-
-  function glideOf(snapping: boolean): number {
-    if (snapping) {
-      return 0
-    }
-    return GLIDE_MS
   }
 
   // The selection is what a drag carries.
@@ -161,7 +149,6 @@
     if (store.desktopLocked) {
       return
     }
-    snapBack = false
     drag = { moved: false, paths: [...store.selection], leadPath: entry.path }
   }
 
@@ -174,10 +161,14 @@
   }
 
   function moveDrag(event: { detail: unknown }): void {
-    if (drag === null || drag.moved || !dragOf(event).carried) {
+    const moved = dragOf(event)
+    if (drag === null || !moved.carried) {
       return
     }
-    drag = { ...drag, moved: true }
+    if (!drag.moved) {
+      drag = { ...drag, moved: true }
+    }
+    store.previewDrop(store.iconPinsFor(drag.paths, drag.leadPath, travelOf(moved)))
   }
 
   function endDrag(event: { detail: unknown }): void {
@@ -188,51 +179,15 @@
     drag = null
     const loose = dragOf(event)
     lastDragMoved = finished.moved || loose.carried
-    if (lastDragMoved) {
-      dropDrag(finished, { x: loose.dx, y: loose.dy })
-    }
-  }
-
-  // The lead icon's landing is snapped, and the delta that snap settled on is
-  // what the whole selection moves by, so the selection keeps its shape. A
-  // landing on something taken is refused and the icons go back.
-  function dropDrag(finished: Drag, loose: Point): void {
-    const delta = settledDelta(finished, loose)
-    const targets = new Map<string, Point>()
-    for (const path of finished.paths) {
-      addTarget(targets, path, delta)
-    }
-    if (!store.moveIcons(finished.paths, targets)) {
-      snapBack = true
-    }
-  }
-
-  function settledDelta(finished: Drag, loose: Point): Point {
-    const lead = store.iconPoint(finished.leadPath)
-    if (lead === undefined) {
-      return loose
-    }
-    const target = { x: lead.x + loose.x, y: lead.y + loose.y }
-    const landing = store.landingFor(target, store.layout.iconSize, draggedRects(finished))
-    return { x: landing.x - lead.x, y: landing.y - lead.y }
-  }
-
-  function draggedRects(finished: Drag): Rect[] {
-    return finished.paths.flatMap((path) => {
-      const point = store.iconPoint(path)
-      if (point === undefined) {
-        return []
-      }
-      return [rectOf(point, store.layout.iconSize)]
-    })
-  }
-
-  function addTarget(targets: Map<string, Point>, path: string, delta: Point): void {
-    const point = store.iconPoint(path)
-    if (point === undefined) {
+    if (!lastDragMoved) {
+      store.cancelDrop()
       return
     }
-    targets.set(path, { x: point.x + delta.x, y: point.y + delta.y })
+    store.commitDrop(store.iconPinsFor(finished.paths, finished.leadPath, travelOf(loose)))
+  }
+
+  function travelOf(moved: { dx: number; dy: number }): Point {
+    return { x: moved.dx, y: moved.dy }
   }
 
   // The press coordinates are relative to the icon, and the menu is placed
@@ -384,7 +339,7 @@
     {carry}
     carry-threshold={DRAG_THRESHOLD_PX}
     carried-by={carriedByOf(entry.path)}
-    glide={glideMs}
+    glide={GLIDE_MS}
     onpress={(event) => handlePress(entry, event)}
     ondragstart={(event) => startDrag(entry, event)}
     ondragmove={moveDrag}

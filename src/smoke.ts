@@ -12,6 +12,7 @@ import { paintableOf, thumbnailHandle } from './host/paintables.js'
 import { ViewRegistry } from './host/plugins/views.js'
 import Smoke from './Smoke.svelte'
 import { SMOKE_EXTERNAL_TEXT, startSmokeExternal } from './smokeExternal.js'
+import { gridFailure } from './smokeGrid.js'
 import { clientEventDetail, filesOfDrop } from './host/drops.js'
 import { registerFile } from './host/fileHandles.js'
 import { isLaunchable } from './extensions/dock/backend.js'
@@ -315,6 +316,11 @@ GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
   }
   if (isLaunchable('rm -rf ~', [], ['firefox %u']) || !isLaunchable('firefox %u', [], ['firefox %u'])) {
     print('neoshell: the dock backend would launch a command no application carries')
+    System.exit(1)
+  }
+  const desktopGridFailure = gridFailure()
+  if (desktopGridFailure !== null) {
+    print(`neoshell: ${desktopGridFailure}`)
     System.exit(1)
   }
   const externalFailure = smokeExternal.failure()

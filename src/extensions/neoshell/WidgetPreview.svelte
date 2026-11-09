@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { BusService } from '../../lib/bus'
   import type { ViewRegistry } from '../../host/plugins/views'
-  import { MAX_UNIT_PX, sizePx, spanOf } from './freeform'
+  import { MAX_UNIT_PX, sizePx, spanOf } from './grid'
 
   // A gallery tile showing the real widget, mounted at its design size and
   // scaled down to fit. Previews are live because a widget's whole point is the

@@ -14,7 +14,7 @@
   import AirQuality from './extensions/airquality/AirQuality.svelte'
   import LockSurface from './extensions/lock/LockSurface.svelte'
   import SettingsWindow from './extensions/settings/SettingsWindow.svelte'
-  import { MAX_UNIT_PX, sizePx, spanOf } from './extensions/neoshell/freeform'
+  import { MAX_UNIT_PX, sizePx, spanOf } from './extensions/neoshell/grid'
   import type { BluetoothState, NetworkState } from './extensions/quicksettings/types'
   import { remoteView } from './host/clients/remoteView'
 

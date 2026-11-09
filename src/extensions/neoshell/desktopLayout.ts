@@ -1,23 +1,16 @@
-import {
-  GAP_PX,
-  ICON_SPAN,
-  MARGIN_PX,
-  TOP_PX,
-  clampPoint,
-  firstFreeSpot,
-  overlapsAny,
-  rectOf,
-  sizePx,
-  spanOf,
-  unitOf,
-} from './freeform'
-import type { Point, Rect, Size, Viewport } from './freeform'
+import { ICON_SPAN, arrange, gridOf, nearestCell, pointOfCell, rectOf, sameCell, sizePx, spanOf } from './grid'
+import type { Cell, Grid, GridItem, Point, Rect, Size, Viewport } from './grid'
 import { recordOf } from '../../lib/record.js'
 
-// Where every icon and widget sits on the desktop. Placement is free-form —
-// pixels, not cells — so this resolves overlap rather than cell occupancy:
-// widgets claim their rects first, then icons take their stored spot when
-// nothing covers it and flow into the first free one otherwise.
+// Where every icon and widget sits on the desktop: one grid for both
+// (grid.ts). Each keeps the cell it was put on; one pushed off by a drop takes
+// the nearest free cell; icons never placed flow down from the top-left.
+//
+// While a drag is on, the dragged items are pinned to the cells under them.
+// The layout then shows everything else where the drop would put it, so the
+// neighbours move aside before the drop, while the dragged items themselves
+// keep their old cells: the host is carrying them, and a placement changed
+// under a carry would jump.
 //
 // Which widgets exist is config's answer, not the view tree's. The tree
 // supplies a seed for a desktop that has never been arranged and nothing after
@@ -48,7 +41,7 @@ export interface WidgetInstance {
   id: string
   type: string
   size: string
-  point?: Point
+  cell?: Cell
   locked: boolean
 }
 
@@ -56,6 +49,7 @@ export interface WidgetPlacement {
   id: string
   type: string
   size: string
+  cell: Cell
   point: Point
   box: Size
   locked: boolean
@@ -63,182 +57,165 @@ export interface WidgetPlacement {
 
 export interface LayoutInput {
   entries: DesktopEntry[]
-  storedIcons: Record<string, Point>
+  storedIcons: Record<string, Cell>
   instances: WidgetInstance[]
   viewport: Viewport
+  // Cells the dragged items would drop on, by item key.
+  pins: ReadonlyMap<string, Cell>
 }
 
 export interface Layout {
+  grid: Grid
   icons: Map<string, Point>
   widgets: Map<string, WidgetPlacement>
   iconSize: Size
+  // Every item's cell as committed, and as the pinned drop would leave it.
+  cells: Map<string, Cell>
+  droppedCells: Map<string, Cell>
+  // Where the pinned items would land: the placeholders a drag shows.
+  landings: Rect[]
+}
+
+export function iconKey(path: string): string {
+  return `icon:${path}`
+}
+
+export function widgetKey(id: string): string {
+  return `widget:${id}`
 }
 
 export function resolveLayout(input: LayoutInput): Layout {
-  const unit = unitOf(input.viewport.width)
-  const iconSize = sizePx(unit, ICON_SPAN)
-  const taken: Rect[] = []
-  const widgets = resolveWidgets(input, unit, taken)
-  return { widgets, iconSize, icons: resolveIcons(input, iconSize, taken) }
+  const grid = gridOf(input.viewport)
+  const iconSize = sizePx(grid.unit, ICON_SPAN)
+  const items = gridItemsOf(input)
+  const cells = arrange(grid, items, new Map())
+  const droppedCells = droppedArrangement(grid, items, input.pins, cells)
+  const shown = shownCells(cells, droppedCells, input.pins)
+  return {
+    grid,
+    iconSize,
+    cells,
+    droppedCells,
+    icons: iconPoints(input.entries, grid, shown),
+    widgets: widgetPlacements(input.instances, grid, shown),
+    landings: landingsOf(items, grid, input.pins, droppedCells),
+  }
 }
 
-// A widget with no stored point has just been added; it takes the first free
-// spot from the right, away from the icons flowing up the left.
-function resolveWidgets(
-  input: LayoutInput,
-  unit: number,
-  taken: Rect[],
+function gridItemsOf(input: LayoutInput): GridItem[] {
+  const widgets: GridItem[] = input.instances.map((instance) => ({
+    key: widgetKey(instance.id),
+    span: spanOf(instance.size),
+    cell: instance.cell,
+    flow: 'widgets',
+  }))
+  const icons: GridItem[] = input.entries.map((entry) => ({
+    key: iconKey(entry.path),
+    span: ICON_SPAN,
+    cell: input.storedIcons[entry.path],
+    flow: 'icons',
+  }))
+  return [...widgets, ...icons]
+}
+
+function droppedArrangement(
+  grid: Grid,
+  items: GridItem[],
+  pins: ReadonlyMap<string, Cell>,
+  cells: Map<string, Cell>,
+): Map<string, Cell> {
+  if (pins.size === 0) {
+    return cells
+  }
+  // Starting from the committed cells keeps the arrangement stable: what has
+  // no stored cell yet would otherwise flow anew on every drag step.
+  const committed = items.map((item) => ({ ...item, cell: cells.get(item.key) }))
+  return arrange(grid, committed, pins)
+}
+
+function shownCells(
+  cells: Map<string, Cell>,
+  droppedCells: Map<string, Cell>,
+  pins: ReadonlyMap<string, Cell>,
+): Map<string, Cell> {
+  const shown = new Map(droppedCells)
+  for (const key of pins.keys()) {
+    const committed = cells.get(key)
+    if (committed !== undefined) {
+      shown.set(key, committed)
+    }
+  }
+  return shown
+}
+
+function iconPoints(entries: DesktopEntry[], grid: Grid, shown: Map<string, Cell>): Map<string, Point> {
+  const points = new Map<string, Point>()
+  for (const entry of entries) {
+    const cell = shown.get(iconKey(entry.path))
+    if (cell !== undefined) {
+      points.set(entry.path, pointOfCell(grid, cell))
+    }
+  }
+  return points
+}
+
+function widgetPlacements(
+  instances: WidgetInstance[],
+  grid: Grid,
+  shown: Map<string, Cell>,
 ): Map<string, WidgetPlacement> {
   const placements = new Map<string, WidgetPlacement>()
-  for (const instance of input.instances) {
-    const placement = placeWidget(instance, unit, input.viewport, taken)
-    taken.push(rectOf(placement.point, placement.box))
-    placements.set(instance.id, placement)
+  for (const instance of instances) {
+    const cell = shown.get(widgetKey(instance.id))
+    if (cell === undefined) {
+      continue
+    }
+    placements.set(instance.id, {
+      id: instance.id,
+      type: instance.type,
+      size: instance.size,
+      locked: instance.locked,
+      cell,
+      point: pointOfCell(grid, cell),
+      box: sizePx(grid.unit, spanOf(instance.size)),
+    })
   }
   return placements
 }
 
-function placeWidget(
-  instance: WidgetInstance,
-  unit: number,
-  viewport: Viewport,
-  taken: Rect[],
-): WidgetPlacement {
-  const size = sizePx(unit, spanOf(instance.size))
-  return {
-    id: instance.id,
-    type: instance.type,
-    size: instance.size,
-    box: size,
-    locked: instance.locked,
-    point: settledPoint(instance.point, size, viewport, taken),
-  }
-}
-
-// A stored point can predate a change to the output or to the widget's own
-// size, so it is clamped back onto the desktop and moved off anything it now
-// covers — two widgets sharing pixels is never the intended reading.
-function settledPoint(
-  stored: Point | undefined,
-  size: Size,
-  viewport: Viewport,
-  taken: Rect[],
-): Point {
-  if (stored === undefined) {
-    return firstFreeSpot(size, taken, viewport, true)
-  }
-  const clamped = clampPoint(stored, size, viewport)
-  if (!overlapsAny(rectOf(clamped, size), taken)) {
-    return clamped
-  }
-  return firstFreeSpot(size, taken, viewport, true)
-}
-
-// Icons resolve in the folder's own order, so the spot an unplaced entry flows
-// into does not depend on which entry changed.
-function resolveIcons(input: LayoutInput, iconSize: Size, taken: Rect[]): Map<string, Point> {
-  const points = new Map<string, Point>()
-  const unplaced: string[] = []
-  for (const entry of input.entries) {
-    claimStoredPoint(input, entry.path, iconSize, taken, points, unplaced)
-  }
-  for (const path of unplaced) {
-    const point = firstFreeSpot(iconSize, taken, input.viewport, false)
-    taken.push(rectOf(point, iconSize))
-    points.set(path, point)
-  }
-  return points
-}
-
-function claimStoredPoint(
-  input: LayoutInput,
-  path: string,
-  iconSize: Size,
-  taken: Rect[],
-  points: Map<string, Point>,
-  unplaced: string[],
-): void {
-  const stored = input.storedIcons[path]
-  if (stored === undefined) {
-    unplaced.push(path)
-    return
-  }
-  const clamped = clampPoint(stored, iconSize, input.viewport)
-  if (overlapsAny(rectOf(clamped, iconSize), taken)) {
-    unplaced.push(path)
-    return
-  }
-  taken.push(rectOf(clamped, iconSize))
-  points.set(path, clamped)
-}
-
-// occupiedRects is the collision map a drop is tested against, minus whatever
-// is being dragged — an item never blocks its own move.
-export function occupiedRects(
-  layout: Layout,
-  exceptPaths: ReadonlySet<string>,
-  exceptWidgets: ReadonlySet<string>,
+function landingsOf(
+  items: GridItem[],
+  grid: Grid,
+  pins: ReadonlyMap<string, Cell>,
+  droppedCells: Map<string, Cell>,
 ): Rect[] {
-  const rects: Rect[] = []
-  for (const [id, placement] of layout.widgets) {
-    if (!exceptWidgets.has(id)) {
-      rects.push(rectOf(placement.point, placement.box))
+  return items.flatMap((item) => {
+    const cell = droppedCells.get(item.key)
+    if (!pins.has(item.key) || cell === undefined) {
+      return []
     }
-  }
-  for (const [path, point] of layout.icons) {
-    if (!exceptPaths.has(path)) {
-      rects.push(rectOf(point, layout.iconSize))
-    }
-  }
-  return rects
+    return [rectOf(pointOfCell(grid, cell), sizePx(grid.unit, item.span))]
+  })
 }
 
-export function distinct(points: Iterable<Point>, size: Size): boolean {
-  const placed: Rect[] = []
-  for (const point of points) {
-    const rect = rectOf(point, size)
-    if (overlapsAny(rect, placed)) {
-      return false
+/** The icons' cells as config stores them; rebuilding the map also prunes files that are gone. */
+export function iconCellsOf(entries: DesktopEntry[], cells: Map<string, Cell>): Record<string, Cell> {
+  const stored: Record<string, Cell> = {}
+  for (const entry of entries) {
+    const cell = cells.get(iconKey(entry.path))
+    if (cell !== undefined) {
+      stored[entry.path] = cell
     }
-    placed.push(rect)
   }
-  return true
+  return stored
 }
 
-// resolvedIconPoints is the layout as config stores it. Rebuilding the map from
-// what the desktop currently shows is also what prunes entries whose file is
-// gone.
-export function resolvedIconPoints(layout: Layout): Record<string, Point> {
-  const points: Record<string, Point> = {}
-  for (const [path, point] of layout.icons) {
-    points[path] = point
-  }
-  return points
-}
-
-export function samePoints(
-  left: Record<string, Point>,
-  right: Record<string, Point>,
-): boolean {
+export function sameCells(left: Record<string, Cell>, right: Record<string, Cell>): boolean {
   const keys = Object.keys(left)
   if (keys.length !== Object.keys(right).length) {
     return false
   }
-  return keys.every((key) => samePoint(left[key], right[key]))
-}
-
-function samePoint(left: Point, right: Point | undefined): boolean {
-  if (right === undefined) {
-    return false
-  }
-  return Math.round(left.x) === Math.round(right.x) && Math.round(left.y) === Math.round(right.y)
-}
-
-export function storesPoint(stored: Record<string, unknown> | undefined, point: Point): boolean {
-  if (stored === undefined) {
-    return false
-  }
-  return samePoint(point, pointOf(stored))
+  return keys.every((key) => sameCell(left[key], right[key]))
 }
 
 // sorted keeps folders ahead of files either way — a desktop that mixes them
@@ -275,56 +252,39 @@ function typeKeyOf(entry: DesktopEntry): string {
   return entry.name.slice(dot + 1).toLowerCase()
 }
 
-export function storedPointsOf(value: unknown, unit: number): Record<string, Point> {
-  const points: Record<string, Point> = {}
+export function storedIconCellsOf(value: unknown, grid: Grid): Record<string, Cell> {
+  const cells: Record<string, Cell> = {}
   for (const [key, raw] of Object.entries(recordOf(value))) {
-    addPoint(points, key, raw, unit)
+    const cell = cellOf(recordOf(raw), grid, ICON_SPAN)
+    if (cell !== undefined) {
+      cells[key] = cell
+    }
   }
-  return points
+  return cells
 }
 
-function addPoint(
-  points: Record<string, Point>,
-  key: string,
-  raw: unknown,
-  unit: number,
-): void {
-  const point = pointOf(recordOf(raw), unit)
-  if (point === undefined) {
-    return
-  }
-  points[key] = point
-}
-
-// A desktop arranged before placement went free-form stored cells. Reading one
-// as its pixel origin is what carries an existing arrangement across, rather
-// than dumping every icon back into a fresh flow.
-export function pointOf(stored: Record<string, unknown>, unit = 0): Point | undefined {
+// A desktop arranged before the grid stored pixel points; the nearest cell is
+// where such an item goes.
+export function cellOf(stored: Record<string, unknown>, grid: Grid, span = ICON_SPAN): Cell | undefined {
   const { x, y, column, row } = stored
+  if (typeof column === 'number' && typeof row === 'number') {
+    return { column, row }
+  }
   if (typeof x === 'number' && typeof y === 'number') {
-    return { x, y }
+    return nearestCell(grid, { x, y }, span)
   }
-  if (typeof column !== 'number' || typeof row !== 'number' || unit === 0) {
-    return undefined
-  }
-  return { x: MARGIN_PX + column * (unit + GAP_PX), y: TOP_PX + row * (unit + GAP_PX) }
+  return undefined
 }
 
 // Config is the record of which widgets exist. A desktop that has never been
 // arranged has no entry at all, and takes the view tree's seed instead — an
 // empty object is an emptied desktop and stays empty.
-export function instancesOf(
-  stored: unknown,
-  seed: WidgetSeed[],
-  unit: number,
-): WidgetInstance[] {
+export function instancesOf(stored: unknown, seed: WidgetSeed[], grid: Grid): WidgetInstance[] {
   if (typeof stored !== 'object' || stored === null) {
     return seed.map((entry) => seededInstance(entry))
   }
   const seededTypes = new Map(seed.map((entry) => [entry.id, entry.type]))
-  return Object.entries(recordOf(stored)).flatMap(([id, raw]) =>
-    instanceOf(id, raw, unit, seededTypes),
-  )
+  return Object.entries(recordOf(stored)).flatMap(([id, raw]) => instanceOf(id, raw, grid, seededTypes))
 }
 
 function seededInstance(seed: WidgetSeed): WidgetInstance {
@@ -334,7 +294,7 @@ function seededInstance(seed: WidgetSeed): WidgetInstance {
 function instanceOf(
   id: string,
   raw: unknown,
-  unit: number,
+  grid: Grid,
   seededTypes: ReadonlyMap<string, string>,
 ): WidgetInstance[] {
   const stored = recordOf(raw)
@@ -342,25 +302,14 @@ function instanceOf(
   if (type === '') {
     return []
   }
-  return [
-    {
-      id,
-      type,
-      size: stringOr(stored.size, 'small'),
-      point: pointOf(stored, unit),
-      locked: stored.locked === true,
-    },
-  ]
+  const size = stringOr(stored.size, 'small')
+  return [{ id, type, size, cell: cellOf(stored, grid, spanOf(size)), locked: stored.locked === true }]
 }
 
 // A desktop arranged before config carried the type has entries holding only a
 // placement. The seed still knows what each of its own ids is, so those entries
 // keep working; one naming an id the seed never had is not a widget.
-function typeOf(
-  stored: Record<string, unknown>,
-  id: string,
-  seededTypes: ReadonlyMap<string, string>,
-): string {
+function typeOf(stored: Record<string, unknown>, id: string, seededTypes: ReadonlyMap<string, string>): string {
   if (typeof stored.type === 'string' && stored.type !== '') {
     return stored.type
   }
