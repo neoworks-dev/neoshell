@@ -105,9 +105,12 @@
   const settings = new Settings(untrack(() => bus));
   // Incoming shares the notch already opened for.
   const askedTransfers = new Set<string>();
-  // Quick Share is waiting on a choice — a device to send to, or an incoming
-  // share to answer — so the notch does not close by itself.
-  let heldOpen = $state(false);
+  // The notch does not close by itself while Quick Share waits on a choice (a
+  // device to send to, an incoming share to answer) or a Tray tile is being
+  // dragged out.
+  let quickShareWaiting = $state(false);
+  let draggingOut = $state(false);
+  const heldOpen = $derived(quickShareWaiting || draggingOut);
 
   let entries = $state<IslandEntry[]>([]);
   let hovered = $state(false);
@@ -337,17 +340,29 @@
     opened = false;
   }
 
-  function holdOpen(hold: boolean): void {
-    if (hold === heldOpen) {
+  function holdForQuickShare(hold: boolean): void {
+    if (hold === quickShareWaiting) {
       return;
     }
-    heldOpen = hold;
-    cancelPointerTimer();
+    quickShareWaiting = hold;
     if (hold) {
+      cancelPointerTimer();
       tab = "tray";
       opened = true;
       return;
     }
+    closeSoonUnlessHovered();
+  }
+
+  function holdForDragOut(dragging: boolean): void {
+    draggingOut = dragging;
+    if (!dragging) {
+      closeSoonUnlessHovered();
+    }
+  }
+
+  function closeSoonUnlessHovered(): void {
+    cancelPointerTimer();
     if (!hovered) {
       pointerTimer = setTimeout(closeAutomatically, LEAVE_CLOSE_DELAY_MS);
     }
@@ -751,7 +766,7 @@
 {#snippet trayShelf()}
   <gtkbox orientation="horizontal" spacing={8}>
     <gtkbox hexpand={false} css="min-width: {QUICKSHARE_WIDTH}px;">
-      <QuickSharePanel {bus} height={NOOK_ROW_HEIGHT} ondragenter={dragEntered} onhold={holdOpen} />
+      <QuickSharePanel {bus} height={NOOK_ROW_HEIGHT} ondragenter={dragEntered} onhold={holdForQuickShare} />
     </gtkbox>
     <gtkbox hexpand>
       <TrayShelf
@@ -760,6 +775,7 @@
         {dragOver}
         onopen={openFile}
         onremove={removeFile}
+        ondragging={holdForDragOut}
       />
     </gtkbox>
   </gtkbox>

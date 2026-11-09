@@ -1,3 +1,5 @@
+import Gdk from 'gi://Gdk?version=4.0'
+import GdkPixbuf from 'gi://GdkPixbuf'
 import Gio from 'gi://Gio'
 import GLib from 'gi://GLib'
 
@@ -73,11 +75,30 @@ function iconNameOf(contentType: string): string {
   return names[0]
 }
 
-// GTK draws a CSS background image straight from disk, so a local image is
-// its own thumbnail. Formats GdkPixbuf cannot read fall back to the icon.
+// A local image is its own thumbnail. Formats GdkPixbuf cannot read fall
+// back to the icon.
 function thumbnailOf(path: string, contentType: string): string {
   if (!contentType.startsWith('image/') || contentType === 'image/svg+xml') {
     return ''
   }
   return path
+}
+
+// The image scaled so its shorter side is `pixels`, which a covering picture
+// then crops: a photo is decoded at thumbnail size, not at its full size.
+export function thumbnailTexture(path: string, pixels: number): Gdk.Texture | null {
+  try {
+    const [, width, height] = GdkPixbuf.Pixbuf.get_file_info(path)
+    const scale = Math.min(1, pixels / Math.max(1, Math.min(width, height)))
+    const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+      path,
+      Math.round(width * scale),
+      Math.round(height * scale),
+      true,
+    )
+    return Gdk.Texture.new_for_pixbuf(pixbuf)
+  } catch (error) {
+    console.error(`tray: no thumbnail for ${path}:`, error)
+    return null
+  }
 }

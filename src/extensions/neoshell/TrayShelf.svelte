@@ -1,12 +1,16 @@
 <script lang="ts">
-  import { tileOf } from './trayFiles'
+  import { thumbnailTexture, tileOf } from './trayFiles'
   import type { TrayTile } from './trayFiles'
 
   // The Tray's shelf: one tile per kept file. A tile drags out as its file,
   // opens it on click, and has its own remove button. The drop itself is the
-  // notch's, which is where the drag arrives.
+  // notch's, which is where the drag arrives. While a tile is dragged out the
+  // notch must stay open: closing it would unmount the tile and GTK would
+  // cancel the drag.
 
   const THUMBNAIL_SIZE = 52
+  // Decoded at twice the size for scaled displays.
+  const THUMBNAIL_PIXELS = THUMBNAIL_SIZE * 2
   const PRIMARY_BUTTON = 1
 
   let {
@@ -15,6 +19,7 @@
     dragOver,
     onopen,
     onremove,
+    ondragging,
   }: {
     paths: string[]
     height: number
@@ -22,6 +27,7 @@
     dragOver: boolean
     onopen: (path: string) => void
     onremove: (path: string) => void
+    ondragging: (dragging: boolean) => void
   } = $props()
 
   const tiles = $derived(paths.map(tileOf))
@@ -47,13 +53,7 @@
     return [tile.path]
   }
 
-  function thumbnailCss(tile: TrayTile): string {
-    const size = `min-width: ${THUMBNAIL_SIZE}px; min-height: ${THUMBNAIL_SIZE}px;`
-    if (tile.thumbnail === '') {
-      return size
-    }
-    return `${size} background-image: url("${tile.thumbnail}"); background-size: cover; background-position: center;`
-  }
+  const thumbnailSize = `min-width: ${THUMBNAIL_SIZE}px; min-height: ${THUMBNAIL_SIZE}px;`
 
   function pressed(tile: TrayTile, detail: { button: number }): void {
     if (detail.button !== PRIMARY_BUTTON || tile.missing) {
@@ -80,11 +80,21 @@
               spacing={6}
               tooltip={tile.path}
               drag-files={draggedPaths(tile)}
+              ondragoutbegin={() => ondragging(true)}
+              ondragoutend={() => ondragging(false)}
               onpress={(event) => pressed(tile, event.detail)}
             >
-              <gtkbox class="tray-thumbnail" css={thumbnailCss(tile)} halign="center">
+              <gtkbox class="tray-thumbnail" css={thumbnailSize} halign="center" clip>
                 {#if tile.thumbnail === ''}
                   <gtkicon icon={tile.icon} size={36} hexpand vexpand></gtkicon>
+                {:else}
+                  <gtkpicture
+                    paintable={thumbnailTexture(tile.thumbnail, THUMBNAIL_PIXELS)}
+                    fit="cover"
+                    shrink
+                    width={THUMBNAIL_SIZE}
+                    height={THUMBNAIL_SIZE}
+                  ></gtkpicture>
                 {/if}
               </gtkbox>
               <gtklabel class="tray-name" ellipsize="middle" max-width-chars={10}>

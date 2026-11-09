@@ -147,7 +147,7 @@
         <Notch {bus} {registry} args={{}} id="smoke.notch" />
         <gtkbox class="island" width={560}>
           <QuickSharePanel {bus} height={112} ondragenter={() => {}} onhold={() => {}} />
-          <TrayShelf paths={TRAY_PATHS} height={112} dragOver onopen={() => {}} onremove={() => {}} />
+          <TrayShelf paths={TRAY_PATHS} height={112} dragOver onopen={() => {}} onremove={() => {}} ondragging={() => {}} />
         </gtkbox>
       </gtkbox>
       <gtkbox class="ui-light" orientation="vertical" spacing={16} width={720} valign="start">
