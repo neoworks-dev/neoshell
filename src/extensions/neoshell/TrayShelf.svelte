@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { thumbnailTexture, tileOf } from './trayFiles'
-  import type { TrayTile } from './trayFiles'
+  import type { ShelfTile } from './shelfTiles'
 
   // The Tray's shelf: one tile per kept file. A tile drags out as its file,
   // opens it on click, and has its own remove button. The drop itself is the
@@ -9,28 +8,24 @@
   // cancel the drag.
 
   const THUMBNAIL_SIZE = 52
-  // Decoded at twice the size for scaled displays.
-  const THUMBNAIL_PIXELS = THUMBNAIL_SIZE * 2
   const PRIMARY_BUTTON = 1
 
   let {
-    paths,
+    tiles,
     height,
     dragOver,
     onopen,
     onremove,
     ondragging,
   }: {
-    paths: string[]
+    tiles: ShelfTile[]
     height: number
     // A drag carrying files is over the notch.
     dragOver: boolean
-    onopen: (path: string) => void
-    onremove: (path: string) => void
+    onopen: (file: string) => void
+    onremove: (file: string) => void
     ondragging: (dragging: boolean) => void
   } = $props()
-
-  const tiles = $derived(paths.map(tileOf))
 
   function shelfClass(isTarget: boolean): string {
     if (isTarget) {
@@ -39,27 +34,27 @@
     return 'tray-shelf'
   }
 
-  function tileClass(tile: TrayTile): string {
+  function tileClass(tile: ShelfTile): string {
     if (tile.missing) {
       return 'tray-tile tray-tile-missing'
     }
     return 'tray-tile'
   }
 
-  function draggedPaths(tile: TrayTile): string[] {
+  function draggedFiles(tile: ShelfTile): string[] {
     if (tile.missing) {
       return []
     }
-    return [tile.path]
+    return [tile.file]
   }
 
   const thumbnailSize = `min-width: ${THUMBNAIL_SIZE}px; min-height: ${THUMBNAIL_SIZE}px;`
 
-  function pressed(tile: TrayTile, detail: { button: number }): void {
+  function pressed(tile: ShelfTile, detail: { button: number }): void {
     if (detail.button !== PRIMARY_BUTTON || tile.missing) {
       return
     }
-    onopen(tile.path)
+    onopen(tile.file)
   }
 </script>
 
@@ -72,14 +67,14 @@
   {:else}
     <gtkscrolledwindow vscroll="never" vexpand>
       <gtkbox orientation="horizontal" spacing={6} valign="center">
-        {#each tiles as tile (tile.path)}
+        {#each tiles as tile (tile.file)}
           <gtkoverlay>
             <gtkpressable
               class={tileClass(tile)}
               orientation="vertical"
               spacing={6}
               tooltip={tile.path}
-              drag-files={draggedPaths(tile)}
+              drag-files={draggedFiles(tile)}
               ondragoutbegin={() => ondragging(true)}
               ondragoutend={() => ondragging(false)}
               onpress={(event) => pressed(tile, event.detail)}
@@ -89,7 +84,7 @@
                   <gtkicon icon={tile.icon} size={36} hexpand vexpand></gtkicon>
                 {:else}
                   <gtkpicture
-                    paintable={thumbnailTexture(tile.thumbnail, THUMBNAIL_PIXELS)}
+                    handle={tile.thumbnail}
                     fit="cover"
                     shrink
                     width={THUMBNAIL_SIZE}
@@ -108,7 +103,7 @@
               halign="end"
               valign="start"
               tooltip="Remove from Tray"
-              onclicked={() => onremove(tile.path)}
+              onclicked={() => onremove(tile.file)}
             >
               <gtkicon icon="window-close-symbolic" size={10}></gtkicon>
             </gtkbutton>

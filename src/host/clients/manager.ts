@@ -9,6 +9,8 @@ import { buildLocaleProfile } from '../../lib/localeProfile.js'
 import type { LocaleProfile } from '../../lib/localeProfile.js'
 import type { ViewRegistry } from '../plugins/views.js'
 import { paintableOf } from '../paintables.js'
+import { filesOf } from '../fileHandles.js'
+import { clientEventDetail } from '../drops.js'
 import { BusBridge } from './bridge.js'
 import { shellEmbedder } from './embedder.svelte.js'
 import type { ClientPermissions } from './permissions.js'
@@ -118,7 +120,7 @@ export class ClientManager {
     client = new RemoteClient({
       name: `client ${name}`,
       argv: clientArgv(runnerPath(), bundle, limitsOf(declaration)),
-      policy: defaultPolicy(`client:${name}`, { paintableOf }),
+      policy: defaultPolicy(`client:${name}`, { paintableOf, filesOf, eventDetail: clientEventDetail }),
       greeting: () => ({ locale: localeProfile() }),
       embedder: shellEmbedder(name, this.bus, this.registry, permissions),
       onApp: (data) => bridge.handle(data),

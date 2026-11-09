@@ -2,7 +2,7 @@
   import { untrack } from 'svelte'
   import { subscribeTo } from '../../lib/bus'
   import type { ViewProps } from "../../host/plugins/views";
-  import { arrayOf, recordOf, stringListOf } from "../../lib/record";
+  import { arrayOf, recordOf } from "../../lib/record";
   import { Settings } from "../../lib/settings.svelte";
   import { resolve } from "../../tree";
   import type { NotchWidgetDeclaration } from "../index";
@@ -15,8 +15,8 @@
     widgetWidth,
   } from "./nook";
   import type { NookEntry } from "./nook";
-  import { deleteCachedCopy, downloadDropped } from "./trayDownloads";
-  import { STAGED_KEY, thumbnailTexture, withPaths, withoutPath } from "./trayFiles";
+  import { shelfTilesOf } from "./shelfTiles";
+  import type { ShelfTile } from "./shelfTiles";
   import QuickSharePanel from "./QuickSharePanel.svelte";
   import TrayShelf from "./TrayShelf.svelte";
 
@@ -32,7 +32,8 @@
   //
   // It opens on click or hover (notch.openOn) and closes when the pointer
   // leaves it. A right click opens its settings. Dragging files over it opens
-  // the Tray, and dropping them keeps them there.
+  // the Tray, and dropping them keeps them there: the tray backend holds the
+  // files, and this view only its tiles' handles and the drop's token.
 
   interface IslandEntry {
     id: string;
@@ -41,7 +42,6 @@
     detail: string;
     progress: number;
     tone: string;
-    art: string;
   }
 
   interface Size {
@@ -49,9 +49,8 @@
     height: number;
   }
 
-  // The island's small sleeve; decoded at twice the size for scaled displays.
+  // The island's small sleeve.
   const SMALL_ART_SIZE = 20;
-  const SMALL_ART_PIXELS = SMALL_ART_SIZE * 2;
   const PRIORITY_IDLE = 0;
   const PRIORITY_ACTIVITY = 10;
   const PRIORITY_TRANSIENT = 20;
@@ -91,6 +90,7 @@
   // controller knowing; unless it reports a hover by then, the notch closes.
   const AFTER_DROP_CLOSE_DELAY_MS = 2500;
   const SECONDARY_BUTTON = 3;
+  const CALL_TIMEOUT_MS = 10000;
 
   const TONE_CLASS: Record<string, string> = {
     neutral: "tone-neutral",
@@ -105,7 +105,7 @@
     { id: "tray", label: "Tray", icon: "folder-symbolic" },
   ];
 
-  let { bus, registry }: ViewProps = $props();
+  let { bus, registry, args }: ViewProps = $props();
 
   const settings = new Settings(untrack(() => bus));
   // Incoming shares the notch already opened for.
@@ -120,9 +120,13 @@
   let entries = $state<IslandEntry[]>([]);
   let hovered = $state(false);
   let opened = $state(false);
-  let tab = $state("nook");
+  // args.tab picks the tab it opens on first, "nook" unless given.
+  let tab = $state(untrack(() => initialTab(args)));
   let dragOver = $state(false);
   let mediaStatus = $state("");
+  // The current track's sleeve as a picture handle, or "".
+  let artHandle = $state("");
+  let tiles = $state.raw<ShelfTile[]>([]);
   let catalog = $state<NotchWidgetDeclaration[]>([]);
   // The registry is outside Svelte's reactivity; a Nook widget whose view
   // registers after the notch is up is picked up by bumping this.
@@ -141,9 +145,20 @@
   const size = $derived(sizeOf(mode, hovered, openSize));
   const stage = $derived(stageOf(openSize));
   const openOn = $derived(settings.string("notch.openOn", "click"));
-  const staged = $derived(stringListOf(settings.value(STAGED_KEY)));
 
   $effect(() => settings.connect());
+
+  $effect(() =>
+    subscribeTo(bus, "tray.files", (message) => {
+      tiles = shelfTilesOf(message.data);
+    })
+  );
+
+  $effect(() =>
+    subscribeTo(bus, "media.artwork", (message) => {
+      artHandle = stringOf(recordOf(message.data).handle);
+    })
+  );
 
   $effect(() =>
     subscribeTo(bus, "notch.catalog", (message) => {
@@ -161,13 +176,7 @@
   $effect(() => subscribeTo(bus, "notch:close", () => (opened = false)));
   $effect(() => subscribeTo(bus, "notch:toggle", () => (opened = !opened)));
 
-  // Files that arrived over Quick Share join the Tray, and a share waiting for
-  // an answer opens the Tray, where it is asked.
-  $effect(() =>
-    subscribeTo(bus, "quickshare:received", (message) => {
-      keepFiles(stringListOf(recordOf(message.data).paths));
-    })
-  );
+  // A share waiting for an answer opens the Tray, where it is asked.
   $effect(() =>
     subscribeTo(bus, "quickshare.state", (message) => {
       showNewRequests(arrayOf(recordOf(message.data).transfers));
@@ -252,7 +261,6 @@
           priority: PRIORITY_ACTIVITY,
           label: title,
           detail: stringOf(record.artist),
-          art: artSourceOf(stringOf(record.artUrl)),
         }),
         0,
       );
@@ -329,11 +337,10 @@
     pointerTimer = setTimeout(closeAutomatically, LEAVE_CLOSE_DELAY_MS);
   }
 
-  function dropped(detail: { paths: string[]; uris: string[]; image: string }): void {
+  function dropped(detail: { drop: string }): void {
     dragOver = false;
     cancelPointerTimer();
-    keepFiles(detail.paths);
-    void downloadDropped(detail.uris, detail.image).then(keepFiles);
+    void bus.call("tray:keep", { drop: detail.drop }, CALL_TIMEOUT_MS);
     pointerTimer = setTimeout(closeUnlessHovered, AFTER_DROP_CLOSE_DELAY_MS);
   }
 
@@ -385,13 +392,6 @@
     opened = true;
   }
 
-  function keepFiles(paths: string[]): void {
-    if (paths.length === 0) {
-      return;
-    }
-    settings.set(STAGED_KEY, withPaths(staged, paths));
-  }
-
   function closeUnlessHovered(): void {
     pointerTimer = null;
     if (!hovered) {
@@ -399,19 +399,16 @@
     }
   }
 
-  function openFile(path: string): void {
-    void bus.call("files:open", { path });
+  function openFile(file: string): void {
+    void bus.call("tray:open", { file }, CALL_TIMEOUT_MS);
   }
 
-  function removeFile(path: string): void {
-    settings.set(STAGED_KEY, withoutPath(staged, path));
-    deleteCachedCopy(path);
+  function removeFile(file: string): void {
+    void bus.call("tray:remove", { file }, CALL_TIMEOUT_MS);
   }
 
   function clearTray(): void {
-    const removed = staged;
-    settings.set(STAGED_KEY, []);
-    removed.forEach(deleteCachedCopy);
+    void bus.call("tray:clear", {}, CALL_TIMEOUT_MS);
   }
 
   function pressed(detail: { button: number }): void {
@@ -420,6 +417,14 @@
     }
     opened = false;
     bus.publish("settings:open", { section: "notch" });
+  }
+
+  function initialTab(viewArgs: unknown): string {
+    const wanted = stringOf(recordOf(viewArgs).tab);
+    if (TABS.some((item) => item.id === wanted)) {
+      return wanted;
+    }
+    return "nook";
   }
 
   // The stack's winner is the highest priority, ties going to whatever arrived
@@ -497,7 +502,6 @@
       detail: "",
       progress: NO_PROGRESS,
       tone: "neutral",
-      art: "",
       ...fields,
     };
   }
@@ -541,22 +545,6 @@
       progress: percent / 100,
       tone: "accent",
     });
-  }
-
-  // Local art is decoded at sleeve size; remote art would have to be
-  // downloaded first and is skipped.
-  function artSourceOf(artUrl: string): string {
-    if (artUrl.startsWith("file://")) {
-      return decodeURIComponent(artUrl.slice("file://".length));
-    }
-    return "";
-  }
-
-  function artTextureOf(art: string) {
-    if (art === "") {
-      return null;
-    }
-    return thumbnailTexture(art, SMALL_ART_PIXELS);
   }
 
   // Collapsed, the header fills the island. Open, the panel keeps its full
@@ -719,7 +707,7 @@
         </gtkbutton>
       {/each}
       <gtkbox hexpand></gtkbox>
-      {#if tab === "tray" && staged.length > 0}
+      {#if tab === "tray" && tiles.length > 0}
         <gtkbutton class="nook-tab" frame={false} onclicked={clearTray}>Clear</gtkbutton>
       {/if}
     </gtkbox>
@@ -759,7 +747,7 @@
     </gtkbox>
     <gtkbox hexpand>
       <TrayShelf
-        paths={staged}
+        {tiles}
         height={NOOK_ROW_HEIGHT}
         {dragOver}
         onopen={openFile}
@@ -788,9 +776,9 @@
 {#snippet mediaHeader(entry: IslandEntry)}
   <gtkbox orientation="horizontal" spacing={12} hexpand>
     <gtkbox class="island-art island-art-small" valign="center" hexpand={false} homogeneous clip>
-      {#if entry.art !== ""}
+      {#if artHandle !== ""}
         <gtkpicture
-          paintable={artTextureOf(entry.art)}
+          handle={artHandle}
           fit="cover"
           shrink
           width={SMALL_ART_SIZE}

@@ -14,11 +14,7 @@
   import Weather from './extensions/weather/Weather.svelte'
   import AirQuality from './extensions/airquality/AirQuality.svelte'
   import LockSurface from './extensions/lock/LockSurface.svelte'
-  import Notch from './extensions/neoshell/Notch.svelte'
   import NotchSettings from './extensions/neoshell/NotchSettings.svelte'
-  import TrayShelf from './extensions/neoshell/TrayShelf.svelte'
-  import QuickSharePanel from './extensions/neoshell/QuickSharePanel.svelte'
-  import GLib from 'gi://GLib'
   import SettingsWindow from './extensions/settings/SettingsWindow.svelte'
   import DisplaysSettings from './extensions/settings/DisplaysSettings.svelte'
   import CalendarSettings from './extensions/calendar/CalendarSettings.svelte'
@@ -33,6 +29,7 @@
   const RemoteAgendaMenu = remoteView('agenda', 'menu')
   const RemoteTopbar = remoteView('neoshell-bar', 'topbar')
   const RemoteControlCentre = remoteView('quicksettings', 'menu')
+  const RemoteNotch = remoteView('neoshell-notch', 'notch')
 
   // The smoke harness's markup: every view added for the quick settings tray
   // and the widget gallery, built once in a plain window.
@@ -43,14 +40,6 @@
   // password prompt, the connection details) is ordinary labels and an entry.
 
   let { bus, registry }: { bus: BusService; registry: ViewRegistry } = $props()
-
-  // A file, a folder and a path that no longer exists: the three tiles the
-  // Tray draws.
-  const TRAY_PATHS = [
-    GLib.build_filenamev([GLib.get_current_dir(), 'style.css']),
-    GLib.build_filenamev([GLib.get_current_dir(), 'src']),
-    '/nonexistent/neoshell-smoke.txt',
-  ]
 
   const networkState: NetworkState = {
     available: true,
@@ -201,13 +190,15 @@
           </gtkbox>
         </gtkbox>
       {/each}
-      <!-- The notch opened on its Nook (notch:open is retained), and both
-           pages of its settings. -->
+      <!-- The notch, run as its client, opened (notch:open is retained) on
+           its Nook, which embeds the client's own media widget back, and on
+           its Tray. Then both pages of its settings. -->
       <gtkbox class="ui-dark" orientation="vertical" spacing={16} valign="start">
-        <Notch {bus} {registry} args={{}} id="smoke.notch" />
-        <gtkbox class="island" width={560}>
-          <QuickSharePanel {bus} height={112} ondragenter={() => {}} onhold={() => {}} />
-          <TrayShelf paths={TRAY_PATHS} height={112} dragOver onopen={() => {}} onremove={() => {}} ondragging={() => {}} />
+        <gtkbox class="smoke-remote-notch" valign="start">
+          <RemoteNotch {bus} {registry} args={{}} id="smoke.notch" />
+        </gtkbox>
+        <gtkbox class="smoke-remote-tray" valign="start">
+          <RemoteNotch {bus} {registry} args={{ tab: 'tray' }} id="smoke.notch.tray" />
         </gtkbox>
       </gtkbox>
       <gtkbox class="ui-light" orientation="vertical" spacing={16} width={720} valign="start">

@@ -1,20 +1,28 @@
 <script lang="ts">
   import type { BusService } from '../../lib/bus'
   import { subscribeTo } from '../../lib/bus'
-  import { recordOf } from '../../lib/record'
+  import { numberOf, recordOf } from '../../lib/record'
   import { Settings } from '../../lib/settings.svelte'
   import { untrack } from 'svelte'
   import type { Device, QuickShareState, Transfer } from '../quickshare/state'
   import { ENDED_STATES, initialState } from '../quickshare/state'
-  import { downloadDropped } from './trayDownloads'
 
   // The Tray's Quick Share container, left of the shelf. Files dropped here
   // (from anywhere, or a Tray tile) wait while nearby devices are discovered,
   // and go to the one picked. An incoming share asks here, with its PIN, and
   // a running transfer shows its progress. Receiving is off until switched on.
+  // A drop stays the tray backend's: this panel holds its token, and sends
+  // through tray:share.
 
+  // Downloading what a browser dropped can take a while.
+  const COUNT_TIMEOUT_MS = 30000
   const CALL_TIMEOUT_MS = 5000
   const CONSENT_STATE = 'waitingForUserConsent'
+
+  interface PendingDrop {
+    drop: string
+    count: number
+  }
 
   let {
     bus,
@@ -33,14 +41,14 @@
   const settings = new Settings(untrack(() => bus))
 
   let state = $state.raw<QuickShareState>(initialState())
-  let pending = $state<string[]>([])
+  let pending = $state<PendingDrop | null>(null)
   let dragOver = $state(false)
 
   const request = $derived(state.transfers.find(isConsentRequest))
   const current = $derived(lastOf(state.transfers))
   const receiving = $derived(settings.string('quickshare.visibility', 'invisible') === 'visible')
 
-  const waiting = $derived(pending.length > 0 || request !== undefined)
+  const waiting = $derived(pending !== null || request !== undefined)
 
   $effect(() => settings.connect())
 
@@ -51,7 +59,7 @@
   // Leaving the Tray tab drops a half-made send; the notch need not wait for
   // a panel that is gone.
   $effect(() => () => {
-    if (pending.length > 0) {
+    if (pending !== null) {
       call('quickshare:discover', { on: false })
     }
     onhold(false)
@@ -82,23 +90,25 @@
     ondragenter()
   }
 
-  async function dropped(detail: { paths: string[]; uris: string[]; image: string }): Promise<void> {
+  async function dropped(detail: { drop: string }): Promise<void> {
     dragOver = false
-    const files = [...detail.paths, ...(await downloadDropped(detail.uris, detail.image))]
-    if (files.length === 0 || !state.available) {
+    const count = numberOf(recordOf(await bus.call('tray:count', { drop: detail.drop }, COUNT_TIMEOUT_MS)).count, 0)
+    if (count === 0 || !state.available) {
       return
     }
-    pending = files
+    pending = { drop: detail.drop, count }
     call('quickshare:discover', { on: true })
   }
 
   function sendTo(device: Device): void {
-    call('quickshare:send', { device: device.id, files: pending })
+    if (pending !== null) {
+      call('tray:share', { drop: pending.drop, device: device.id })
+    }
     stopPicking()
   }
 
   function stopPicking(): void {
-    pending = []
+    pending = null
     call('quickshare:discover', { on: false })
   }
 
@@ -170,8 +180,8 @@
     {@render idle(state.reason)}
   {:else if request !== undefined}
     {@render consent(request)}
-  {:else if pending.length > 0}
-    {@render picker()}
+  {:else if pending !== null}
+    {@render picker(pending.count)}
   {:else if current !== undefined && !ENDED_STATES.has(current.state)}
     {@render progress(current)}
   {:else if current !== undefined}
@@ -194,9 +204,9 @@
   {/if}
 {/snippet}
 
-{#snippet picker()}
+{#snippet picker(count: number)}
   <gtkbox orientation="horizontal" spacing={6}>
-    <gtklabel class="quickshare-title" hexpand halign="start" ellipsize="end">Send {fileCount(pending.length)}</gtklabel>
+    <gtklabel class="quickshare-title" hexpand halign="start" ellipsize="end">Send {fileCount(count)}</gtklabel>
     <gtkbutton class="quickshare-close" frame={false} tooltip="Cancel" onclicked={stopPicking}>
       <gtkicon icon="window-close-symbolic" size={12}></gtkicon>
     </gtkbutton>
