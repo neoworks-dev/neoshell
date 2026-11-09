@@ -156,6 +156,7 @@
     margin-top={placement.point.y}
     width={placement.box.width}
     height={placement.box.height}
+    clip
     {carry}
     carry-threshold={DRAG_THRESHOLD_PX}
     carried-by={carryGroup}
@@ -166,35 +167,39 @@
     ondragmove={moveDrag}
     ondragend={endDrag}
   >
-    <gtkoverlay hexpand vexpand>
-      <!-- The card is told its own size rather than measuring it: the store
-           already holds it, and a change from the widget's context menu
-           reaches the card as a prop instead of as a resize it has to
-           observe. -->
-      <View
-        {bus}
-        {registry}
-        args={{
-          size: placement.size,
-          width: placement.box.width,
-          height: placement.box.height,
-        }}
-        id={placement.id}
-      />
-      <!-- While the gallery is open, every widget can be taken off. -->
-      {#if store.editing && !removing}
-        <gtkbutton
-          overlay
-          class="widget-remove"
-          halign="start"
-          valign="start"
-          frame={false}
-          tooltip="Remove Widget"
-          onclicked={remove}
-        >
-          <gtkicon icon="list-remove-symbolic" size={12}></gtkicon>
-        </gtkbutton>
-      {/if}
-    </gtkoverlay>
+    <!-- An overlay child gets its natural width, and a card's wrapping text
+         would ask for a whole line of it: the clamp holds it to the slot. -->
+    <gtkclamp maximum={placement.box.width} hexpand vexpand>
+      <gtkoverlay hexpand vexpand>
+        <!-- The card is told its own size rather than measuring it: the store
+             already holds it, and a change from the widget's context menu
+             reaches the card as a prop instead of as a resize it has to
+             observe. -->
+        <View
+          {bus}
+          {registry}
+          args={{
+            size: placement.size,
+            width: placement.box.width,
+            height: placement.box.height,
+          }}
+          id={placement.id}
+        />
+        <!-- While the gallery is open, every widget can be taken off. -->
+        {#if store.editing && !removing}
+          <gtkbutton
+            overlay
+            class="widget-remove"
+            halign="start"
+            valign="start"
+            frame={false}
+            tooltip="Remove Widget"
+            onclicked={remove}
+          >
+            <gtkicon icon="list-remove-symbolic" size={12}></gtkicon>
+          </gtkbutton>
+        {/if}
+      </gtkoverlay>
+    </gtkclamp>
   </gtkpressable>
 {/if}

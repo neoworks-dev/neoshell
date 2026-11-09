@@ -87,4 +87,10 @@
       </gtkpressable>
     </gtkbox>
   </gtkrevealer>
+
+  <!-- With no widget marked `input` the surface would take the whole left
+       edge; this keeps it click-through while nothing is shown. -->
+  {#if !shown}
+    <gtkbox width={0} height={0} input></gtkbox>
+  {/if}
 </gtkbox>

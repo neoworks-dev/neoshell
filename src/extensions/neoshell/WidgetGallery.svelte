@@ -18,10 +18,14 @@
   // windows, which a pointer grab does not cross, so the drag is a Wayland
   // one carrying the widget's type as text (widgetDrag.ts).
   //
-  // While closed the panel draws nothing that takes input, so the corner of
-  // the screen stays click-through.
+  // While closed the panel draws a zero-size input marker rather than nothing:
+  // a surface with no widget marked `input` takes input over its whole area,
+  // and with keyboard on demand that steals focus from whatever window is
+  // under the corner.
 
-  const PREVIEW_SCALE = 0.72
+  const PREVIEW_SCALE = 0.8
+  // How many colours the category tiles cycle through (.gallery-category-icon.tone-N).
+  const ICON_TONES = 6
   const ALL = 'All Widgets'
   const ALL_ICON = 'view-app-grid-symbolic'
   const FALLBACK_ICON = 'application-x-addon-symbolic'
@@ -200,11 +204,23 @@
     return Math.round(sizePx(MAX_UNIT_PX, spanOf(size)).width * PREVIEW_SCALE)
   }
 
-  function captionOf(entry: CatalogEntry): string {
+  function tooltipOf(entry: CatalogEntry): string {
     if (entry.source === '') {
-      return entry.name
+      return `${entry.name} — ${entry.description}`
     }
-    return `${entry.name} · ${entry.source}`
+    return `${entry.name} (${entry.source}) — ${entry.description}`
+  }
+
+  // A category keeps its colour wherever it sorts: the tone comes from its name.
+  function iconClassOf(name: string): string {
+    if (name === ALL) {
+      return 'gallery-category-icon all'
+    }
+    let hash = 0
+    for (const character of name) {
+      hash = (hash * 31 + character.charCodeAt(0)) % 9973
+    }
+    return `gallery-category-icon tone-${hash % ICON_TONES}`
   }
 
   function categoryClass(name: string, active: string): string {
@@ -235,7 +251,7 @@
       input={open}
     >
       <gtkbox orientation="horizontal" vexpand>
-        <gtkbox class="gallery-sidebar" orientation="vertical" spacing={10} width={SIDEBAR_WIDTH}>
+        <gtkbox class="gallery-sidebar" orientation="vertical" spacing={10} width={SIDEBAR_WIDTH} hexpand={false}>
           <gtksearchentry
             class="gallery-search"
             placeholder="Search Widgets"
@@ -252,8 +268,8 @@
                   onclicked={() => (category = entry.name)}
                 >
                   <gtkbox orientation="horizontal" spacing={10}>
-                    <gtkbox class="gallery-category-icon" valign="center">
-                      <gtkicon icon={entry.icon} size={14} halign="center" valign="center" hexpand vexpand></gtkicon>
+                    <gtkbox class={iconClassOf(entry.name)} width={22} height={22} halign="start" valign="center">
+                      <gtkicon icon={entry.icon} size={14} halign="center" valign="center"></gtkicon>
                     </gtkbox>
                     <gtklabel hexpand halign="start" ellipsize="end">{entry.name}</gtklabel>
                   </gtkbox>
@@ -271,42 +287,33 @@
               {#each sections as section (section.name)}
                 <gtkbox orientation="vertical" spacing={12}>
                   <gtklabel class="gallery-section" halign="start">{section.name}</gtklabel>
-                  <!-- A flow box wraps the tiles, the one container that
-                       reflows in a panel whose width follows the output. -->
-                  <gtkflowbox
-                    class="gallery-tiles"
-                    orientation="horizontal"
-                    spacing={18}
-                    selection="none"
-                    halign="start"
-                    valign="start"
-                    max-per-line={8}
-                  >
-                    {#each section.entries as entry (entry.type)}
-                      <gtkpressable
-                        class="gallery-tile"
-                        orientation="vertical"
-                        spacing={8}
-                        tooltip={entry.description}
-                        drag-text={widgetDragText(entry.type)}
-                        onpress={() => add(entry)}
-                        ondragoutbegin={() => announceDrag(entry)}
-                        ondragoutend={endDrag}
-                      >
-                        <WidgetPreview
-                          {bus}
-                          {registry}
-                          {generation}
-                          type={entry.type}
-                          size={entry.defaultSize}
-                          width={previewWidth(entry.defaultSize)}
-                        />
-                        <gtklabel class="gallery-tile-name" halign="center" ellipsize="end">
-                          {captionOf(entry)}
-                        </gtklabel>
-                      </gtkpressable>
-                    {/each}
-                  </gtkflowbox>
+                  <!-- One row per section, scrolling sideways when it is
+                       longer than the panel: a flow box would line mixed
+                       sizes up in equal columns with gaps between. -->
+                  <gtkscrolledwindow vscroll="never" propagate-natural-height frame={false}>
+                    <gtkbox class="gallery-tiles" orientation="horizontal" spacing={14} halign="start" valign="start">
+                      {#each section.entries as entry (entry.type)}
+                        <gtkpressable
+                          class="gallery-tile"
+                          orientation="vertical"
+                          tooltip={tooltipOf(entry)}
+                          drag-text={widgetDragText(entry.type)}
+                          onpress={() => add(entry)}
+                          ondragoutbegin={() => announceDrag(entry)}
+                          ondragoutend={endDrag}
+                        >
+                          <WidgetPreview
+                            {bus}
+                            {registry}
+                            {generation}
+                            type={entry.type}
+                            size={entry.defaultSize}
+                            width={previewWidth(entry.defaultSize)}
+                          />
+                        </gtkpressable>
+                      {/each}
+                    </gtkbox>
+                  </gtkscrolledwindow>
                 </gtkbox>
               {/each}
             </gtkbox>
@@ -322,4 +329,8 @@
       </gtkbox>
     </gtkbox>
   </gtkrevealer>
+
+  {#if !open}
+    <gtkbox width={0} height={0} input></gtkbox>
+  {/if}
 </gtkbox>
