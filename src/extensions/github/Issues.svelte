@@ -154,9 +154,9 @@
   {#if issues !== null}
     {#if box.size === 'small'}
       <gtkbox orientation="vertical" vexpand>
-        <TickingNumber class="gh-total" value={items.length} suffix={moreSuffix} />
+        <TickingNumber class="card-reading compact" value={items.length} suffix={moreSuffix} />
         <gtklabel class="card-hint" halign="start">open issues and PRs</gtklabel>
-        <gtklabel class="gh-streak" halign="start" margin-top={6}>
+        <gtklabel class="card-hint" halign="start" margin-top={6}>
           {pluralize(items.length - pullRequests, 'issue')} · {pluralize(pullRequests, 'PR')}
         </gtklabel>
         <gtkbox vexpand></gtkbox>
@@ -175,7 +175,7 @@
         </gtkbox>
       {/if}
     {:else}
-      <gtklabel class="gh-section" halign="start">
+      <gtklabel class="card-hint gh-section" halign="start">
         {pluralize(items.length, 'open item')}
       </gtklabel>
       <gtkbox orientation="vertical" spacing={2} vexpand={!showNotifications}>
@@ -189,7 +189,7 @@
       </gtkbox>
       {#if showNotifications}
         <gtkbox vexpand></gtkbox>
-        <gtklabel class="gh-section" halign="start">
+        <gtklabel class="card-hint gh-section" halign="start">
           {unreadLabel(unread)} · notifications
         </gtklabel>
         <gtkbox orientation="vertical" spacing={2}>

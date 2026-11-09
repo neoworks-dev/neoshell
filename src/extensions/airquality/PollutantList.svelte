@@ -29,12 +29,12 @@
 
 <gtkbox class="card-pollutants" orientation="vertical" vexpand>
   <gtkbox orientation="horizontal" spacing={8}>
-    <gtklabel class="card-strip-label" hexpand halign="start">Pollutants</gtklabel>
-    <gtklabel class="card-strip-label" width={52} halign="end">{unit}</gtklabel>
+    <gtklabel class="card-hint" hexpand halign="start">Pollutants</gtklabel>
+    <gtklabel class="card-hint" width={52} halign="end">{unit}</gtklabel>
   </gtkbox>
   {#each pollutants as pollutant (pollutant.label)}
     <gtkbox orientation="horizontal" spacing={8} vexpand>
-      <gtklabel class="card-day-label" width={44} halign="start" ellipsize="end">
+      <gtklabel class="card-body" width={44} halign="start" ellipsize="end">
         {pollutant.label}
       </gtklabel>
       <gtklevelbar
@@ -46,7 +46,7 @@
         hexpand
         valign="center"
       ></gtklevelbar>
-      <gtklabel class="card-day-high" tabular width={52} halign="end">{pollutant.value}</gtklabel>
+      <gtklabel class="card-body" tabular width={52} halign="end">{pollutant.value}</gtklabel>
     </gtkbox>
   {/each}
 </gtkbox>

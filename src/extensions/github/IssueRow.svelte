@@ -28,7 +28,7 @@
 <gtkbox class="gh-row" orientation="horizontal" spacing={8} tooltip={issue.title}>
   <gtklabel class={chipClass(issue)} valign="center" halign="start" width={38}>{kindLabel}</gtklabel>
   <gtkbox orientation="vertical" hexpand halign="fill">
-    <gtklabel class="gh-row-title" halign="start" xalign={0} ellipsize="end">{issue.title}</gtklabel>
+    <gtklabel class="card-body" halign="start" xalign={0} ellipsize="end">{issue.title}</gtklabel>
     <gtklabel class="card-hint" halign="start" xalign={0} ellipsize="end">{meta}</gtklabel>
   </gtkbox>
 </gtkbox>

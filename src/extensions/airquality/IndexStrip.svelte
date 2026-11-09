@@ -29,7 +29,7 @@
 <gtkbox class="card-strip" orientation="horizontal" homogeneous>
   {#each hours as hour (hour.label)}
     <gtkbox orientation="vertical" spacing={2}>
-      <gtklabel class="card-strip-label" halign="center">{hour.label}</gtklabel>
+      <gtklabel class="card-hint" halign="center">{hour.label}</gtklabel>
       <gtkbox
         class="aqi-bar-track"
         orientation="vertical"
@@ -41,7 +41,7 @@
         <gtkbox vexpand></gtkbox>
         <gtkbox class={fillClass(hour)} height={heightOf(hour)} valign="end"></gtkbox>
       </gtkbox>
-      <gtklabel class="card-strip-value" tabular halign="center">{hour.index}</gtklabel>
+      <gtklabel class="card-body" tabular halign="center">{hour.index}</gtklabel>
     </gtkbox>
   {/each}
 </gtkbox>

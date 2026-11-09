@@ -123,10 +123,10 @@
   {#if contributions !== null}
     {#if box.size === 'small'}
       <gtkbox orientation="vertical" vexpand>
-        <TickingNumber class="gh-total" value={contributions.total} />
+        <TickingNumber class="card-reading compact" value={contributions.total} />
         <gtklabel class="card-hint" halign="start">contributions in the last year</gtklabel>
         <gtkbox vexpand></gtkbox>
-        <gtklabel class="gh-streak" halign="start" margin-bottom={6}>
+        <gtklabel class="card-hint" halign="start" margin-bottom={6}>
           {pluralize(contributions.currentStreak, 'day')} streak
         </gtklabel>
         <Heatmap columns={weeksFor(contributions, 6, 2)} cellSize={6} gap={2} />
@@ -134,11 +134,11 @@
     {:else if box.size === 'medium'}
       <gtkbox orientation="horizontal" spacing={16}>
         <gtkbox orientation="vertical" hexpand halign="start">
-          <TickingNumber class="gh-total" value={contributions.total} />
+          <TickingNumber class="card-reading compact" value={contributions.total} />
           <gtklabel class="card-hint" halign="start">contributions in the last year</gtklabel>
         </gtkbox>
         <gtkbox orientation="vertical" halign="end">
-          <TickingNumber class="gh-total-secondary" value={contributions.currentStreak} halign="end" />
+          <TickingNumber class="card-reading compact" value={contributions.currentStreak} halign="end" />
           <gtklabel class="card-hint" halign="end">{streakCaption(contributions.currentStreak)}</gtklabel>
         </gtkbox>
       </gtkbox>
@@ -146,7 +146,7 @@
       <Heatmap columns={weeksFor(contributions, 6, 3)} cellSize={6} gap={3} showMonths />
     {:else}
       <gtkbox orientation="vertical" halign="start">
-        <TickingNumber class="gh-total" value={contributions.total} />
+        <TickingNumber class="card-reading compact" value={contributions.total} />
         <gtklabel class="card-hint" halign="start">contributions in the last year</gtklabel>
       </gtkbox>
       <Heatmap columns={weeksFor(contributions, 10, 3)} cellSize={10} gap={3} showMonths />

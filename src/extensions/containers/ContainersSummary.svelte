@@ -31,7 +31,7 @@
   </gtkbox>
   <gtkbox orientation="horizontal" spacing={6} valign="end">
     <gtklabel class="card-reading" tabular halign="start">{upCountOf(counts)}</gtklabel>
-    <gtklabel class="card-condition" halign="start" valign="end" margin-bottom={10}>running</gtklabel>
+    <gtklabel class="card-body" halign="start" valign="end" margin-bottom={10}>running</gtklabel>
   </gtkbox>
   <gtkbox orientation="horizontal" spacing={4} halign="start">
     {#each dots as item (item.engine + item.id)}
@@ -41,7 +41,7 @@
   <gtkbox orientation="vertical" valign="end" vexpand>
     <gtklabel class="container-attention attention-{attention.tone}" halign="start" ellipsize="end">{attention.text}</gtklabel>
     {#if stacked && stoppedLine !== ''}
-      <gtklabel class="card-range" halign="start">{stoppedLine}</gtklabel>
+      <gtklabel class="card-hint" halign="start">{stoppedLine}</gtklabel>
     {/if}
   </gtkbox>
 </gtkbox>

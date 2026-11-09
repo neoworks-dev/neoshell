@@ -134,7 +134,7 @@
       <MailRow {message} {now} />
     {/each}
     {#if hiddenCount > 0}
-      <gtklabel class="card-range container-more" halign="start">+{hiddenCount} more</gtklabel>
+      <gtklabel class="card-hint container-more" halign="start">+{hiddenCount} more</gtklabel>
     {/if}
   </gtkbox>
 {/snippet}
@@ -156,10 +156,10 @@
         <gtklabel class="card-title" halign="start">Email</gtklabel>
       </gtkbox>
       <gtklabel class="card-reading" tabular halign="start" valign="end" vexpand>{current.unread}</gtklabel>
-      <gtklabel class="card-condition" halign="start">{unreadLabelOf(current.unread)}</gtklabel>
+      <gtklabel class="card-body" halign="start">{unreadLabelOf(current.unread)}</gtklabel>
       <gtkbox orientation="vertical" valign="end">
-        <gtklabel class="container-name" halign="start" ellipsize="end">{latestLineOf(current)}</gtklabel>
-        <gtklabel class="card-range" halign="start" ellipsize="end">{latestSubjectOf(current)}</gtklabel>
+        <gtklabel class="card-body" halign="start" ellipsize="end">{latestLineOf(current)}</gtklabel>
+        <gtklabel class="card-hint" halign="start" ellipsize="end">{latestSubjectOf(current)}</gtklabel>
       </gtkbox>
     </gtkbox>
   {:else if box.size === 'medium'}
@@ -170,7 +170,7 @@
           <gtklabel class="card-title" halign="start">Email</gtklabel>
         </gtkbox>
         <gtklabel class="card-reading" tabular halign="start" valign="end" vexpand>{current.unread}</gtklabel>
-        <gtklabel class="card-condition" halign="start" ellipsize="end">{unreadLabelOf(current.unread)}</gtklabel>
+        <gtklabel class="card-body" halign="start" ellipsize="end">{unreadLabelOf(current.unread)}</gtklabel>
       </gtkbox>
       {#if messages.length === 0}
         {@render notice('object-select-symbolic', 'Inbox zero', 'Nothing unread.', false)}
@@ -184,7 +184,7 @@
     <gtkbox orientation="horizontal" spacing={8}>
       <gtkbox orientation="vertical" hexpand>
         <gtklabel class="card-title" halign="start">Email</gtklabel>
-        <gtklabel class="card-range" halign="start">{current.unread} {unreadLabelOf(current.unread)}</gtklabel>
+        <gtklabel class="card-hint" halign="start">{current.unread} {unreadLabelOf(current.unread)}</gtklabel>
       </gtkbox>
       <gtkbutton
         class={refreshClass(refreshing)}
@@ -202,7 +202,7 @@
       {@render rows()}
     {/if}
     {#if problem !== ''}
-      <gtklabel class="card-range container-footer-error" halign="start" ellipsize="end" xalign={0}>{problem}</gtklabel>
+      <gtklabel class="card-hint container-footer-error" halign="start" ellipsize="end" xalign={0}>{problem}</gtklabel>
     {/if}
   {/if}
 </gtkbox>

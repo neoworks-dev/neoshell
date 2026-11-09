@@ -120,9 +120,9 @@
 
   function footerClass(failure: string): string {
     if (failure !== '') {
-      return 'card-range container-footer-error'
+      return 'card-hint container-footer-error'
     }
-    return 'card-range'
+    return 'card-hint'
   }
 </script>
 
@@ -140,7 +140,7 @@
       <ContainerRow {item} {full} busy={isBusy(item)} onaction={act} />
     {/each}
     {#if hiddenCount > 0}
-      <gtklabel class="card-range container-more" halign="start">+{hiddenCount} more</gtklabel>
+      <gtklabel class="card-hint container-more" halign="start">+{hiddenCount} more</gtklabel>
     {/if}
   </gtkbox>
 {/snippet}
@@ -175,7 +175,7 @@
           {attention.text}
         </gtklabel>
       </gtkbox>
-      <gtklabel class="card-reading container-count" tabular valign="center">{upCountOf(current.counts)}</gtklabel>
+      <gtklabel class="card-reading compact" tabular valign="center">{upCountOf(current.counts)}</gtklabel>
       <gtkbutton
         class="card-gear"
         frame={false}

@@ -120,12 +120,12 @@
   {:else if box.size === 'small'}
     {#key current.fullName}
       <gtkbox orientation="vertical" vexpand>
-        <TickingNumber class="gh-total" value={current.weekCommits} />
+        <TickingNumber class="card-reading compact" value={current.weekCommits} />
         <gtklabel class="card-hint" halign="start">commits this week</gtklabel>
         <gtkbox vexpand></gtkbox>
         <Sparkline counts={current.dailyCounts} areaHeight={SMALL_BAR_AREA_PX} barWidth={8} />
         {#if current.commits.length > 0}
-          <gtklabel class="gh-commit-subject" halign="start" ellipsize="end" margin-top={8}>
+          <gtklabel class="card-body" halign="start" ellipsize="end" margin-top={8}>
             {current.commits[0].message}
           </gtklabel>
           <gtklabel class="card-hint" halign="start" ellipsize="end">
@@ -138,7 +138,7 @@
     {#key current.fullName}
       <gtkbox orientation="horizontal" spacing={16} vexpand>
         <gtkbox orientation="vertical" width={140}>
-          <TickingNumber class="gh-total" value={current.weekCommits} />
+          <TickingNumber class="card-reading compact" value={current.weekCommits} />
           <gtklabel class="card-hint" halign="start">commits this week</gtklabel>
           <gtkbox vexpand></gtkbox>
           <Sparkline counts={current.dailyCounts} areaHeight={MEDIUM_BAR_AREA_PX} barWidth={5} />

@@ -6,9 +6,9 @@
 </script>
 
 <gtkbox orientation="horizontal" spacing={3} halign="end" valign="center">
-  <gtklabel class="gh-legend" valign="center">Less</gtklabel>
+  <gtklabel class="card-hint gh-legend" valign="center">Less</gtklabel>
   {#each LEVELS as level (level)}
     <gtkbox class="gh-cell gh-shown gh-level-{level}" width={SWATCH_PX} height={SWATCH_PX} valign="center"></gtkbox>
   {/each}
-  <gtklabel class="gh-legend" valign="center">More</gtklabel>
+  <gtklabel class="card-hint gh-legend" valign="center">More</gtklabel>
 </gtkbox>
