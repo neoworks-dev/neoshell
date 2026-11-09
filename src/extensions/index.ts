@@ -37,6 +37,8 @@ import galleryBackend from './gallery/backend.js'
 import galleryViews from './gallery/views.js'
 import containersBackend from './containers/backend.js'
 import containersViews from './containers/views.js'
+import aiUsageBackend from './aiusage/backend.js'
+import aiUsageViews from './aiusage/views.js'
 
 // The extension registry. In the bun host an extension was a directory the
 // loader found by scanning for manifest.json and imported at runtime; one GJS
@@ -678,5 +680,45 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     },
     backend: containersBackend as Plugin.Object,
     views: containersViews,
+  },
+  // Coding agents' token use, plan windows and live sessions, read from the
+  // logs Claude Code and Codex keep on this machine.
+  aiusage: {
+    manifest: {
+      id: 'aiusage',
+      inject: ['bus', 'ui'],
+      widgets: [
+        {
+          type: 'aiusage.card',
+          name: 'AI usage',
+          category: 'Developer',
+          icon: 'utilities-terminal-symbolic',
+          description: 'Claude Code and Codex: token use, usage windows and what each is doing now.',
+          sizes: ['small', 'medium', 'large'],
+          defaultSize: 'medium',
+        },
+      ],
+      settings: [
+        {
+          id: 'aiusage',
+          title: 'AI usage',
+          icon: 'utilities-terminal-symbolic',
+          view: 'aiusage.settings',
+          order: 50,
+          group: 'shell',
+          keywords: ['claude', 'codex', 'tokens', 'limits', 'agents', 'openai', 'anthropic'],
+        },
+      ],
+      client: {
+        permissions: {
+          subscribe: ['aiusage.state'],
+          call: ['aiusage:refresh', 'config:set'],
+          publish: ['settings:open'],
+          configKeys: ['aiusage.*'],
+        },
+      },
+    },
+    backend: aiUsageBackend as Plugin.Object,
+    views: aiUsageViews,
   },
 }

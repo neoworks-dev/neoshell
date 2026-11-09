@@ -25,6 +25,7 @@
   let state = $state<ContainersState | null>(null)
   let contextDraft = $state('')
   let namespaceDraft = $state('')
+  let seeded = false
 
   const applyContext = debounced(() => settings.set('containers.kubeContext', contextDraft.trim()), TYPING_PAUSE_MS)
   const applyNamespace = debounced(
@@ -39,15 +40,20 @@
   const showStopped = $derived(settings.boolean('containers.showStopped', false))
   const pollSeconds = $derived(settings.number('containers.pollSeconds', DEFAULT_POLL_SECONDS))
 
-  // The drafts start as what is saved, once; the republish that follows an
-  // edit must not overwrite what is being typed.
+  $effect(() => settings.connect())
+
+  // The drafts start as what is saved, once: the snapshot arrives after the
+  // page is up, and the republish that follows an edit must not overwrite
+  // what is being typed.
   $effect(() => {
-    const disconnect = settings.connect()
+    if (seeded || settings.value('containers') === undefined) {
+      return
+    }
+    seeded = true
     untrack(() => {
       contextDraft = settings.string('containers.kubeContext', '')
       namespaceDraft = settings.string('containers.kubeNamespace', '')
     })
-    return disconnect
   })
 
   $effect(() =>

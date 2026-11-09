@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { BusService } from './lib/bus'
   import type { ViewRegistry } from './host/plugins/views'
+  import AiUsage from './extensions/aiusage/AiUsage.svelte'
   import Containers from './extensions/containers/Containers.svelte'
   import Gallery from './extensions/gallery/Gallery.svelte'
   import { MAX_UNIT_PX, sizePx, spanOf } from './extensions/neoshell/grid'
@@ -12,6 +13,8 @@
 
   const CARD_SIZES = ['small', 'medium', 'large']
 
+  const RemoteAiUsageCard = remoteView('aiusage', 'card')
+  const RemoteAiUsageSettings = remoteView('aiusage', 'settings')
   const RemoteContainersCard = remoteView('containers', 'card')
   const RemoteContainersSettings = remoteView('containers', 'settings')
   const RemoteGalleryCard = remoteView('gallery', 'card')
@@ -41,6 +44,17 @@
     {#each CARD_SIZES as size (size)}
       {@const box = boxFor(size)}
       <gtkbox width={box.width} height={box.height} valign="start">
+        <AiUsage {bus} {registry} args={box} id={`smoke.aiusage.${size}`} />
+      </gtkbox>
+    {/each}
+    <gtkbox class="smoke-remote-aiusage-card" width={boxFor('medium').width} height={boxFor('medium').height} valign="start">
+      <RemoteAiUsageCard {bus} {registry} args={boxFor('medium')} id="smoke.aiusage.remote" />
+    </gtkbox>
+  </gtkbox>
+  <gtkbox orientation="horizontal" spacing={12} valign="start">
+    {#each CARD_SIZES as size (size)}
+      {@const box = boxFor(size)}
+      <gtkbox width={box.width} height={box.height} valign="start">
         <Gallery {bus} {registry} args={box} id={`smoke.gallery.${size}`} />
       </gtkbox>
     {/each}
@@ -51,5 +65,6 @@
   <gtkbox class="ui-light" orientation="vertical" width={720} valign="start">
     <RemoteGallerySettings {bus} {registry} args={{}} id="smoke.gallery.settings" />
     <RemoteContainersSettings {bus} {registry} args={{}} id="smoke.containers.settings" />
+    <RemoteAiUsageSettings {bus} {registry} args={{}} id="smoke.aiusage.settings" />
   </gtkbox>
 </gtkbox>
