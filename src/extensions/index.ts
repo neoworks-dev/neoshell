@@ -72,6 +72,9 @@ export interface SettingsDeclaration {
   title: string
   // A theme icon name.
   icon: string
+  // The sidebar tile behind the icon: blue, sky, teal, green, yellow, orange,
+  // red, pink, purple or grey (the default).
+  color?: string
   view: string
   // Lower comes first; ties keep declaration order.
   order?: number
@@ -219,6 +222,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           id: 'calendar',
           title: 'Calendar',
           icon: 'x-office-calendar-symbolic',
+          color: 'red',
           view: 'calendar.settings',
           order: 20,
           group: 'shell',
@@ -280,6 +284,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           id: 'notch',
           title: 'Notch',
           icon: 'view-grid-symbolic',
+          color: 'grey',
           view: 'neoshell.notch.settings',
           order: 10,
           group: 'shell',
@@ -535,6 +540,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           id: 'displays',
           title: 'Displays',
           icon: 'video-display-symbolic',
+          color: 'blue',
           view: 'settings.displays',
           order: 0,
           group: 'system',
@@ -576,6 +582,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           id: 'weather',
           title: 'Weather',
           icon: 'weather-few-clouds-symbolic',
+          color: 'sky',
           view: 'weather.settings',
           order: 22,
           group: 'shell',
@@ -635,6 +642,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           id: 'github',
           title: 'GitHub',
           icon: 'folder-symbolic',
+          color: 'purple',
           view: 'github.settings',
           order: 25,
           group: 'shell',
@@ -697,6 +705,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           id: 'gallery',
           title: 'Gallery',
           icon: 'folder-pictures-symbolic',
+          color: 'pink',
           view: 'gallery.settings',
           order: 30,
           group: 'shell',
@@ -737,6 +746,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           id: 'containers',
           title: 'Containers',
           icon: 'package-x-generic-symbolic',
+          color: 'teal',
           view: 'containers.settings',
           order: 40,
           group: 'shell',
@@ -777,6 +787,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           id: 'aiusage',
           title: 'AI usage',
           icon: 'utilities-terminal-symbolic',
+          color: 'orange',
           view: 'aiusage.settings',
           order: 50,
           group: 'shell',
@@ -816,6 +827,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           id: 'email',
           title: 'Email',
           icon: 'mail-unread-symbolic',
+          color: 'blue',
           view: 'email.settings',
           order: 60,
           group: 'shell',

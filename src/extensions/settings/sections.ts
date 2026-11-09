@@ -1,13 +1,15 @@
-import type { NavSection } from '@neoworks/gtk-ui'
 import { arrayOf, stringListOf, stringOf } from '../../lib/record.js'
 
 // The Settings sidebar's model: the catalog's sections, narrowed by the
 // search text and grouped the way the manifests asked.
 
+const TILE_COLORS = ['blue', 'sky', 'teal', 'green', 'yellow', 'orange', 'red', 'pink', 'purple', 'grey']
+
 export interface Section {
   id: string
   title: string
   icon: string
+  color: string
   view: string
   group: string
   keywords: string[]
@@ -18,10 +20,20 @@ export function sectionsOf(sections: unknown): Section[] {
     id: stringOf(record.id),
     title: stringOf(record.title),
     icon: stringOf(record.icon),
+    color: tileColorOf(record.color),
     view: stringOf(record.view),
     group: stringOf(record.group),
     keywords: stringListOf(record.keywords),
   }))
+}
+
+// An unknown colour, or none, is the neutral tile.
+function tileColorOf(value: unknown): string {
+  const color = stringOf(value)
+  if (!TILE_COLORS.includes(color)) {
+    return 'grey'
+  }
+  return color
 }
 
 export function matching(sections: Section[], query: string): Section[] {
@@ -33,7 +45,7 @@ export function matching(sections: Section[], query: string): Section[] {
 }
 
 // Groups keep the catalog's order: a group sits where its first section is.
-export function navSectionsOf(sections: Section[]): NavSection[] {
+export function groupsOf(sections: Section[]): Section[][] {
   const groups = new Map<string, Section[]>()
   for (const section of sections) {
     const members = groups.get(section.group)
@@ -43,9 +55,7 @@ export function navSectionsOf(sections: Section[]): NavSection[] {
     }
     members.push(section)
   }
-  return [...groups.values()].map((members) => ({
-    items: members.map((section) => ({ id: section.id, label: section.title, icon: section.icon })),
-  }))
+  return [...groups.values()]
 }
 
 function wordsOf(section: Section): string[] {

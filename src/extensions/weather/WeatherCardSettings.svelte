@@ -53,12 +53,12 @@
   }
 </script>
 
-<gtkbox orientation="vertical" spacing={8}>
-  <SectionHeader title={titleOf(card.size, number)} level={4} />
+<gtkbox class="settings-group" orientation="vertical" spacing={8}>
+  <SectionHeader title={titleOf(card.size, number)} level={3} />
   <List variant="card" dividers>
     <ListRow title="Location" subtitle="Empty shows the default location">
       {#snippet trailing()}
-        <gtkbox css="min-width: 220px;">
+        <gtkbox css="min-width: 240px;">
           <TextField
             label="Location"
             hideLabel
