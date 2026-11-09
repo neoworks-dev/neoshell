@@ -13,6 +13,7 @@ import { ViewRegistry } from './host/plugins/views.js'
 import Smoke from './Smoke.svelte'
 import { SMOKE_EXTERNAL_TEXT, startSmokeExternal } from './smokeExternal.js'
 import { gridFailure } from './smokeGrid.js'
+import { retainSmokeCards, SMOKE_CARD_TEXTS, SMOKE_CARD_TOOLTIPS } from './smokeCards.js'
 import { revealFailure } from './smokeReveal.js'
 import { clientEventDetail, filesOfDrop } from './host/drops.js'
 import { registerFile } from './host/fileHandles.js'
@@ -155,6 +156,8 @@ for (const cardId of ['smoke.weather.small', 'smoke.weather.medium', 'smoke.weat
     ],
   })
 }
+
+retainSmokeCards(bus)
 
 bus.retain('airquality.current', {
   index: 42,
@@ -322,6 +325,12 @@ GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
     print('neoshell: the gallery, run as a client, did not draw a tile for the catalog entry')
     System.exit(1)
   }
+  for (const [box, tooltip] of SMOKE_CARD_TOOLTIPS) {
+    if (!remoteTooltipShows(box, tooltip)) {
+      print(`neoshell: the card in .${box}, run as a client, did not draw "${tooltip}"`)
+      System.exit(1)
+    }
+  }
   if (!remoteTooltipShows('smoke-remote-dock', 'smoke-app')) {
     print('neoshell: the dock, run as a client, did not draw a tile for the open window')
     System.exit(1)
@@ -363,6 +372,7 @@ GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
 // proves the whole path.
 const REMOTE_CARDS: [string, string][] = [
   ['smoke-remote-weather', 'Smoke'],
+  ...SMOKE_CARD_TEXTS,
   // Got with Get and then replaced by a Changed signal from the "program".
   ['smoke-remote-external', SMOKE_EXTERNAL_TEXT],
   ['smoke-remote-reveal', 'Smoke Window'],

@@ -1601,6 +1601,47 @@ button.qs-row-action:hover {
   margin: 0;
 }
 
+/* ── picture gallery card ─────────────────────────────────────────────── */
+
+/* The pictures sit close to the card's edge: the card's 24px radius less its
+   6px padding is the tiles' own, so the curves stay concentric. */
+.card.picture-card {
+  padding: 6px;
+}
+
+.picture-tile {
+  border-radius: 18px;
+  background-color: alpha(#fafafa, 0.06);
+  transition: filter 180ms ease-out;
+}
+
+.picture-tile:hover {
+  filter: brightness(1.08);
+}
+
+/* Until its first picture arrives a tile breathes, so the card reads as
+   loading rather than empty. */
+.picture-tile.loading {
+  animation: picture-breathe 1.6s ease-in-out infinite alternate;
+}
+
+@keyframes picture-breathe {
+  from { background-color: alpha(#fafafa, 0.04); }
+  to   { background-color: alpha(#fafafa, 0.12); }
+}
+
+.picture-empty { padding: 14px; }
+
+.picture-link {
+  margin-top: 6px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.picture-link:hover { background-color: alpha(#fafafa, 0.08); }
+
 /* ── lock screen ──────────────────────────────────────────────────────── */
 
 /* A darkening gradient over the wallpaper, heaviest where the text sits. */

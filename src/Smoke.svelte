@@ -13,6 +13,7 @@
   import Weather from './extensions/weather/Weather.svelte'
   import AirQuality from './extensions/airquality/AirQuality.svelte'
   import LockSurface from './extensions/lock/LockSurface.svelte'
+  import SmokeCards from './SmokeCards.svelte'
   import SettingsWindow from './extensions/settings/SettingsWindow.svelte'
   import { MAX_UNIT_PX, sizePx, spanOf } from './extensions/neoshell/grid'
   import type { BluetoothState, NetworkState } from './extensions/quicksettings/types'
@@ -244,6 +245,7 @@
       <gtkbox width={960} height={540}>
         <LockSurface {bus} {registry} onunlock={() => {}} />
       </gtkbox>
+      <SmokeCards {bus} {registry} />
     </gtkbox>
   </gtkscrolledwindow>
 </gtkwindow>

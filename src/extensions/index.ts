@@ -33,6 +33,8 @@ import settingsViews from './settings/views.js'
 import statusViews from './status/views.js'
 import weatherViews from './weather/views.js'
 import airQualityViews from './airquality/views.js'
+import galleryBackend from './gallery/backend.js'
+import galleryViews from './gallery/views.js'
 
 // The extension registry. In the bun host an extension was a directory the
 // loader found by scanning for manifest.json and imported at runtime; one GJS
@@ -594,5 +596,45 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     },
     backend: airQualityBackend as Plugin.Object,
     views: airQualityViews,
+  },
+  // Pictures from a folder. The widget only holds file handles; thumbnails and
+  // "open" go through the backend.
+  gallery: {
+    manifest: {
+      id: 'gallery',
+      inject: ['bus', 'ui'],
+      widgets: [
+        {
+          type: 'gallery.card',
+          name: 'Gallery',
+          category: 'Photos',
+          icon: 'folder-pictures-symbolic',
+          description: 'Pictures from a folder, fading slowly from one to the next.',
+          sizes: ['small', 'medium', 'large'],
+          defaultSize: 'medium',
+        },
+      ],
+      settings: [
+        {
+          id: 'gallery',
+          title: 'Gallery',
+          icon: 'folder-pictures-symbolic',
+          view: 'gallery.settings',
+          order: 30,
+          group: 'shell',
+          keywords: ['pictures', 'photos', 'images', 'folder', 'slideshow'],
+        },
+      ],
+      client: {
+        permissions: {
+          subscribe: ['gallery.library'],
+          call: ['gallery:thumbnail', 'gallery:open', 'config:set'],
+          publish: ['settings:open'],
+          configKeys: ['gallery.*'],
+        },
+      },
+    },
+    backend: galleryBackend as Plugin.Object,
+    views: galleryViews,
   },
 }
