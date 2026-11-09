@@ -113,7 +113,7 @@ describe('classifyFailure', () => {
 
 describe('repositories', () => {
   const now = Date.parse('2026-03-15T12:00:00Z')
-  const commit = (sha: string, date: string, message: string) => ({
+  const commit = (sha: string, date: string, message: string): Record<string, unknown> => ({
     sha: `${sha}0000000`,
     commit: { message, author: { name: 'Ada', date } },
     author: { login: 'ada' },
