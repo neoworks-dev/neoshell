@@ -4,7 +4,6 @@
   import { monitorSizeOf } from '../../lib/placement'
   import { numberOf, recordOf, stringOf } from '../../lib/record'
   import { widgetTypeOfDrag } from './widgetDrag'
-  import { resolve } from '../../tree'
   import ContextMenu from './ContextMenu.svelte'
   import DesktopIcons from './DesktopIcons.svelte'
   import WidgetSlot from './WidgetSlot.svelte'
@@ -13,8 +12,8 @@
   import type { Point } from './grid'
   import { dragOf, pressOf, SECONDARY_BUTTON } from './gestures'
 
-  // The desktop: the background-layer view that owns everything behind the
-  // windows — the desktop folder's icons and the widget grid. There is one per
+  // The desktop: the bottom-layer view that owns everything on the wallpaper
+  // and behind the windows — the desktop folder's icons and the widget grid. There is one per
   // monitor it is placed on; only the main display's shows the folder's icons.
   // Icons and widgets share one grid, so this node also owns what spans both:
   // the rubber band that selects icons, the background context menu, and the
@@ -54,7 +53,6 @@
   // which counts as the main one.
   const monitor = $derived(stringOf(recordOf(args).monitor))
   const isMain = $derived(recordOf(args).mainMonitor !== false)
-  const WallpaperView = $derived(resolve(registry, 'neoshell.wallpaper', generation))
 
   $effect(() => {
     store.setMonitor(monitor, isMain)
@@ -343,18 +341,11 @@
   ondropleave={dragLeft}
   ondroptext={dropped}
 >
-  <!-- The wallpaper is the overlay's main child, so it is measured and fills
-       the surface: one surface per monitor instead of a wallpaper surface
-       under the desktop's. Everything else is an overlay child on top of it.
-       It is the host's view (it decodes images and plays video), reached
-       through the registry so a desktop run as a client embeds it. -->
-  {#if WallpaperView !== undefined}
-    <WallpaperView {bus} {registry} {args} id="wallpaper" />
-  {/if}
-
-  <!-- The background takes the rubber band and the menu. -->
+  <!-- The background takes the rubber band and the menu. It is the overlay's
+       main child, so it is measured and fills the surface; everything else is
+       an overlay child on top of it. The wallpaper is a surface of its own
+       below this one, which is what the cards' blur samples. -->
   <gtkpressable
-    overlay
     class="desktop-background"
     hexpand
     vexpand

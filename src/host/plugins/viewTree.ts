@@ -101,10 +101,22 @@ const DEFAULT_TREE: TreeNode[] = [
     },
   },
   {
+    id: 'wallpaper',
+    type: 'neoshell.wallpaper',
+    // Its own surface under the desktop's: the compositor blurs what is behind
+    // a surface, so the cards can only blur a wallpaper that is not part of
+    // theirs. The desktop above covers it and takes every click.
+    args: {
+      label: 'Wallpaper',
+      monitors: 'all',
+      layer: 'background',
+      anchors: ['top', 'bottom', 'left', 'right'],
+      keyboard: 'none',
+    },
+  },
+  {
     id: 'desktop',
     type: 'neoshell.desktop',
-    // The desktop draws the wallpaper itself, so there is one background
-    // surface per monitor.
     // Which widgets the desktop shows is config's answer, under widgets.<id>.
     // This list only seeds a desktop that has never been arranged: once
     // anything is written the seed is never consulted again, so removing a
@@ -112,12 +124,15 @@ const DEFAULT_TREE: TreeNode[] = [
     args: {
       label: 'Desktop',
       monitors: 'all',
-      layer: 'background',
+      layer: 'bottom',
       anchors: ['top', 'bottom', 'left', 'right'],
       // Widgets have their own settings, and a text field on a layer that
       // takes no keyboard focus cannot be typed into.
       keyboard: 'ondemand',
       widgetHost: true,
+      blur: true,
+      // Between the cards' shadow (0.35) and their fill (0.8).
+      blurIgnoreAlpha: 0.5,
       widgets: [
         { id: 'weather', type: 'weather.card', size: 'small' },
         { id: 'airquality', type: 'airquality.card', size: 'small' },
