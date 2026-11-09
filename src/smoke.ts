@@ -12,9 +12,10 @@ import { paintableOf, thumbnailHandle } from './host/paintables.js'
 import { ViewRegistry } from './host/plugins/views.js'
 import Smoke from './Smoke.svelte'
 import SmokeCard from './SmokeCard.svelte'
-import NookMedia from './extensions/neoshell/NookMedia.svelte'
-import NookCalendar from './extensions/neoshell/NookCalendar.svelte'
 import NotchSettings from './extensions/neoshell/NotchSettings.svelte'
+import { clientEventDetail, filesOfDrop } from './host/drops.js'
+import { registerFile } from './host/fileHandles.js'
+import { recordOf } from './lib/record.js'
 import { notchWidgetCatalog, settingsCatalog } from './host/plugins/extensions.js'
 
 // Builds every view in the shell once, in a plain window, and exits. `tsc`
@@ -52,8 +53,9 @@ bus.retain('widgets.catalog', {
 })
 
 // The Nook's widgets and the Settings window's tabs, from the real manifests.
-registry.register('neoshell.nook.media', NookMedia)
-registry.register('neoshell.nook.calendar', NookCalendar)
+// The Nook widgets run in the notch's client, which embeds them back.
+registry.register('neoshell.nook.media', remoteView('neoshell-notch', 'nookMedia'))
+registry.register('neoshell.nook.calendar', remoteView('neoshell-notch', 'nookCalendar'))
 registry.register('neoshell.notch.settings', NotchSettings)
 bus.retain('notch.catalog', { widgets: notchWidgetCatalog() })
 bus.retain('settings.catalog', { sections: settingsCatalog() })
@@ -209,6 +211,30 @@ bus.retain('quicksettings.account', {
   canScreenshot: true,
 })
 
+// The Tray as its backend publishes it: a file with a picture, and one that
+// has gone missing since it was dropped.
+const SMOKE_STYLESHEET = GLib.build_filenamev([GLib.get_current_dir(), 'style.css'])
+bus.retain('tray.files', {
+  files: [
+    {
+      file: registerFile(SMOKE_STYLESHEET),
+      path: SMOKE_STYLESHEET,
+      name: 'style.css',
+      icon: 'text-x-generic',
+      thumbnail: thumbnailHandle(SMOKE_AVATAR, 104),
+      missing: false,
+    },
+    {
+      file: registerFile('/nonexistent/neoshell-smoke.txt'),
+      path: '/nonexistent/neoshell-smoke.txt',
+      name: 'neoshell-smoke.txt',
+      icon: 'dialog-question-symbolic',
+      thumbnail: '',
+      missing: true,
+    },
+  ],
+})
+
 // Some surfaces render nothing but an input marker while closed, so the
 // gallery's tiles only exist once it is opened. The commands are retained
 // rather than published: the views subscribe from an effect, which runs after
@@ -216,6 +242,14 @@ bus.retain('quicksettings.account', {
 bus.retain('notch:open', {})
 bus.retain('settings:open', { section: 'notch' })
 bus.retain('widgets:gallery', { open: true })
+
+// What a client's ondrop sees is a token, never the paths; the token is what
+// leads a backend back to them.
+let dropResolved = false
+const dropDetail = recordOf(clientEventDetail('drop', { paths: [SMOKE_STYLESHEET], uris: [], image: '', x: 1, y: 2 }))
+void filesOfDrop(dropDetail.drop).then((files) => {
+  dropResolved = dropDetail.paths === undefined && files.length === 1 && files[0] === SMOKE_STYLESHEET
+})
 
 GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
   for (const [box, text] of REMOTE_CARDS) {
@@ -226,6 +260,14 @@ GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
   }
   if (!remotePictureShows('smoke-remote-controlcentre')) {
     print('neoshell: the Control Centre, run as a client, did not show the avatar handle')
+    System.exit(1)
+  }
+  if (!remotePictureShows('smoke-remote-tray')) {
+    print('neoshell: the Tray, run as a client, did not show the thumbnail handle')
+    System.exit(1)
+  }
+  if (!dropResolved) {
+    print('neoshell: a drop token did not lead back to the dropped files')
     System.exit(1)
   }
   print('neoshell: built every view — the tray, the gallery, both widget cards, the notch and settings — without error')
@@ -246,6 +288,10 @@ const REMOTE_CARDS: [string, string][] = [
   ['smoke-remote-agenda', new Intl.DateTimeFormat(undefined, { weekday: 'long' }).format(new Date())],
   ['smoke-remote-bar', 'smoke-one'],
   ['smoke-remote-controlcentre', 'Smoke Person'],
+  // The Nook's media widget: a view of the notch's client, embedded back
+  // into the notch through the host.
+  ['smoke-remote-notch', 'Smoke Test'],
+  ['smoke-remote-tray', 'style.css'],
   ['smoke-remote-bar', new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date())],
 ]
 

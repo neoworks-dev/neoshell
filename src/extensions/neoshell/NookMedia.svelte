@@ -2,34 +2,38 @@
   import { subscribeTo } from '../../lib/bus'
   import { recordOf, stringOf } from '../../lib/record'
   import type { ViewProps } from '../../host/plugins/views'
-  import { thumbnailTexture } from './trayFiles'
 
   // The Nook's media widget: sleeve, title, artist and transport for the
-  // current MPRIS player. Reads media.player itself, so the notch only places it.
+  // current MPRIS player. Reads media.player itself, so the notch only places
+  // it; the sleeve is media.artwork's picture handle.
 
   interface Track {
     status: string
     title: string
     artist: string
     album: string
-    art: string
   }
 
   const ART_SIZE = 88
-  const EMPTY_TRACK: Track = { status: '', title: '', artist: '', album: '', art: '' }
+  const EMPTY_TRACK: Track = { status: '', title: '', artist: '', album: '' }
 
   let { bus }: ViewProps = $props()
 
   let track = $state<Track>(EMPTY_TRACK)
+  let artHandle = $state('')
 
   const playing = $derived(track.status === 'Playing')
   const hasTrack = $derived(track.title !== '' && track.status !== 'Stopped')
-  // Decoded once per track, not on every render.
-  const artTexture = $derived(artTextureOf(track.art))
 
   $effect(() =>
     subscribeTo(bus, 'media.player', (message) => {
       track = trackOf(recordOf(message.data))
+    }),
+  )
+
+  $effect(() =>
+    subscribeTo(bus, 'media.artwork', (message) => {
+      artHandle = stringOf(recordOf(message.data).handle)
     }),
   )
 
@@ -39,24 +43,7 @@
       title: stringOf(record.title),
       artist: stringOf(record.artist),
       album: stringOf(record.album),
-      art: artSourceOf(stringOf(record.artUrl)),
     }
-  }
-
-  // Local art is decoded at sleeve size; remote art would have to be
-  // downloaded first and is skipped.
-  function artSourceOf(artUrl: string): string {
-    if (artUrl.startsWith('file://')) {
-      return decodeURIComponent(artUrl.slice('file://'.length))
-    }
-    return ''
-  }
-
-  function artTextureOf(art: string) {
-    if (art === '') {
-      return null
-    }
-    return thumbnailTexture(art, ART_SIZE * 2)
   }
 
   function playPauseIcon(isPlaying: boolean): string {
@@ -80,8 +67,8 @@
     homogeneous
     clip
   >
-    {#if artTexture !== null}
-      <gtkpicture paintable={artTexture} fit="cover" shrink width={ART_SIZE} height={ART_SIZE}></gtkpicture>
+    {#if artHandle !== ''}
+      <gtkpicture handle={artHandle} fit="cover" shrink width={ART_SIZE} height={ART_SIZE}></gtkpicture>
     {:else}
       <gtkicon icon="audio-x-generic-symbolic" size={28} halign="center" valign="center"></gtkicon>
     {/if}

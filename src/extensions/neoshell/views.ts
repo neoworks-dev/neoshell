@@ -2,19 +2,17 @@ import type { Plugin } from '@neoworks/extension-system'
 import { requireService } from '../../lib/services.js'
 import type { ViewRegistry } from '../../host/plugins/views.js'
 import { remoteView } from '../../host/clients/remoteView.js'
-import Notch from './Notch.svelte'
 import Dock from './Dock.svelte'
 import Wallpaper from './Wallpaper.svelte'
 import Desktop from './Desktop.svelte'
 import WidgetGallery from './WidgetGallery.svelte'
 import NotchSettings from './NotchSettings.svelte'
-import NookMedia from './NookMedia.svelte'
-import NookCalendar from './NookCalendar.svelte'
 
 // neoshell default views — the neoworks profile's surface set. Registration is
 // an effect, so a view type leaves the registry with the extension and the
 // shell drops the window that was showing it. The bar, the clock and the
-// battery run as the neoshell-bar client (clients/bar.ts).
+// battery run as the neoshell-bar client (clients/bar.ts); the notch and its
+// Nook widgets as neoshell-notch (clients/notch.ts).
 
 const plugin: Plugin.Object = {
   name: 'neoshell-views',
@@ -22,7 +20,7 @@ const plugin: Plugin.Object = {
   apply(context) {
     const ui = requireService<ViewRegistry>(context, 'ui')
     context.effect(() => ui.register('neoshell.topbar', remoteView('neoshell-bar', 'topbar')))
-    context.effect(() => ui.register('neoshell.notch', Notch))
+    context.effect(() => ui.register('neoshell.notch', remoteView('neoshell-notch', 'notch')))
     context.effect(() => ui.register('neoshell.clock', remoteView('neoshell-bar', 'clock')))
     context.effect(() => ui.register('neoshell.battery', remoteView('neoshell-bar', 'battery')))
     context.effect(() => ui.register('neoshell.dock', Dock))
@@ -30,8 +28,8 @@ const plugin: Plugin.Object = {
     context.effect(() => ui.register('neoshell.desktop', Desktop))
     context.effect(() => ui.register('neoshell.widgetgallery', WidgetGallery))
     context.effect(() => ui.register('neoshell.notch.settings', NotchSettings))
-    context.effect(() => ui.register('neoshell.nook.media', NookMedia))
-    context.effect(() => ui.register('neoshell.nook.calendar', NookCalendar))
+    context.effect(() => ui.register('neoshell.nook.media', remoteView('neoshell-notch', 'nookMedia')))
+    context.effect(() => ui.register('neoshell.nook.calendar', remoteView('neoshell-notch', 'nookCalendar')))
   },
 }
 

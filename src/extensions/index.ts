@@ -16,6 +16,7 @@ import pomodoroBackend from './pomodoro/backend.js'
 import pomodoroViews from './pomodoro/views.js'
 import quickShareBackend from './quickshare/backend.js'
 import filesBackend from './files/backend.js'
+import trayBackend from './tray/backend.js'
 import networkBackend from './network/backend.js'
 import bluetoothBackend from './bluetooth/backend.js'
 import weatherBackend from './weather/backend.js'
@@ -177,6 +178,10 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     manifest: { id: 'files', inject: ['bus'] },
     backend: filesBackend as Plugin.Object,
   },
+  tray: {
+    manifest: { id: 'tray', inject: ['bus'] },
+    backend: trayBackend as Plugin.Object,
+  },
   network: {
     manifest: { id: 'network', inject: ['bus'] },
     backend: networkBackend as Plugin.Object,
@@ -221,6 +226,42 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
             publish: ['status:toggle'],
             configKeys: [],
             embed: ['*.icon', 'neoshell.clock', 'neoshell.battery'],
+          },
+        },
+        // The notch and the Nook widgets it ships with. The Tray's files are
+        // the tray backend's; the client only holds their handles.
+        notch: {
+          permissions: {
+            subscribe: [
+              'notch.catalog',
+              'notch:open',
+              'notch:close',
+              'notch:toggle',
+              'island:show',
+              'island:dismiss',
+              'hypr.activewindow',
+              'system.volume',
+              'media.player',
+              'media.artwork',
+              'quickshare.state',
+              'tray.files',
+              'calendar.events',
+              'calendar.sources',
+            ],
+            call: [
+              'tray:*',
+              'quickshare:discover',
+              'quickshare:accept',
+              'quickshare:reject',
+              'quickshare:cancel',
+              'media:playPause',
+              'media:next',
+              'media:previous',
+              'config:set',
+            ],
+            publish: ['settings:open'],
+            configKeys: ['notch.nook', 'notch.openOn', 'quickshare.visibility'],
+            embed: ['neoshell.nook.*'],
           },
         },
       },
