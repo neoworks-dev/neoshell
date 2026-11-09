@@ -165,7 +165,10 @@ class Revealer {
 
   private async dispatchAll(dispatches: Dispatch[]): Promise<void> {
     for (const dispatch of dispatches) {
-      await this.bus.call('hypr:dispatch', dispatch, CALL_TIMEOUT_MS)
+      const reply = recordOf(await this.bus.call('hypr:dispatch', dispatch, CALL_TIMEOUT_MS))
+      if (reply.error !== undefined) {
+        console.warn(`reveal: ${dispatch.dispatcher} ${dispatch.arg} failed: ${stringOf(reply.error)}`)
+      }
     }
   }
 
