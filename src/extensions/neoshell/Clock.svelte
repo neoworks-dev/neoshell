@@ -1,10 +1,5 @@
 <script lang="ts">
-  import type { ViewProps } from '../../host/plugins/views'
-
-  // The bar clock. Clicking it toggles the quick settings tray, which is a
-  // sibling top-level view — the bar only announces the intent.
-
-  let { bus }: ViewProps = $props()
+  // The bar clock, a status item without a menu.
 
   // SpiderMonkey ships full ICU, so the formatters port from the webview
   // build unchanged.
@@ -28,21 +23,9 @@
       clearInterval(timer)
     }
   })
-
-  function toggleQuickSettings(): void {
-    bus.publish('quicksettings:toggle', {})
-  }
 </script>
 
-<gtkbutton
-  class="clock"
-  frame={false}
-  tooltip="Quick settings"
-  valign="center"
-  onclicked={toggleQuickSettings}
->
-  <gtkbox orientation="horizontal" spacing={8}>
-    <gtklabel class="clock-date">{DATE_FORMAT.format(now)}</gtklabel>
-    <gtklabel tabular>{TIME_FORMAT.format(now)}</gtklabel>
-  </gtkbox>
-</gtkbutton>
+<gtkbox class="clock" orientation="horizontal" spacing={8} valign="center">
+  <gtklabel class="clock-date">{DATE_FORMAT.format(now)}</gtklabel>
+  <gtklabel tabular>{TIME_FORMAT.format(now)}</gtklabel>
+</gtkbox>

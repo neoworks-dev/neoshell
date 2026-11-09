@@ -16,6 +16,7 @@
   import { Settings } from '../../lib/settings.svelte'
   import type { ViewProps } from '../../host/plugins/views'
   import { idOf, isDetached, nodesOf } from '../../tree'
+  import type { TreeNode } from '../../tree'
 
   // Settings → Displays: which monitor is the main one, and where each surface
   // of the view tree goes (lib/placement.ts). Detached nodes — the lock screen,
@@ -52,12 +53,19 @@
     }),
   )
 
+  // A node placed with another (args.placedWith) moves with it and has no
+  // placement of its own to choose.
   function surfacesOf(data: unknown): Surface[] {
-    const placed = nodesOf(data).filter((node) => idOf(node) !== '' && !isDetached(recordOf(node.args)))
+    const placed = nodesOf(data).filter((node) => isPlacedByItself(node))
     return placed.map((node) => {
       const args = recordOf(node.args)
       return { id: idOf(node), label: labelOf(args, idOf(node)), args }
     })
+  }
+
+  function isPlacedByItself(node: TreeNode): boolean {
+    const args = recordOf(node.args)
+    return idOf(node) !== '' && !isDetached(args) && stringOf(args.placedWith) === ''
   }
 
   function labelOf(args: Record<string, unknown>, fallback: string): string {

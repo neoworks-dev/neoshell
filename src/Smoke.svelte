@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { BusService } from './lib/bus'
   import type { ViewRegistry } from './host/plugins/views'
-  import Panel from './extensions/quicksettings/Panel.svelte'
+  import ControlCentre from './extensions/quicksettings/ControlCentre.svelte'
   import WifiPage from './extensions/quicksettings/WifiPage.svelte'
   import BluetoothPage from './extensions/quicksettings/BluetoothPage.svelte'
   import WidgetGallery from './extensions/neoshell/WidgetGallery.svelte'
@@ -96,11 +96,13 @@
 <gtkwindow title="neoshell smoke" default-width={1400} default-height={760}>
   <gtkscrolledwindow>
     <gtkbox orientation="horizontal" spacing={16} margin={16} valign="start">
-      <Panel {bus} {registry} args={{}} id="smoke.panel" />
-      <gtkbox class="panel" orientation="vertical" width={328} valign="start">
+      <gtkbox class="status-menu" orientation="vertical" valign="start">
+        <ControlCentre {bus} {registry} args={{ close: () => {} }} id="smoke.controlcentre" />
+      </gtkbox>
+      <gtkbox class="status-menu" orientation="vertical" width={328} valign="start">
         <WifiPage {bus} {networkState} {networks} onBack={() => {}} />
       </gtkbox>
-      <gtkbox class="panel" orientation="vertical" width={328} valign="start">
+      <gtkbox class="status-menu" orientation="vertical" width={328} valign="start">
         <BluetoothPage {bus} {bluetoothState} {devices} onBack={() => {}} />
       </gtkbox>
       <WidgetGallery {bus} {registry} args={{}} id="smoke.gallery" />

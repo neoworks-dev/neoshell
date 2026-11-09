@@ -145,12 +145,17 @@ bus.retain('bluetooth.devices', [
   { mac: '00:00:00:00:00:01', name: 'paired', connected: true, paired: true, icon: 'audio-headset' },
 ])
 
-// Both surfaces render nothing but an input marker while closed, so the
-// panel's tiles and the gallery's tiles only exist once they are opened. The
-// commands are retained rather than published: the views subscribe from an
-// effect, which runs after this module does, and only a retained topic
-// replays for a late subscriber.
-bus.retain('quicksettings:open', {})
+// Every Control Centre block shows only when its topic has data.
+bus.retain('network.wired', { available: true, connected: true, device: 'eth0', connection: 'Wired' })
+bus.retain('system.volume', { volume: 40, muted: false })
+bus.retain('system.powerprofile', { active: 'balanced', profiles: ['power-saver', 'balanced', 'performance'] })
+bus.retain('quickshare.state', { available: true, visibility: 'invisible', devices: [], transfers: [] })
+bus.retain('media.player', { title: 'Smoke Test', artist: 'neoshell', status: 'Playing', artUrl: '' })
+
+// Some surfaces render nothing but an input marker while closed, so the
+// gallery's tiles only exist once it is opened. The commands are retained
+// rather than published: the views subscribe from an effect, which runs after
+// this module does, and only a retained topic replays for a late subscriber.
 bus.retain('notch:open', {})
 bus.retain('settings:open', { section: 'notch' })
 bus.retain('widgets:gallery', { open: true })

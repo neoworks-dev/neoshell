@@ -1,22 +1,19 @@
 import type { Plugin } from '@neoworks/extension-system'
 import { requireService } from '../../lib/services.js'
 import type { ViewRegistry } from '../../host/plugins/views.js'
-import Panel from './Panel.svelte'
+import ControlCentre from './ControlCentre.svelte'
+import ControlCentreIcon from './ControlCentreIcon.svelte'
 
-// quicksettings views: the tray the clock opens, registered as
-// quicksettings.panel.
-//
-// The webview build also injected the extension's compiled stylesheet here,
-// once per webview document. There is one process and one GTK style provider
-// now, so the panel's rules live in the shell's stylesheet with everything
-// else and nothing has to be injected.
+// quicksettings views: the Control Centre status item — its bar icon and the
+// menu it opens.
 
 const plugin: Plugin.Object = {
   name: 'quicksettings-views',
   inject: ['ui', 'bus'],
   apply(context) {
     const ui = requireService<ViewRegistry>(context, 'ui')
-    context.effect(() => ui.register('quicksettings.panel', Panel))
+    context.effect(() => ui.register('quicksettings.icon', ControlCentreIcon))
+    context.effect(() => ui.register('quicksettings.menu', ControlCentre))
   },
 }
 

@@ -53,10 +53,6 @@ const DEFAULT_TREE: TreeNode[] = [
       centerGap: 320,
       blur: true,
     },
-    children: [
-      { type: 'neoshell.battery' },
-      { type: 'neoshell.clock' },
-    ],
   },
   {
     id: 'notch',
@@ -71,19 +67,18 @@ const DEFAULT_TREE: TreeNode[] = [
     },
   },
   {
-    id: 'quicksettings',
-    type: 'quicksettings.panel',
-    // The tray spans the output so a click anywhere outside the panel can
-    // dismiss it. A closed tray keeps the window's input region empty, so it
-    // neither takes input nor covers what is under it; the panel itself hangs
-    // below the bar at the right-hand end.
+    id: 'statusmenus',
+    type: 'status.menus',
+    // The window every status item's menu opens in. It spans the output so a
+    // click anywhere outside the menu can dismiss it; a closed host keeps its
+    // input region empty, so it neither takes input nor covers what is under
+    // it. It goes wherever the bar goes.
     args: {
-      label: 'Quick settings',
       layer: 'top',
       anchors: ['top', 'bottom', 'left', 'right'],
       keyboard: 'ondemand',
       offsetTop: 36,
-      offsetEnd: 6,
+      placedWith: 'bar',
       blur: true,
     },
   },

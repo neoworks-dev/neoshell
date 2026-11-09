@@ -58,11 +58,11 @@ window:not(.ui-window) {
 .topbar button,
 .dock button,
 .island button,
-.panel button,
+.status-menu button,
 .topbar button:backdrop,
 .dock button:backdrop,
 .island button:backdrop,
-.panel button:backdrop {
+.status-menu button:backdrop {
   background-image: none;
   background-color: transparent;
   border: none;
@@ -718,24 +718,30 @@ popover.dock-preview-popover > arrow {
   background-color: alpha(#fafafa, 0.1);
 }
 
-/* ── quick settings ───────────────────────────────────────────────────── */
+/* ── status area and its menus ────────────────────────────────────────── */
 
-/* rounded-3xl border border-base-content/8 bg-base-200 p-2.5 shadow-2xl
-   backdrop-blur — the blur is the compositor's, asked for by the node, so the
-   surface is translucent enough to show it. */
-.panel {
-  background-color: alpha(#0b0b0d, 0.9);
-  border: 1px solid alpha(#fafafa, 0.12);
-  border-radius: 24px;
-  padding: 10px;
+.topbar button.status-item {
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.topbar button.status-item:hover { background-color: alpha(#fafafa, 0.08); }
+.topbar button.status-item.status-item-open { background-color: alpha(#fafafa, 0.16); }
+
+/* The one box every status item's menu is drawn in. The blur is the
+   compositor's, asked for by the node, so the surface is translucent enough
+   to show it. */
+.status-menu {
+  background-color: alpha(#1c1c1f, 0.88);
+  border: 1px solid alpha(#fafafa, 0.1);
+  border-radius: 18px;
+  padding: 12px;
   box-shadow: 0 25px 50px alpha(#000000, 0.6);
   animation: qs-unroll 160ms ease-out;
 }
 
-/* The tray drops out from under the bar rather than fading, so it reads as
-   attached to the edge the clock lives on. The webview build clipped it open
-   with clip-path, which GTK has no equivalent for; a short slide reads the
-   same way and transform is one of the few GTK CSS properties that animates. */
+/* The menu drops out from under the bar rather than fading, so it reads as
+   attached to the icon it came from. */
 @keyframes qs-unroll {
   from {
     opacity: 0;
@@ -747,85 +753,102 @@ popover.dock-preview-popover > arrow {
   }
 }
 
-/* rounded-2xl bg-base-300/80, and the two states the tile computed inline. */
-.qs-tile {
-  background-color: alpha(#141416, 0.8);
+/* ── Control Centre ───────────────────────────────────────────────────── */
+
+/* The bar glyph: two small switches. */
+.cc-glyph-switch {
+  min-width: 14px;
+  min-height: 6px;
+  padding: 1px;
+  border: 1.5px solid currentColor;
+  border-radius: 5px;
+}
+
+.cc-glyph-knob {
+  min-width: 4px;
+  min-height: 4px;
+  border-radius: 2px;
+  background-color: currentColor;
+}
+
+.cc-avatar {
+  border-radius: 22px;
+  background-color: alpha(#fafafa, 0.12);
+}
+
+.cc-avatar-initial { font-size: 18px; font-weight: 600; }
+.cc-name { font-size: 14px; font-weight: 600; color: var(--base-content); }
+.cc-account { font-size: 11px; color: alpha(#fafafa, 0.5); }
+
+.cc-pill {
+  padding: 2px;
+  border-radius: 12px;
+  background-color: alpha(#fafafa, 0.08);
+}
+
+.status-menu button.cc-pill-button {
+  min-width: 34px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 10px;
+}
+
+.status-menu button.cc-pill-button:hover { background-color: alpha(#fafafa, 0.1); }
+.cc-pill-divider { margin: 6px 0; min-width: 1px; background-color: alpha(#fafafa, 0.12); }
+
+/* A block is one rounded surface: the connectivity pair, a tile, the
+   slider, the player. */
+.status-menu .cc-block,
+.status-menu button.cc-block {
+  padding: 10px;
+  border-radius: 14px;
+  background-color: alpha(#fafafa, 0.07);
+}
+
+.status-menu button.cc-tile:hover { background-color: alpha(#fafafa, 0.11); }
+.status-menu button.cc-row-text { padding: 0; }
+.status-menu button.cc-row-text:hover { opacity: 0.85; }
+
+.status-menu .cc-circle,
+.status-menu button.cc-circle {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
   border-radius: 16px;
-  transition: background-color 120ms;
-}
-
-.qs-tile:hover {
-  background-color: var(--base-300);
-}
-
-.qs-tile.on {
-  background-color: alpha(#60a5fa, 0.2);
-}
-
-.qs-tile.on:hover {
-  background-color: alpha(#60a5fa, 0.25);
-}
-
-/* bg-base-300/50 opacity-45 — GTK dims an insensitive widget itself, so this
-   only has to carry the flatter surface. */
-.qs-tile.off {
-  background-color: alpha(#141416, 0.5);
-}
-
-/* The tile's own padding lives on the buttons inside it, so the chevron's hit
-   area reaches the full height of the row. */
-.qs-tile-main {
-  padding: 0 0 0 10px;
-  border-radius: 16px;
-}
-
-button.qs-tile-open {
-  padding: 0 8px 0 4px;
-  border-radius: 16px;
-  color: alpha(#fafafa, 0.45);
-  transition: color 120ms;
-}
-
-button.qs-tile-open:hover {
+  background-color: alpha(#fafafa, 0.14);
   color: var(--base-content);
 }
 
-/* h-8 w-8 rounded-full bg-base-content/10 */
-.qs-badge {
-  background-color: alpha(#fafafa, 0.1);
-  color: alpha(#fafafa, 0.7);
-  border-radius: 16px;
-}
-
-.qs-badge.on {
+.status-menu .cc-circle.cc-circle-on,
+.status-menu button.cc-circle.cc-circle-on {
   background-color: var(--info);
-  color: var(--base-100);
+  color: #ffffff;
 }
 
-.qs-badge.off {
+.cc-title { font-size: 13px; font-weight: 600; color: var(--base-content); }
+.cc-subtitle { font-size: 11px; color: alpha(#fafafa, 0.5); }
+
+.cc-art {
+  border-radius: 8px;
   background-color: alpha(#fafafa, 0.1);
-  color: alpha(#fafafa, 0.6);
 }
 
-/* text-[12px] leading-tight font-medium */
-.qs-tile-title {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--base-content);
+.status-menu button.cc-media-button {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 16px;
 }
 
-/* text-[10px] leading-tight opacity-55 */
-.qs-tile-subtitle {
-  font-size: 10px;
-  color: alpha(#fafafa, 0.55);
+.status-menu button.cc-media-button:hover { background-color: alpha(#fafafa, 0.1); }
+
+.status-menu button.cc-power-item {
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 13px;
 }
 
-/* text-[9.5px] leading-[1.15], wrapping onto a second line rather than
-   cutting "Do not disturb" short. */
-.qs-tile-compact-label {
-  font-size: 10px;
-  color: var(--base-content);
-}
+.status-menu button.cc-power-item:hover { background-color: alpha(#fafafa, 0.1); }
 
 /* The slider was a range input whose track carried the fill as a gradient. A
    Gtk.Scale has the parts already: the trough is the pill, the highlight is
@@ -851,7 +874,7 @@ scale.qs-slider {
 .qs-slider highlight {
   min-height: 32px;
   border-radius: 16px;
-  background-color: var(--info);
+  background-color: #f4f4f5;
   background-image: none;
   border: none;
   margin: 0;
@@ -872,10 +895,11 @@ scale.qs-slider {
 
 /* Both spellings sit over the left end of the trough; only the button form
    takes a click, so only it gets a hover. */
+/* Dark, so it reads on the white fill it usually sits over. */
 button.qs-slider-icon,
 .qs-slider-lamp {
   min-width: 36px;
-  color: alpha(#fafafa, 0.8);
+  color: #3f3f46;
   padding: 0;
 }
 
@@ -884,61 +908,7 @@ button.qs-slider-icon {
 }
 
 button.qs-slider-icon:hover {
-  color: var(--base-content);
-}
-
-/* border-t border-base-content/10 */
-.qs-separator {
-  min-height: 1px;
-  background-color: alpha(#fafafa, 0.1);
-}
-
-.qs-footer {
-  padding: 2px 2px 0 2px;
-}
-
-/* rounded-full px-1.5 py-1 text-base-content/70 */
-button.qs-power-button {
-  padding: 4px 6px;
-  border-radius: 16px;
-  color: alpha(#fafafa, 0.7);
-}
-
-button.qs-power-button:hover {
-  background-color: alpha(#fafafa, 0.1);
-}
-
-/* px-1 text-[10.5px] tabular-nums text-base-content/60 */
-.qs-battery {
-  font-size: 11px;
-  padding: 0 4px;
-  color: alpha(#fafafa, 0.6);
-}
-
-/* rounded-2xl bg-base-300/70 p-1 */
-.qs-power-menu {
-  background-color: alpha(#141416, 0.7);
-  border-radius: 16px;
-  padding: 4px;
-}
-
-/* rounded-xl px-3 py-1.5 text-left text-[12px] */
-.qs-power-item {
-  padding: 6px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-}
-
-.qs-power-item:hover {
-  background-color: alpha(#fafafa, 0.1);
-}
-
-.qs-power-item.danger {
-  color: var(--error);
-}
-
-.qs-power-item.danger:hover {
-  background-color: alpha(#f87171, 0.15);
+  color: #0b0b0d;
 }
 
 /* ── quick settings: detail pages ─────────────────────────────────────── */

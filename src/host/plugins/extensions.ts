@@ -6,6 +6,7 @@ import type {
   ExtensionManifest,
   NotchWidgetDeclaration,
   SettingsDeclaration,
+  StatusItemDeclaration,
   WidgetDeclaration,
 } from '../../extensions/index.js'
 
@@ -32,6 +33,7 @@ import type {
 //
 //   settings.catalog  {sections: [{id, title, icon, view, order?, group?, keywords?}]}
 //   notch.catalog     {widgets: [{type, name, icon, defaultCells, minCells, maxCells}]}
+//   status.catalog    {items: [{id, label, icon, menu?, order?, when?}]}
 
 interface ExtensionEntry {
   id: string
@@ -56,6 +58,7 @@ export const extensionsPlugin: Plugin.Object = {
     context.effect(() => bus.retain('widgets.catalog', { widgets: widgetCatalog() }))
     context.effect(() => bus.retain('settings.catalog', { sections: settingsCatalog() }))
     context.effect(() => bus.retain('notch.catalog', { widgets: notchWidgetCatalog() }))
+    context.effect(() => bus.retain('status.catalog', { items: statusCatalog() }))
   },
 }
 
@@ -66,6 +69,11 @@ export function widgetCatalog(): WidgetDeclaration[] {
 export function settingsCatalog(): SettingsDeclaration[] {
   const sections = collect((manifest) => manifest.settings)
   return sections.sort((first, second) => orderOf(first) - orderOf(second))
+}
+
+export function statusCatalog(): StatusItemDeclaration[] {
+  const items = collect((manifest) => manifest.statusItems)
+  return items.sort((first, second) => orderOf(first) - orderOf(second))
 }
 
 export function notchWidgetCatalog(): NotchWidgetDeclaration[] {
@@ -83,11 +91,11 @@ function collect<T>(pick: (manifest: ExtensionManifest) => T[] | undefined): T[]
   return declarations
 }
 
-function orderOf(section: SettingsDeclaration): number {
-  if (section.order === undefined) {
+function orderOf(declaration: { order?: number }): number {
+  if (declaration.order === undefined) {
     return 0
   }
-  return section.order
+  return declaration.order
 }
 
 class ExtensionLoader {

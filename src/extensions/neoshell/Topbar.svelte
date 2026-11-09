@@ -1,7 +1,8 @@
 <script lang="ts">
   import { subscribeTo } from '../../lib/bus'
   import type { ViewProps } from '../../host/plugins/views'
-  import { recordOf } from '../../lib/record'
+  import { recordOf, stringOf } from '../../lib/record'
+  import StatusArea from '../status/StatusArea.svelte'
   import {
     activeIdOf,
     urgentAddressOf,
@@ -10,12 +11,12 @@
   } from './hypr'
   import type { WorkspaceEntry } from './hypr'
 
-  // The top bar: workspaces on the left, the configured children (battery,
-  // clock, …) on the right, and a reserved gap between them — the notch is a
-  // sibling top-level view floating over the bar's centre, so the bar must keep
-  // that span clear.
+  // The top bar: workspaces on the left, the status area (every extension's
+  // status items, then any configured children before it) on the right, and a
+  // reserved gap between them — the notch is a sibling top-level view floating
+  // over the bar's centre, so the bar must keep that span clear.
 
-  let { bus, args, children }: ViewProps = $props()
+  let { bus, registry, args, children }: ViewProps = $props()
 
   const centerGap = $derived(centerGapOf(args))
 
@@ -131,5 +132,6 @@
     halign="end"
   >
     {@render children?.()}
+    <StatusArea {bus} {registry} monitor={stringOf(recordOf(args).monitor)} />
   </gtkbox>
 </gtkcenterbox>

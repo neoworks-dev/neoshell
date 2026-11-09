@@ -4,6 +4,7 @@
   import { subscribeTo } from './lib/bus'
   import { Displays } from './lib/displays.svelte'
   import { DISPLAYS_KEY, connectorsFor, mainConnectorOf, placementOf } from './lib/placement'
+  import { stringOf } from './lib/record'
   import { Settings } from './lib/settings.svelte'
   import type { Bus } from './host/bus'
   import type { ViewRegistry } from './host/plugins/views'
@@ -72,13 +73,27 @@
 
   function windowsOf(list: TreeNode[], section: Record<string, unknown>, connectors: string[]): SurfaceWindow[] {
     const main = mainConnectorOf(section, connectors)
-    return list.flatMap((node, index) => windowsForNode(node, keyOf(node, index), section, connectors, main))
+    return list.flatMap((node, index) => {
+      const placement = placementFor(list, node, section)
+      return windowsForNode(node, keyOf(node, index), placement, connectors, main)
+    })
+  }
+
+  // args.placedWith names another node whose placement this one shares — the
+  // status menus go wherever the bar they open from goes.
+  function placementFor(list: TreeNode[], node: TreeNode, section: Record<string, unknown>): string {
+    const leaderId = stringOf(recordOf(node.args).placedWith)
+    const leader = list.find((candidate) => idOf(candidate) === leaderId)
+    if (leaderId === '' || leader === undefined) {
+      return placementOf(section, idOf(node), recordOf(node.args))
+    }
+    return placementOf(section, leaderId, recordOf(leader.args))
   }
 
   function windowsForNode(
     node: TreeNode,
     key: string,
-    section: Record<string, unknown>,
+    placement: string,
     connectors: string[],
     main: string,
   ): SurfaceWindow[] {
@@ -86,7 +101,6 @@
     if (isDetached(args)) {
       return [{ key, node, monitor: null }]
     }
-    const placement = placementOf(section, idOf(node), args)
     return connectorsFor(placement, connectors, main).map((connector) => ({
       key: `${key}@${connector}`,
       node: placedOn(node, args, connector, main),

@@ -16,6 +16,7 @@ import lockBackend from './lock/backend.js'
 import lockViews from './lock/views.js'
 import quicksettingsViews from './quicksettings/views.js'
 import settingsViews from './settings/views.js'
+import statusViews from './status/views.js'
 import weatherViews from './weather/views.js'
 import airQualityViews from './airquality/views.js'
 
@@ -64,6 +65,23 @@ export interface NotchWidgetDeclaration {
   maxCells: number
 }
 
+// An icon in the bar's status area. `icon` is the view drawn in the bar;
+// `menu`, when given, is the view a click opens, inside the dropdown box the
+// shell draws for every item. Both views get args {monitor}; the menu also
+// gets {close}, which dismisses it.
+export interface StatusItemDeclaration {
+  id: string
+  // What the item is, for people (tooltips, settings).
+  label: string
+  icon: string
+  menu?: string
+  // Lower sits further left; ties keep declaration order.
+  order?: number
+  // A retained topic the item waits for: until something publishes it — a
+  // battery on a laptop — the item is not shown.
+  when?: string
+}
+
 export interface ExtensionManifest {
   id: string
   inject?: string[]
@@ -71,6 +89,7 @@ export interface ExtensionManifest {
   widgets?: WidgetDeclaration[]
   settings?: SettingsDeclaration[]
   notchWidgets?: NotchWidgetDeclaration[]
+  statusItems?: StatusItemDeclaration[]
 }
 
 export interface ExtensionModule {
@@ -146,6 +165,10 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           keywords: ['widgets', 'nook', 'tray', 'quick share', 'receive', 'trusted'],
         },
       ],
+      statusItems: [
+        { id: 'battery', label: 'Battery', icon: 'neoshell.battery', order: 70, when: 'system.battery' },
+        { id: 'clock', label: 'Date and time', icon: 'neoshell.clock', order: 100 },
+      ],
       notchWidgets: [
         {
           type: 'neoshell.nook.media',
@@ -173,8 +196,19 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     views: lockViews,
   },
   quicksettings: {
-    manifest: { id: 'quicksettings', inject: ['bus', 'ui'] },
+    manifest: {
+      id: 'quicksettings',
+      inject: ['bus', 'ui'],
+      statusItems: [
+        { id: 'controls', label: 'Control Centre', icon: 'quicksettings.icon', menu: 'quicksettings.menu', order: 80 },
+      ],
+    },
     views: quicksettingsViews,
+  },
+  // The bar's status area and the window its menus open in.
+  status: {
+    manifest: { id: 'status', inject: ['bus', 'ui'] },
+    views: statusViews,
   },
   settings: {
     manifest: {
