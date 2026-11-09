@@ -17,6 +17,7 @@ export function gridFailure(): string | null {
     ['new icons did not flow down from the top-left, or a new widget from the top-right', flows(grid)],
     ['a pixel point from before the grid did not come back on its nearest cell', pixelPointsMigrate(grid)],
     ['a dragged item moved on screen before its drop', draggedStaysPut()],
+    ['a widget dragged in from the gallery did not push what was under it aside', incomingPushes()],
   ]
   const failed = checks.find(([, passed]) => !passed)
   if (failed === undefined) {
@@ -96,6 +97,20 @@ function flows(grid: Grid): boolean {
 function pixelPointsMigrate(grid: Grid): boolean {
   const near = { x: grid.origin.x + grid.pitch * 3 + 10, y: grid.origin.y + grid.pitch * 2 - 10 }
   return sameCell(nearestCell(grid, near, ICON), { column: 3, row: 2 })
+}
+
+function incomingPushes(): boolean {
+  const entry = { name: 'a', path: '/d/a', directory: false, icon: '', image: false, thumbnail: '' }
+  const layout = resolveLayout({
+    entries: [entry],
+    storedIcons: { '/d/a': { column: 0, row: 0 } },
+    instances: [],
+    viewport: VIEWPORT,
+    pins: new Map(),
+    incoming: { size: 'small', cell: { column: 0, row: 0 } },
+  })
+  const icon = layout.icons.get('/d/a')
+  return icon !== undefined && icon.x > layout.grid.origin.x && layout.landings.length === 1
 }
 
 // While pinned, the dragged widget is still drawn on its committed cell (the

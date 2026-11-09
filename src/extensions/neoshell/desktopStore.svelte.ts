@@ -1,4 +1,4 @@
-import { ICON_SPAN, clampCell, gridOf, nearestCell, sameCell, spanOf } from './grid'
+import { ICON_SPAN, clampCell, gridOf, nearestCell, sameCell, sizePx, spanOf } from './grid'
 import type { Cell, Grid, Point, Viewport } from './grid'
 import {
   entriesOf,
@@ -13,7 +13,7 @@ import {
   storedIconCellsOf,
   widgetKey,
 } from './desktopLayout'
-import type { DesktopEntry, Layout, WidgetPlacement, WidgetSeed } from './desktopLayout'
+import type { DesktopEntry, IncomingWidget, Layout, WidgetPlacement, WidgetSeed } from './desktopLayout'
 import { recordOf } from '../../lib/record.js'
 import { valueAt } from '../../lib/settings.svelte.js'
 import type { BusService as BusLike } from '../../lib/bus.js'
@@ -79,6 +79,7 @@ export class DesktopStore {
   private storedIcons = $state<Record<string, Cell>>({})
   // Replaced whole, never changed in place.
   private pins = $state<ReadonlyMap<string, Cell>>(NO_PINS)
+  private incoming = $state<IncomingWidget | undefined>(undefined)
   private storedWidgets = $state<Record<string, Record<string, unknown>> | null>(null)
   private seeds = $state<WidgetSeed[]>([])
   private folderLoaded = $state(false)
@@ -112,6 +113,7 @@ export class DesktopStore {
       instances: instancesOf(this.storedWidgets, this.seeds, this.grid),
       viewport: this.viewport,
       pins: this.pins,
+      incoming: this.incoming,
     }),
   )
 
@@ -239,6 +241,32 @@ export class DesktopStore {
     this.pins = NO_PINS
   }
 
+  /** A widget dragged in from the gallery is over `pointer`: it would land centred under it. */
+  previewIncoming(size: string, pointer: Point): void {
+    const cell = this.incomingCellAt(size, pointer)
+    const current = this.incoming
+    if (current !== undefined && current.size === size && sameCell(current.cell, cell)) {
+      return
+    }
+    this.incoming = { size, cell }
+  }
+
+  clearIncoming(): void {
+    this.incoming = undefined
+  }
+
+  /** The dragged-in widget is let go over `pointer`. */
+  dropIncoming(type: string, size: string, pointer: Point): string {
+    const cell = this.incomingCellAt(size, pointer)
+    this.incoming = undefined
+    return this.addWidgetAt(type, size, cell)
+  }
+
+  private incomingCellAt(size: string, pointer: Point): Cell {
+    const box = sizePx(this.grid.unit, spanOf(size))
+    return nearestCell(this.grid, { x: pointer.x - box.width / 2, y: pointer.y - box.height / 2 }, spanOf(size))
+  }
+
   /** The cell a widget dragged so its origin is at `point` would take. */
   widgetCellAt(id: string, point: Point): Cell | undefined {
     const placement = this.layout.widgets.get(id)
@@ -287,12 +315,22 @@ export class DesktopStore {
   // and lands there like any drop; one added without one gathers with the
   // other widgets from the top-right.
   addWidget(type: string, size: string, point?: Point): string {
+    if (point !== undefined) {
+      return this.addWidgetAt(type, size, nearestCell(this.grid, point, spanOf(size)))
+    }
+    return this.writeNewWidget(type, size)
+  }
+
+  private addWidgetAt(type: string, size: string, cell: Cell): string {
+    const id = this.writeNewWidget(type, size)
+    this.commitDrop(new Map([[widgetKey(id), cell]]))
+    return id
+  }
+
+  private writeNewWidget(type: string, size: string): string {
     const current = this.instanceRecords()
     const id = nextWidgetId(type, new Set(Object.keys(current)))
     this.writeWidgets({ ...current, [id]: { type, size, locked: false } })
-    if (point !== undefined) {
-      this.commitDrop(new Map([[widgetKey(id), nearestCell(this.grid, point, spanOf(size))]]))
-    }
     return id
   }
 

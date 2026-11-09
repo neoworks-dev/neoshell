@@ -62,7 +62,17 @@ export interface LayoutInput {
   viewport: Viewport
   // Cells the dragged items would drop on, by item key.
   pins: ReadonlyMap<string, Cell>
+  // A widget being dragged in from the gallery: not on the desktop yet, but
+  // what is under it moves aside all the same.
+  incoming?: IncomingWidget
 }
+
+export interface IncomingWidget {
+  size: string
+  cell: Cell
+}
+
+const INCOMING_KEY = 'incoming'
 
 export interface Layout {
   grid: Grid
@@ -89,8 +99,9 @@ export function resolveLayout(input: LayoutInput): Layout {
   const iconSize = sizePx(grid.unit, ICON_SPAN)
   const items = gridItemsOf(input)
   const cells = arrange(grid, items, new Map())
-  const droppedCells = droppedArrangement(grid, items, input.pins, cells)
-  const shown = shownCells(cells, droppedCells, input.pins)
+  const pins = pinsWithIncoming(input)
+  const droppedCells = droppedArrangement(grid, itemsWithIncoming(items, input.incoming), pins, cells)
+  const shown = shownCells(cells, droppedCells, pins)
   return {
     grid,
     iconSize,
@@ -98,8 +109,22 @@ export function resolveLayout(input: LayoutInput): Layout {
     droppedCells,
     icons: iconPoints(input.entries, grid, shown),
     widgets: widgetPlacements(input.instances, grid, shown),
-    landings: landingsOf(items, grid, input.pins, droppedCells),
+    landings: landingsOf(itemsWithIncoming(items, input.incoming), grid, pins, droppedCells),
   }
+}
+
+function pinsWithIncoming(input: LayoutInput): ReadonlyMap<string, Cell> {
+  if (input.incoming === undefined) {
+    return input.pins
+  }
+  return new Map([...input.pins, [INCOMING_KEY, input.incoming.cell]])
+}
+
+function itemsWithIncoming(items: GridItem[], incoming: IncomingWidget | undefined): GridItem[] {
+  if (incoming === undefined) {
+    return items
+  }
+  return [...items, { key: INCOMING_KEY, span: spanOf(incoming.size), flow: 'widgets' }]
 }
 
 function gridItemsOf(input: LayoutInput): GridItem[] {

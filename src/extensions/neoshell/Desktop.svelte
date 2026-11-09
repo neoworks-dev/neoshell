@@ -2,7 +2,8 @@
   import { subscribeTo } from '../../lib/bus'
   import type { ViewProps } from '../../host/plugins/views'
   import { monitorSizeOf } from '../../lib/placement'
-  import { recordOf, stringOf } from '../../lib/record'
+  import { numberOf, recordOf, stringOf } from '../../lib/record'
+  import { widgetTypeOfDrag } from './widgetDrag'
   import { resolve } from '../../tree'
   import ContextMenu from './ContextMenu.svelte'
   import DesktopIcons from './DesktopIcons.svelte'
@@ -44,6 +45,7 @@
   // The release that ends a rubber band also arrives as a press on the
   // background, which must not throw the selection the band just made away.
   let bandMoved = false
+  let incoming: { type: string; size: string } | null = null
   // The registry is outside Svelte's reactivity, so a widget provider that
   // registers after the desktop is up is picked up by bumping this.
   let generation = $state(0)
@@ -96,6 +98,13 @@
   $effect(() =>
     subscribeTo(bus, 'widgets:gallery', (message) => {
       store.editing = recordOf(message.data).open === true
+    }),
+  )
+
+  // The widget the gallery is dragging, if any (widgetDrag.ts).
+  $effect(() =>
+    subscribeTo(bus, 'widgets:dragging', (message) => {
+      applyDragging(recordOf(message.data))
     }),
   )
 
@@ -278,6 +287,43 @@
     void bus.call('desktop:newfolder', {}, CALL_TIMEOUT_MS)
   }
 
+  function applyDragging(request: Record<string, unknown>): void {
+    const type = stringOf(request.type)
+    if (type === '') {
+      incoming = null
+      store.clearIncoming()
+      return
+    }
+    incoming = { type, size: stringOf(request.size) }
+  }
+
+  // The gallery's drag is over this desktop: what is under it moves aside.
+  function dragOver(event: { detail: unknown }): void {
+    if (incoming === null) {
+      return
+    }
+    store.previewIncoming(incoming.size, pointOfDrop(event.detail))
+  }
+
+  function dragLeft(): void {
+    store.clearIncoming()
+  }
+
+  function dropped(event: { detail: unknown }): void {
+    const detail = recordOf(event.detail)
+    const type = widgetTypeOfDrag(stringOf(detail.text))
+    if (incoming === null || type !== incoming.type) {
+      store.clearIncoming()
+      return
+    }
+    store.dropIncoming(type, incoming.size, pointOfDrop(detail))
+  }
+
+  function pointOfDrop(detail: unknown): Point {
+    const record = recordOf(detail)
+    return { x: numberOf(record.x, 0), y: numberOf(record.y, 0) }
+  }
+
   // A widget's landing is drawn with its own corners, an icon's with a cell's.
   function landingClass(width: number): string {
     if (width > store.layout.iconSize.width) {
@@ -287,7 +333,16 @@
   }
 </script>
 
-<gtkoverlay class="desktop" hexpand vexpand>
+<!-- The drop target is the overlay itself, so a drag over a widget or an
+     icon still reaches it. -->
+<gtkoverlay
+  class="desktop"
+  hexpand
+  vexpand
+  ondropmove={dragOver}
+  ondropleave={dragLeft}
+  ondroptext={dropped}
+>
   <!-- The wallpaper is the overlay's main child, so it is measured and fills
        the surface: one surface per monitor instead of a wallpaper surface
        under the desktop's. Everything else is an overlay child on top of it.
