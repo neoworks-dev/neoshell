@@ -7,7 +7,8 @@ import { spawn } from "node:child_process";
 import { watch } from "node:fs";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
-import { buildOptions } from "@neoworks/svelte-gtk4/build.mjs";
+import { buildOptions, clientBuildOptions } from "@neoworks/svelte-gtk4/build.mjs";
+import { clientEntries } from "./clients.mjs";
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url));
 
@@ -38,6 +39,13 @@ options.plugins.push(restartOnBuild);
 
 const context = await esbuild.context(options);
 await context.watch();
+
+// A rebuilt client bundle needs no restart: the shell watches the file and
+// restarts only that client.
+for (const client of clientEntries()) {
+  const clientContext = await esbuild.context(clientBuildOptions(client));
+  await clientContext.watch();
+}
 
 // Editors save by replacing the file, which ends a watch on the file itself,
 // so the directory is watched instead.
