@@ -100,8 +100,16 @@ bus.retain('hypr.monitors', [{ width: 1920, height: 1080 }])
 // The bar's workspaces and status items: the clock is the bar client's own
 // view, embedded back into it through the host.
 bus.retain('hypr.workspaces', [{ id: 1, name: 'smoke-one', windows: 1 }, { id: 2, name: '2', windows: 0 }])
-bus.retain('status.catalog', { items: [{ id: 'clock', label: 'Date and time', icon: 'neoshell.clock', order: 100 }] })
+// The pomodoro's icon is another client's view, reached through the bar's
+// "*.icon" embed permission.
+bus.retain('status.catalog', {
+  items: [
+    { id: 'pomodoro', label: 'Pomodoro', icon: 'pomodoro.icon', order: 50 },
+    { id: 'clock', label: 'Date and time', icon: 'neoshell.clock', order: 100 },
+  ],
+})
 registry.register('neoshell.clock', remoteView('neoshell-bar', 'clock'))
+registry.register('pomodoro.icon', remoteView('pomodoro', 'icon'))
 bus.retain('calendar.sources', {
   sources: [{ id: 'cal-smoke', name: 'Smoke', status: 'ok', message: '', eventCount: 2 }],
 })
@@ -287,6 +295,7 @@ const REMOTE_CARDS: [string, string][] = [
   // out as the host's own Intl writes it.
   ['smoke-remote-agenda', new Intl.DateTimeFormat(undefined, { weekday: 'long' }).format(new Date())],
   ['smoke-remote-bar', 'smoke-one'],
+  ['smoke-remote-bar', '20:34'],
   ['smoke-remote-controlcentre', 'Smoke Person'],
   // The Nook's media widget: a view of the notch's client, embedded back
   // into the notch through the host.

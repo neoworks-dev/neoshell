@@ -16,7 +16,8 @@ export interface ClientPermissions {
   // Config keys it may read and `config:set` may write, as patterns. A client
   // with any may subscribe to `config`, and sees only these keys of it.
   configKeys: string[]
-  // View types it may embed with <gtkembed>, as patterns.
+  // View types it may embed with <gtkembed>: the bus's patterns, or a
+  // leading "*" for any prefix — "*.icon" is every extension's icon view.
   embed?: string[]
 }
 
@@ -35,7 +36,15 @@ export function mayEmbed(permissions: ClientPermissions, view: string): boolean 
   if (permissions.embed === undefined || view.includes('*')) {
     return false
   }
-  return permissions.embed.some((allowed) => matchesPattern(allowed, view))
+  return permissions.embed.some((allowed) => matchesViewPattern(allowed, view))
+}
+
+function matchesViewPattern(allowed: string, view: string): boolean {
+  if (!allowed.startsWith('*')) {
+    return matchesPattern(allowed, view)
+  }
+  const suffix = allowed.slice(1)
+  return view.length > suffix.length && view.endsWith(suffix)
 }
 
 export function maySubscribe(permissions: ClientPermissions, pattern: string): boolean {
