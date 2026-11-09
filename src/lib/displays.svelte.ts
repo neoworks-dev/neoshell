@@ -54,13 +54,18 @@ function displaysOf(model: Gio.ListModel): Display[] {
   return displays
 }
 
+// Make and model first: the compositor's description repeats the connector
+// and adds the serial number.
 function descriptionOf(monitor: Gdk.Monitor): string {
-  const description = monitor.get_description()
-  if (description !== null && description !== '') {
-    return description
-  }
   const parts = [monitor.get_manufacturer(), monitor.get_model()].filter(
     (part): part is string => part !== null && part !== '',
   )
-  return parts.join(' ')
+  if (parts.length > 0) {
+    return parts.join(' ')
+  }
+  const description = monitor.get_description()
+  if (description === null) {
+    return ''
+  }
+  return description
 }

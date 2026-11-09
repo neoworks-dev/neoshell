@@ -1522,14 +1522,63 @@ button.qs-row-action:hover {
 
 /* ── settings window ──────────────────────────────────────────────────── */
 
-/* The window and its controls are @neoworks/gtk-ui; these are the pages'
-   own pieces, on the same --ui-* tokens so they follow light and dark. */
-.settings-content { margin: 4px 24px 28px 24px; }
+/* The window and its controls are @neoworks/gtk-ui; these tune them to a
+   macOS settings pane and add the pages' own pieces, on the same --ui-*
+   tokens so they follow light and dark. */
+
+/* The sidebar floats inset from the window's edges as a rounded panel. */
+box.settings-sidebar { padding: 8px 0 8px 8px; }
+box.settings-sidebar:only-child { padding: 8px; }
+box.settings-sidebar box.ui-drawer {
+  padding: 10px 8px;
+  border-radius: 14px;
+  border: 1px solid var(--ui-line);
+  background-color: var(--ui-sunken);
+}
+.settings-search { margin-bottom: 10px; }
+box.settings-sidebar box.ui-drawer box.ui-search { background-color: var(--ui-hover); border-radius: 8px; }
+
+box.settings-sidebar button.ui-drawer-item {
+  min-height: 30px;
+  padding: 0 6px;
+  border-radius: 8px;
+}
+
+/* Each section's icon on a filled grey tile, white glyph. Neutral: the tones
+   are for status, not for telling sections apart. */
+box.settings-sidebar box.ui-icon-circle {
+  min-width: 22px;
+  min-height: 22px;
+  border-radius: 6px;
+  background-image: linear-gradient(var(--ui-grey-9), var(--ui-grey-11));
+  color: #ffffff;
+}
+
+box.settings-sidebar button.ui-drawer-item.ui-drawer-item-active box.ui-icon-circle {
+  background-image: none;
+  background-color: alpha(#ffffff, 0.22);
+}
+
+box.settings-main box.ui-top-app-bar { min-height: 52px; padding: 0 18px; }
+box.settings-history { margin-right: 6px; }
+
 /* Grouped like a macOS settings pane: pages space their children 8px apart,
    so a heading sits close above its card, and a heading after the first
    stands the group apart from the one before. */
+.settings-content { margin: 4px 24px 28px 24px; }
 .settings-content > box.ui-section-header:not(:first-child) { margin-top: 18px; }
-.settings-search { margin-bottom: 8px; }
+.settings-content label.ui-section-title { font-size: var(--ui-text-body); font-weight: 700; }
+
+.settings-content box.ui-list.ui-list-card { border-radius: 12px; }
+
+/* Rows sit inside the card's side padding, so the dividers between them are
+   inset from its edges. */
+.settings-content box.ui-list.ui-list-card > .ui-list-row {
+  min-height: 40px;
+  margin: 0 12px;
+  padding: 4px 0;
+}
+
 .settings-missing { color: var(--ui-text-muted); }
 label.settings-hint { color: var(--ui-text-muted); font-size: var(--ui-text-caption); }
 

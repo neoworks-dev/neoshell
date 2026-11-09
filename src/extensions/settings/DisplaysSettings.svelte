@@ -80,7 +80,7 @@
     if (display.description === '') {
       return { value: display.connector, label: display.connector }
     }
-    return { value: display.connector, label: `${display.connector} — ${display.description}` }
+    return { value: display.connector, label: `${display.description} (${display.connector})` }
   }
 
   function setMain(connector: string): void {
