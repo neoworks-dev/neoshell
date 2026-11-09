@@ -11,7 +11,6 @@ import { remoteView } from './host/clients/remoteView.js'
 import { paintableOf, thumbnailHandle } from './host/paintables.js'
 import { ViewRegistry } from './host/plugins/views.js'
 import Smoke from './Smoke.svelte'
-import SmokeCard from './SmokeCard.svelte'
 import NotchSettings from './extensions/neoshell/NotchSettings.svelte'
 import { clientEventDetail, filesOfDrop } from './host/drops.js'
 import { registerFile } from './host/fileHandles.js'
@@ -39,13 +38,15 @@ setPaintableResolver(paintableOf)
 
 // The gallery lists what the catalog holds and previews each entry with the
 // registered view for its type, so a catalog with no provider behind it would
-// build the empty branch and nothing else.
-registry.register('smoke.card', SmokeCard)
+// build the empty branch and nothing else. It runs as a client and embeds the
+// weather card's own client for the preview, which only "@widgets" in its
+// permissions lets it do.
+registry.register('weather.card', remoteView('weather', 'card'))
 bus.retain('widgets.catalog', {
   widgets: [
     {
-      type: 'smoke.card',
-      name: 'Smoke card',
+      type: 'weather.card',
+      name: 'Smoke weather',
       category: 'Smoke',
       description: 'a widget to preview',
       sizes: ['small'],
@@ -125,8 +126,8 @@ bus.retain('calendar.events', {
 
 // The two widget cards, with the series the medium and large sizes draw —
 // their bar arithmetic only runs once there is something to scale.
-for (const size of ['small', 'medium', 'large']) {
-  bus.retain(`weather.current/smoke.weather.${size}`, {
+for (const cardId of ['smoke.weather.small', 'smoke.weather.medium', 'smoke.weather.large', 'preview:weather.card']) {
+  bus.retain(`weather.current/${cardId}`, {
     place: 'Smoke',
     temperature: 17,
     unit: '°C',
@@ -342,6 +343,8 @@ const REMOTE_CARDS: [string, string][] = [
   ['smoke-remote-notch', 'Smoke Test'],
   ['smoke-remote-tray', 'style.css'],
   ['smoke-remote-desktop', 'Smoke Folder'],
+  ['smoke-remote-gallery', 'Smoke weather'],
+  ['smoke-remote-gallery', 'Smoke'],
   ['smoke-remote-bar', new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date())],
 ]
 

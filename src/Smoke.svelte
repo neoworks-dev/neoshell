@@ -10,7 +10,6 @@
   import PomodoroIcon from './extensions/pomodoro/PomodoroIcon.svelte'
   import WifiPage from './extensions/quicksettings/WifiPage.svelte'
   import BluetoothPage from './extensions/quicksettings/BluetoothPage.svelte'
-  import WidgetGallery from './extensions/neoshell/WidgetGallery.svelte'
   import Weather from './extensions/weather/Weather.svelte'
   import AirQuality from './extensions/airquality/AirQuality.svelte'
   import LockSurface from './extensions/lock/LockSurface.svelte'
@@ -32,6 +31,7 @@
   const RemoteNotch = remoteView('neoshell-notch', 'notch')
   const RemoteDock = remoteView('neoshell-dock', 'dock')
   const RemoteDesktop = remoteView('neoshell-desktop', 'desktop')
+  const RemoteGallery = remoteView('neoshell-gallery', 'gallery')
 
   // The smoke harness's markup: every view added for the quick settings tray
   // and the widget gallery, built once in a plain window.
@@ -129,7 +129,9 @@
       <gtkbox class="status-menu" orientation="horizontal" valign="start">
         <RunCatIcon {bus} {registry} args={{}} id="smoke.runcat.icon" />
       </gtkbox>
-      <WidgetGallery {bus} {registry} args={{}} id="smoke.gallery" />
+      <gtkbox class="smoke-remote-gallery" valign="start">
+        <RemoteGallery {bus} {registry} args={{}} id="smoke.gallery" />
+      </gtkbox>
 
       <!-- The password prompt, the connection details and the power menu are
            reached by clicking, and their state belongs to a component this

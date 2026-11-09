@@ -333,6 +333,15 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
             embed: ['neoshell.wallpaper', '@widgets'],
           },
         },
+        gallery: {
+          permissions: {
+            subscribe: ['widgets:gallery', 'widgets.catalog', 'hypr.monitors'],
+            call: [],
+            publish: ['widgets:gallery', 'widgets:add'],
+            configKeys: [],
+            embed: ['@widgets'],
+          },
+        },
       },
       notchWidgets: [
         {
