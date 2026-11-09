@@ -50,28 +50,32 @@
   }
 </script>
 
-<gtkbox
+<!-- A scrolled window that never scrolls: unlike a box, it asks for the size
+     it is given instead of its child's, which is still the unscaled card. -->
+<gtkscrolledwindow
   class="gallery-preview"
-  width={width}
-  height={Math.round(box.height * scale)}
+  hscroll="external"
+  vscroll="external"
+  min-content-width={width}
+  max-content-width={width}
+  min-content-height={Math.round(box.height * scale)}
+  max-content-height={Math.round(box.height * scale)}
+  frame={false}
   halign="start"
   valign="start"
-  clip
 >
   {#if View !== undefined}
-    <gtkbox
-      width={box.width}
-      height={box.height}
-      halign="start"
-      valign="start"
-      css={scaleCss(scale, box)}
-    >
-      <View
-        {bus}
-        {registry}
-        args={{ size, width: box.width, height: box.height }}
-        id={`preview:${type}`}
-      />
-    </gtkbox>
+    <!-- Held to the card's design width, the way the desktop's slot holds
+         it, so wrapping text wraps and the transform's arithmetic holds. -->
+    <gtkclamp maximum={box.width} halign="start" valign="start" css={scaleCss(scale, box)}>
+      <gtkbox width={box.width} height={box.height}>
+        <View
+          {bus}
+          {registry}
+          args={{ size, width: box.width, height: box.height }}
+          id={`preview:${type}`}
+        />
+      </gtkbox>
+    </gtkclamp>
   {/if}
-</gtkbox>
+</gtkscrolledwindow>

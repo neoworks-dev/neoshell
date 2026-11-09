@@ -675,7 +675,7 @@ popover.dock-preview-popover > arrow {
 .widget-remove {
   min-width: 22px;
   min-height: 22px;
-  margin: 6px;
+  margin: 2px;
   padding: 0;
   border-radius: 999px;
   background-color: alpha(#3a3a3c, 0.95);
@@ -1279,9 +1279,13 @@ button.qs-row-action:hover {
   color: #fafafa;
 }
 
-.gallery-category.active .gallery-category-icon {
-  background-color: #0a84ff;
-}
+.gallery-category-icon.all { background-color: #8e8e93; }
+.gallery-category-icon.tone-0 { background-color: #0a84ff; }
+.gallery-category-icon.tone-1 { background-color: #30d158; }
+.gallery-category-icon.tone-2 { background-color: #ff9f0a; }
+.gallery-category-icon.tone-3 { background-color: #ff453a; }
+.gallery-category-icon.tone-4 { background-color: #bf5af2; }
+.gallery-category-icon.tone-5 { background-color: #64d2ff; }
 
 .gallery-body {
   padding: 18px 20px;
