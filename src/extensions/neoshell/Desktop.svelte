@@ -35,7 +35,11 @@
 
   const store = new DesktopStore(bus)
 
-  let band = $state<{ x: number; y: number; width: number; height: number } | null>(null)
+  // The band is drawn by the host (`banded-by`); this is the same rectangle,
+  // kept to select what it covers.
+  const instanceId = $props.id()
+  const bandGroup = `desktop-band-${instanceId}`
+  let band: { x: number; y: number; width: number; height: number } | null = null
   // The release that ends a rubber band also arrives as a press on the
   // background, which must not throw the selection the band just made away.
   let bandMoved = false
@@ -300,6 +304,8 @@
     hexpand
     vexpand
     input
+    carry={bandGroup}
+    carry-threshold={0}
     onpress={handlePress}
     ondragstart={startBand}
     ondragmove={moveBand}
@@ -328,18 +334,9 @@
     <DesktopIcons {bus} {store} />
   {/if}
 
-  {#if band !== null}
-    <gtkbox
-      overlay
-      class="rubber-band"
-      halign="start"
-      valign="start"
-      margin-start={band.x}
-      margin-top={band.y}
-      width={band.width}
-      height={band.height}
-    ></gtkbox>
-  {/if}
+  <!-- The background covers the overlay from its origin, so the drag's own
+       coordinates are the band's. -->
+  <gtkbox overlay class="rubber-band" halign="start" valign="start" banded-by={bandGroup}></gtkbox>
 
   {#if store.menu !== null}
     <ContextMenu

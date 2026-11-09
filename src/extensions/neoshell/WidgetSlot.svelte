@@ -5,17 +5,18 @@
   import type { Point, Rect, Size } from './freeform'
   import type { DesktopStore, MenuItem, WidgetPlacement } from './desktopStore.svelte'
   import { dragOf, pressOf, SECONDARY_BUTTON } from './gestures'
-  import { glide } from './glide'
-  import type { GlideStop } from './glide'
 
   // One widget on the desktop: the registered view for its type, placed by the
   // store and draggable unless it or the desktop is locked.
   //
   // A drag lifts the widget and lets it follow the pointer exactly, while a
   // placeholder marks where it would settle; on release it glides into that
-  // spot — or back to where it came from when the spot is taken.
+  // spot — or back to where it came from when the spot is taken. The
+  // following and the gliding are the host's (`carry`, `glide`): this view
+  // only says where the widget belongs.
 
   const DRAG_THRESHOLD_PX = 4
+  const GLIDE_MS = 180
 
   let {
     placement,
@@ -33,28 +34,27 @@
     onpreview: (point: Point | null, box: Size, allowed: boolean) => void
   } = $props()
 
-  // Where the widget is drawn while it is away from its point: under the
-  // pointer during a drag, then along the glide back to a point.
-  let loosePoint = $state<Point | null>(null)
+  const instanceId = $props.id()
+  const carryGroup = `widget-slot-${instanceId}`
+
   let moving = $state(false)
   let dragging = false
-  let stopGlide: GlideStop = () => {}
 
   // Reading `generation` is what re-resolves the type when a widget provider's
   // views register after the desktop is already up.
   const View = $derived(viewFor(placement.type, generation))
-  const point = $derived(shownPoint(placement, loosePoint))
   const slotClass = $derived(slotClassOf(moving))
+  const carry = $derived(carryOf(store.widgetDraggable(placement.id)))
 
   function viewFor(type: string, _generation: number): ViewComponent | undefined {
     return registry.resolve(type)
   }
 
-  function shownPoint(current: WidgetPlacement, loose: Point | null): Point {
-    if (loose === null) {
-      return current.point
+  function carryOf(draggable: boolean): string {
+    if (draggable) {
+      return carryGroup
     }
-    return loose
+    return ''
   }
 
   function slotClassOf(isMoving: boolean): string {
@@ -73,74 +73,38 @@
   }
 
   function startDrag(): void {
-    if (!store.widgetDraggable(placement.id)) {
-      return
-    }
-    settle()
-    dragging = true
+    dragging = store.widgetDraggable(placement.id)
   }
 
-  // The widget follows the pointer; the placeholder shows where it would
-  // land, which is the store's answer — so the outline and the drop agree.
+  // The host moves the widget; the placeholder shows where it would land,
+  // which is the store's answer — so the outline and the drop agree.
   function moveDrag(event: { detail: unknown }): void {
-    if (!dragging) {
-      return
-    }
     const drag = dragOf(event)
-    if (!moving && Math.hypot(drag.dx, drag.dy) < DRAG_THRESHOLD_PX) {
+    if (!dragging || !drag.carried) {
       return
     }
     moving = true
-    const loose = { x: placement.point.x + drag.dx, y: placement.point.y + drag.dy }
-    loosePoint = loose
-    const landing = landingFor(loose)
+    const landing = landingFor(drag)
     onpreview(landing, placement.box, store.widgetDropAllowed(placement.id, landing))
   }
 
-  function endDrag(event: { detail: unknown; target: { widget: unknown } }): void {
-    if (!dragging) {
-      return
-    }
+  // A refused drop — the pixels are taken — leaves the store as it was, and
+  // the host glides the widget back to the point it still holds.
+  function endDrag(event: { detail: unknown }): void {
+    const drag = dragOf(event)
+    const wasMoving = dragging && drag.carried
     dragging = false
-    const wasMoving = moving
     moving = false
     onpreview(null, placement.box, false)
-    if (!wasMoving || loosePoint === null) {
-      settle()
+    if (!wasMoving) {
       return
     }
-    const drag = dragOf(event)
+    store.moveWidget(placement.id, landingFor(drag))
+  }
+
+  function landingFor(drag: { dx: number; dy: number }): Point {
     const loose = { x: placement.point.x + drag.dx, y: placement.point.y + drag.dy }
-    const landing = landingFor(loose)
-    // A refused drop — the pixels are taken — leaves the store as it was, and
-    // the widget glides back to the point it still holds.
-    store.moveWidget(placement.id, landing)
-    glideFrom(loose, event.target.widget as Parameters<typeof glide>[0])
-  }
-
-  function landingFor(loose: Point): Point {
     return store.landingFor(loose, placement.box, [rectOfPlacement()])
-  }
-
-  // The store has already decided the point; the widget is carried from where
-  // it was released to wherever that turned out to be.
-  function glideFrom(from: Point, widget: Parameters<typeof glide>[0]): void {
-    stopGlide()
-    stopGlide = glide(
-      widget,
-      from,
-      placement.point,
-      (at) => {
-        loosePoint = at
-      },
-      settle,
-    )
-  }
-
-  function settle(): void {
-    stopGlide()
-    stopGlide = () => {}
-    loosePoint = null
   }
 
   function rectOfPlacement(): Rect {
@@ -187,10 +151,14 @@
     class={slotClass}
     halign="start"
     valign="start"
-    margin-start={point.x}
-    margin-top={point.y}
+    margin-start={placement.point.x}
+    margin-top={placement.point.y}
     width={placement.box.width}
     height={placement.box.height}
+    {carry}
+    carry-threshold={DRAG_THRESHOLD_PX}
+    carried-by={carryGroup}
+    glide={GLIDE_MS}
     input
     onpress={handlePress}
     ondragstart={startDrag}

@@ -24,6 +24,9 @@ export interface DragDetail {
   state: number
   width: number
   height: number
+  // Whether the host is moving the press's `carry` group: the drag has passed
+  // its threshold.
+  carried: boolean
 }
 
 export const PRIMARY_BUTTON = 1
@@ -55,7 +58,18 @@ export function pressOf(event: { detail: unknown }): PressDetail {
 export function dragOf(event: { detail: unknown }): DragDetail {
   const detail = event.detail as Partial<DragDetail> | null
   if (detail === null || detail === undefined) {
-    return { startX: 0, startY: 0, dx: 0, dy: 0, x: 0, y: 0, state: 0, width: 0, height: 0 }
+    return {
+      startX: 0,
+      startY: 0,
+      dx: 0,
+      dy: 0,
+      x: 0,
+      y: 0,
+      state: 0,
+      width: 0,
+      height: 0,
+      carried: false,
+    }
   }
   return {
     startX: numberOr(detail.startX, 0),
@@ -67,6 +81,7 @@ export function dragOf(event: { detail: unknown }): DragDetail {
     state: numberOr(detail.state, 0),
     width: numberOr(detail.width, 0),
     height: numberOr(detail.height, 0),
+    carried: detail.carried === true,
   }
 }
 
