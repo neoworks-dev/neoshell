@@ -803,18 +803,18 @@ popover.dock-preview-popover > arrow {
 
 /* ── Control Centre ───────────────────────────────────────────────────── */
 
-/* The bar glyph: two small switches. */
+/* The bar glyph: two small switches, 16px together, inside the 22px pill. */
 .cc-glyph-switch {
-  min-width: 14px;
-  min-height: 6px;
+  min-width: 13px;
+  min-height: 3px;
   padding: 1px;
   border: 1.5px solid currentColor;
-  border-radius: 5px;
+  border-radius: 4px;
 }
 
 .cc-glyph-knob {
-  min-width: 4px;
-  min-height: 4px;
+  min-width: 3px;
+  min-height: 3px;
   border-radius: 2px;
   background-color: currentColor;
 }
