@@ -35,6 +35,8 @@ import weatherViews from './weather/views.js'
 import airQualityViews from './airquality/views.js'
 import galleryBackend from './gallery/backend.js'
 import galleryViews from './gallery/views.js'
+import containersBackend from './containers/backend.js'
+import containersViews from './containers/views.js'
 
 // The extension registry. In the bun host an extension was a directory the
 // loader found by scanning for manifest.json and imported at runtime; one GJS
@@ -636,5 +638,45 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     },
     backend: galleryBackend as Plugin.Object,
     views: galleryViews,
+  },
+  // Docker and Podman containers and Kubernetes pods, from the engines' own
+  // command-line tools.
+  containers: {
+    manifest: {
+      id: 'containers',
+      inject: ['bus', 'ui'],
+      widgets: [
+        {
+          type: 'containers.card',
+          name: 'Containers',
+          category: 'Developer',
+          icon: 'package-x-generic-symbolic',
+          description: 'Docker and Podman containers and Kubernetes pods, with their health.',
+          sizes: ['small', 'medium', 'large'],
+          defaultSize: 'medium',
+        },
+      ],
+      settings: [
+        {
+          id: 'containers',
+          title: 'Containers',
+          icon: 'package-x-generic-symbolic',
+          view: 'containers.settings',
+          order: 40,
+          group: 'shell',
+          keywords: ['docker', 'podman', 'kubernetes', 'kubectl', 'pods'],
+        },
+      ],
+      client: {
+        permissions: {
+          subscribe: ['containers.state'],
+          call: ['containers:action', 'containers:refresh', 'config:set'],
+          publish: [],
+          configKeys: ['containers.*'],
+        },
+      },
+    },
+    backend: containersBackend as Plugin.Object,
+    views: containersViews,
   },
 }
