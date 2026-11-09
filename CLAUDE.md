@@ -22,17 +22,18 @@ still describe the earlier webview/bun build and are out of date.
   change to show.
 - **Desktop interaction model** (`src/extensions/neoshell/`): Finder-like.
   A press on an icon selects on mouse-down; a drag carries translucent ghosts
-  that track the pointer 1:1 while the originals stay; only the drop is
-  snapped (`freeform.ts` — screen edges and neighbours' edges), then the
-  icons glide into place. The following, gliding and rubber band are the
+  that track the pointer 1:1 while the originals stay. Icons and widgets
+  share one grid (`grid.ts`, stored as cells): a drag pins what it carries
+  to the cells under it, everything in the way glides aside live, and the
+  drop always lands there. The following, gliding and rubber band are the
   host's (`carry`/`carried-by`/`glide`/`banded-by`, svelte-gtk4's
   `carry.ts`), so they stay on the pointer's frame when the view runs as a
   client; the view only computes landings. The desktop runs as the
   `neoshell-desktop` client: its file actions are `desktop:*`
   (`extensions/desktop/backend.ts`), which refuse any path the desktop does
   not show, and the wallpaper and widgets are host views it embeds. Rubber band on the background,
-  ctrl-click toggles. Widgets lift on grab, show a filled placeholder at the
-  landing, and glide there or back if the spot is taken.
+  ctrl-click toggles. Widgets keep their size on grab (a shadow is the lift)
+  and show a filled placeholder at the landing.
 - **Live wallpaper.** A video path in `appearance.wallpaper` (mp4, m4v, webm,
   mkv, mov, avi) plays looped and muted through `livePlayer.ts`; the rules
   are pure functions in `liveWallpaper.ts`. `appearance.liveWallpaper`

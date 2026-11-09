@@ -1,22 +1,23 @@
 <script lang="ts">
   import type { BusService } from '../../lib/bus'
   import type { ViewComponent, ViewRegistry } from '../../host/plugins/views'
-  import { SIZE_NAMES } from './freeform'
-  import type { Point, Rect, Size } from './freeform'
+  import { SIZE_NAMES } from './grid'
+  import type { Cell, Point } from './grid'
+  import { widgetKey } from './desktopLayout'
   import type { DesktopStore, MenuItem, WidgetPlacement } from './desktopStore.svelte'
   import { dragOf, pressOf, SECONDARY_BUTTON } from './gestures'
 
   // One widget on the desktop: the registered view for its type, placed by the
   // store and draggable unless it or the desktop is locked.
   //
-  // A drag lifts the widget and lets it follow the pointer exactly, while a
-  // placeholder marks where it would settle; on release it glides into that
-  // spot — or back to where it came from when the spot is taken. The
-  // following and the gliding are the host's (`carry`, `glide`): this view
-  // only says where the widget belongs.
+  // A drag picks the widget up at its own size and it follows the pointer
+  // exactly. The cell under it is pinned as the drag goes, so the desktop
+  // shows where it will land and moves whatever is there aside; on release
+  // it glides into that cell. The following and the gliding are the host's
+  // (`carry`, `glide`): this view only says where the widget belongs.
 
   const DRAG_THRESHOLD_PX = 4
-  const GLIDE_MS = 180
+  const GLIDE_MS = 220
 
   let {
     placement,
@@ -24,14 +25,12 @@
     registry,
     generation,
     store,
-    onpreview,
   }: {
     placement: WidgetPlacement
     bus: BusService
     registry: ViewRegistry
     generation: number
     store: DesktopStore
-    onpreview: (point: Point | null, box: Size, allowed: boolean) => void
   } = $props()
 
   const instanceId = $props.id()
@@ -76,44 +75,34 @@
     dragging = store.widgetDraggable(placement.id)
   }
 
-  // The host moves the widget; the placeholder shows where it would land,
-  // which is the store's answer — so the outline and the drop agree.
   function moveDrag(event: { detail: unknown }): void {
     const drag = dragOf(event)
     if (!dragging || !drag.carried) {
       return
     }
     moving = true
-    const landing = landingFor(drag)
-    onpreview(landing, placement.box, store.widgetDropAllowed(placement.id, landing))
+    store.previewDrop(pinsFor(drag))
   }
 
-  // A refused drop — the pixels are taken — leaves the store as it was, and
-  // the host glides the widget back to the point it still holds.
   function endDrag(event: { detail: unknown }): void {
     const drag = dragOf(event)
     const wasMoving = dragging && drag.carried
     dragging = false
     moving = false
-    onpreview(null, placement.box, false)
     if (!wasMoving) {
+      store.cancelDrop()
       return
     }
-    store.moveWidget(placement.id, landingFor(drag))
+    store.commitDrop(pinsFor(drag))
   }
 
-  function landingFor(drag: { dx: number; dy: number }): Point {
-    const loose = { x: placement.point.x + drag.dx, y: placement.point.y + drag.dy }
-    return store.landingFor(loose, placement.box, [rectOfPlacement()])
-  }
-
-  function rectOfPlacement(): Rect {
-    return {
-      x: placement.point.x,
-      y: placement.point.y,
-      width: placement.box.width,
-      height: placement.box.height,
+  function pinsFor(drag: { dx: number; dy: number }): Map<string, Cell> {
+    const loose: Point = { x: placement.point.x + drag.dx, y: placement.point.y + drag.dy }
+    const cell = store.widgetCellAt(placement.id, loose)
+    if (cell === undefined) {
+      return new Map()
     }
+    return new Map([[widgetKey(placement.id), cell]])
   }
 
   function menuItems(): MenuItem[] {

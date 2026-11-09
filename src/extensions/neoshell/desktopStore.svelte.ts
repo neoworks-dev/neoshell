@@ -1,18 +1,17 @@
-import { clampPoint, overlapsAny, rectOf, sizePx, snapPoint, spanOf, unitOf } from './freeform'
-import type { Point, Rect, Size, Viewport } from './freeform'
+import { ICON_SPAN, clampCell, gridOf, nearestCell, sameCell, spanOf } from './grid'
+import type { Cell, Grid, Point, Viewport } from './grid'
 import {
-  distinct,
   entriesOf,
+  iconCellsOf,
+  iconKey,
   instancesOf,
   nextWidgetId,
-  occupiedRects,
   resolveLayout,
-  resolvedIconPoints,
-  samePoints,
+  sameCells,
   seedsOf,
   sorted,
-  storedPointsOf,
-  storesPoint,
+  storedIconCellsOf,
+  widgetKey,
 } from './desktopLayout'
 import type { DesktopEntry, Layout, WidgetPlacement, WidgetSeed } from './desktopLayout'
 import { recordOf } from '../../lib/record.js'
@@ -25,8 +24,10 @@ import type { BusService as BusLike } from '../../lib/bus.js'
 // desktopLayout, which both the icons and the widget canvas resolve against —
 // one desktop, one answer.
 //
-// Placement is free-form. Config holds pixel points, and a drag snaps to the
-// screen edges and to whatever is already placed rather than to a lattice.
+// Icons and widgets share one grid, and config holds their cells. A drag pins
+// what it carries to the cells under it (previewDrop), which moves everything
+// in the way aside on screen; the drop writes every cell that arrangement
+// gave (commitDrop). A drop is never refused.
 //
 // Config is also the record of which widgets exist: widgets.<id> carries the
 // type, so the gallery can add one and the context menu can remove it. The
@@ -60,6 +61,7 @@ export type { DesktopEntry, WidgetPlacement }
 const CALL_TIMEOUT_MS = 10000
 const PERSIST_DEBOUNCE_MS = 250
 const MAIN_WIDGETS_KEY = 'widgets'
+const NO_PINS: ReadonlyMap<string, Cell> = new Map()
 
 export class DesktopStore {
   entries = $state<DesktopEntry[]>([])
@@ -72,7 +74,9 @@ export class DesktopStore {
   desktopLocked = $state(false)
   sortMode = $state('name')
 
-  private storedIcons = $state<Record<string, Point>>({})
+  private storedIcons = $state<Record<string, Cell>>({})
+  // Replaced whole, never changed in place.
+  private pins = $state<ReadonlyMap<string, Cell>>(NO_PINS)
   private storedWidgets = $state<Record<string, Record<string, unknown>> | null>(null)
   private seeds = $state<WidgetSeed[]>([])
   private folderLoaded = $state(false)
@@ -87,13 +91,12 @@ export class DesktopStore {
     this.bus = bus
   }
 
-  // The unit sizes widgets and icons; nothing is positioned against it.
-  readonly unit: number = $derived(unitOf(this.viewportWidth))
-
   readonly viewport: Viewport = $derived({
     width: this.viewportWidth,
     height: this.viewportHeight,
   })
+
+  readonly grid: Grid = $derived(gridOf(this.viewport))
 
   // The files extension already returns folders first and then names; a sort
   // mode reorders that, and because icons flow in this order it is also the
@@ -104,8 +107,9 @@ export class DesktopStore {
     resolveLayout({
       entries: this.sortedEntries,
       storedIcons: this.storedIcons,
-      instances: instancesOf(this.storedWidgets, this.seeds, this.unit),
+      instances: instancesOf(this.storedWidgets, this.seeds, this.grid),
       viewport: this.viewport,
+      pins: this.pins,
     }),
   )
 
@@ -213,78 +217,80 @@ export class DesktopStore {
     this.bus.publish('widgets:gallery', { open: true })
   }
 
-  // landingFor is where a dragged rect settles: pulled onto the screen edges
-  // and the neighbours it nearly lines up with, then kept on the desktop. It
-  // commits nothing, so the drop preview and the drop itself ask the same
-  // question.
-  landingFor(point: Point, size: Size, exclude: Rect[]): Point {
-    const snapped = snapPoint(point, size, this.othersFor(exclude), this.viewport)
-    return clampPoint(snapped, size, this.viewport)
+  /** Pins what a drag carries to the cells under it; everything in the way moves aside on screen. */
+  previewDrop(pins: ReadonlyMap<string, Cell>): void {
+    if (samePins(pins, this.pins)) {
+      return
+    }
+    this.pins = pins
   }
 
-  private othersFor(exclude: Rect[]): Rect[] {
-    const all = occupiedRects(this.layout, new Set(), new Set())
-    return all.filter((rect) => !exclude.some((skip) => sameRect(rect, skip)))
+  cancelDrop(): void {
+    this.pins = NO_PINS
   }
 
-  // moveIcons shifts every dragged path to its target, and refuses the whole
-  // move if any of them would land on something taken — a partial move would
-  // silently scatter a multi-selection.
-  moveIcons(paths: string[], targets: Map<string, Point>): boolean {
-    const blocked = occupiedRects(this.layout, new Set(paths), new Set())
-    if (!distinct(targets.values(), this.layout.iconSize)) {
-      return false
-    }
-    for (const point of targets.values()) {
-      if (overlapsAny(rectOf(point, this.layout.iconSize), blocked)) {
-        return false
-      }
-    }
-    const next = { ...this.storedIcons }
-    for (const [path, point] of targets) {
-      next[path] = point
-    }
-    this.storedIcons = next
-    this.writeIcons(next)
-    return true
+  /** Drops the pinned items: every cell the arrangement gives is written, the neighbours' too. */
+  commitDrop(pins: ReadonlyMap<string, Cell>): void {
+    this.pins = pins
+    const cells = this.layout.droppedCells
+    this.writeCells(cells)
+    this.pins = NO_PINS
   }
 
-  // The drag preview asks the same question the drop does, so the outline never
-  // promises a landing that would be refused.
-  widgetDropAllowed(id: string, point: Point): boolean {
+  /** The cell a widget dragged so its origin is at `point` would take. */
+  widgetCellAt(id: string, point: Point): Cell | undefined {
     const placement = this.layout.widgets.get(id)
     if (placement === undefined) {
-      return false
+      return undefined
     }
-    const blocked = occupiedRects(this.layout, new Set(), new Set([id]))
-    return !overlapsAny(rectOf(point, placement.box), blocked)
+    return nearestCell(this.grid, point, spanOf(placement.size))
   }
 
-  moveWidget(id: string, point: Point): boolean {
-    if (!this.widgetDropAllowed(id, point)) {
-      return false
+  /**
+   * Where the dragged icons go: the held icon to the cell nearest under it,
+   * the rest of the selection by the same number of cells, so it keeps its
+   * shape.
+   */
+  iconPinsFor(paths: string[], leadPath: string, travel: Point): Map<string, Cell> {
+    const pins = new Map<string, Cell>()
+    const lead = this.layout.cells.get(iconKey(leadPath))
+    if (lead === undefined) {
+      return pins
     }
-    this.patchWidget(id, { x: Math.round(point.x), y: Math.round(point.y) })
-    return true
+    const leadPoint = this.layout.icons.get(leadPath)
+    if (leadPoint === undefined) {
+      return pins
+    }
+    const target = nearestCell(this.grid, { x: leadPoint.x + travel.x, y: leadPoint.y + travel.y }, ICON_SPAN)
+    for (const path of paths) {
+      addShiftedPin(pins, this.layout.cells, path, target, lead, this.grid)
+    }
+    return pins
   }
 
   setWidgetLocked(id: string, locked: boolean): void {
     this.patchWidget(id, { locked })
   }
 
-  // A resized widget drops its stored point when it no longer fits where it
-  // was: the layout then places it rather than leaving it overlapping.
+  // A widget that grows keeps its corner; whatever it now covers moves aside.
   setWidgetSize(id: string, size: string): void {
-    this.patchWidget(id, { size, ...pointAfterResize(this, id, size) })
+    const placement = this.layout.widgets.get(id)
+    this.patchWidget(id, { size })
+    if (placement !== undefined) {
+      this.commitDrop(new Map([[widgetKey(id), placement.cell]]))
+    }
   }
 
-  // A widget dragged out of the gallery carries the point it was dropped on;
-  // one added without one is placed by the layout.
+  // A widget dragged out of the gallery carries the point it was dropped on,
+  // and lands there like any drop; one added without one gathers with the
+  // other widgets from the top-right.
   addWidget(type: string, size: string, point?: Point): string {
     const current = this.instanceRecords()
     const id = nextWidgetId(type, new Set(Object.keys(current)))
-    const next = { ...current, [id]: { type, size, locked: false, ...pointRecord(point) } }
-    this.writeWidgets(next)
+    this.writeWidgets({ ...current, [id]: { type, size, locked: false } })
+    if (point !== undefined) {
+      this.commitDrop(new Map([[widgetKey(id), nearestCell(this.grid, point, spanOf(size))]]))
+    }
     return id
   }
 
@@ -330,7 +336,7 @@ export class DesktopStore {
   // stopped moving.
   schedulePersist(layout: Layout): void {
     this.cancelPersist()
-    if (this.showsIcons && !this.folderLoaded) {
+    if ((this.showsIcons && !this.folderLoaded) || this.pins.size > 0) {
       return
     }
     this.persistTimer = setTimeout(() => {
@@ -361,42 +367,40 @@ export class DesktopStore {
     return records
   }
 
+  // The resolved cells are written back so what the desktop placed itself —
+  // seeded, flowed in, or displaced off a stale cell — survives a restart the
+  // same way a dragged item does.
   private persist(layout: Layout): void {
-    if (this.showsIcons) {
-      this.persistIcons(layout)
-    }
-    this.persistWidgets(layout)
+    this.writeCells(layout.cells)
   }
 
-  private storedIconsOf(value: unknown): Record<string, Point> {
+  private writeCells(cells: Map<string, Cell>): void {
+    if (this.showsIcons) {
+      this.writeIconCells(iconCellsOf(this.sortedEntries, cells))
+    }
+    this.writeWidgetCells(cells)
+  }
+
+  private storedIconsOf(value: unknown): Record<string, Cell> {
     if (!this.showsIcons) {
       return {}
     }
-    return storedPointsOf(value, this.unit)
+    return storedIconCellsOf(value, this.grid)
   }
 
-  private persistIcons(layout: Layout): void {
-    const points = resolvedIconPoints(layout)
-    if (samePoints(points, this.storedIcons)) {
+  private writeIconCells(cells: Record<string, Cell>): void {
+    if (sameCells(cells, this.storedIcons)) {
       return
     }
-    this.storedIcons = points
-    this.writeIcons(points)
+    this.storedIcons = cells
+    this.writeIcons(cells)
   }
 
-  // The resolved point is written back so a widget the desktop placed itself —
-  // seeded, or displaced off a stale point — survives a restart the same way a
-  // dragged one does.
-  private persistWidgets(layout: Layout): void {
-    const stored = this.storedWidgets
-    if (stored === null) {
-      this.writeWidgets(this.instanceRecords())
-      return
-    }
-    const next = { ...stored }
-    let changed = false
-    for (const [id, placement] of layout.widgets) {
-      changed = stageWidgetPoint(next, id, placement) || changed
+  private writeWidgetCells(cells: Map<string, Cell>): void {
+    const next = { ...this.instanceRecords() }
+    let changed = this.storedWidgets === null
+    for (const id of Object.keys(next)) {
+      changed = stageWidgetCell(next, id, cells.get(widgetKey(id))) || changed
     }
     if (changed) {
       this.writeWidgets(next)
@@ -421,10 +425,10 @@ export class DesktopStore {
     this.notify()
   }
 
-  // Points are written as whole maps: config:set addresses keys by dot-path,
+  // Cells are written as whole maps: config:set addresses keys by dot-path,
   // and a file path as a key would explode into one nested object per segment.
-  private writeIcons(points: Record<string, Point>): void {
-    void this.bus.call('config:set', { key: 'icons', value: points }, CALL_TIMEOUT_MS)
+  private writeIcons(cells: Record<string, Cell>): void {
+    void this.bus.call('config:set', { key: 'icons', value: cells }, CALL_TIMEOUT_MS)
     this.notify()
   }
 
@@ -444,66 +448,57 @@ function widgetsKeyFor(connector: string, isMain: boolean): string {
   return `desktop.screens.${connector}.widgets`
 }
 
-function pointRecord(point: Point | undefined): Record<string, unknown> {
-  if (point === undefined) {
-    return {}
-  }
-  return { x: Math.round(point.x), y: Math.round(point.y) }
-}
-
 function recordFor(placement: WidgetPlacement): Record<string, unknown> {
   return {
     type: placement.type,
     size: placement.size,
     locked: placement.locked,
-    x: Math.round(placement.point.x),
-    y: Math.round(placement.point.y),
+    column: placement.cell.column,
+    row: placement.cell.row,
   }
 }
 
-// The resolved type is written back alongside the point so an entry that
-// predates config carrying one stops depending on the seed to name it: the
-// migration finishes on disk rather than being redone on every read.
-function stageWidgetPoint(
+// A widget stored before the grid kept pixel points; writing its cell drops
+// them, so the migration finishes on disk rather than being redone on every
+// read.
+function stageWidgetCell(
   next: Record<string, Record<string, unknown>>,
   id: string,
-  placement: WidgetPlacement,
+  cell: Cell | undefined,
 ): boolean {
   const stored = next[id]
-  if (storesPoint(stored, placement.point) && stored?.type === placement.type) {
+  if (cell === undefined || stored === undefined) {
     return false
   }
-  next[id] = {
-    ...stored,
-    type: placement.type,
-    x: Math.round(placement.point.x),
-    y: Math.round(placement.point.y),
+  if (stored.column === cell.column && stored.row === cell.row && stored.x === undefined) {
+    return false
   }
+  const { x: _x, y: _y, ...rest } = stored
+  next[id] = { ...rest, column: cell.column, row: cell.row }
   return true
 }
 
-// A widget growing into space something else holds keeps its point only if the
-// larger box still fits; otherwise the point is dropped and the layout places
-// it afresh.
-function pointAfterResize(store: DesktopStore, id: string, size: string): Record<string, unknown> {
-  const placement = store.widgetPlacement(id)
-  if (placement === undefined) {
-    return {}
+function addShiftedPin(
+  pins: Map<string, Cell>,
+  cells: Map<string, Cell>,
+  path: string,
+  target: Cell,
+  lead: Cell,
+  grid: Grid,
+): void {
+  const cell = cells.get(iconKey(path))
+  if (cell === undefined) {
+    return
   }
-  const box = sizePx(store.unit, spanOf(size))
-  const blocked = occupiedRects(store.layout, new Set(), new Set([id]))
-  const grown = clampPoint(placement.point, box, store.viewport)
-  if (!overlapsAny(rectOf(grown, box), blocked)) {
-    return { x: Math.round(grown.x), y: Math.round(grown.y) }
-  }
-  return { x: undefined, y: undefined }
+  const shifted = { column: cell.column + target.column - lead.column, row: cell.row + target.row - lead.row }
+  pins.set(iconKey(path), clampCell(grid, shifted, ICON_SPAN))
 }
 
-function sameRect(left: Rect, right: Rect): boolean {
-  if (left.x !== right.x || left.y !== right.y) {
+function samePins(left: ReadonlyMap<string, Cell>, right: ReadonlyMap<string, Cell>): boolean {
+  if (left.size !== right.size) {
     return false
   }
-  return left.width === right.width && left.height === right.height
+  return [...left].every(([key, cell]) => sameCell(cell, right.get(key)))
 }
 
 function storedWidgetsOf(value: unknown): Record<string, Record<string, unknown>> | null {

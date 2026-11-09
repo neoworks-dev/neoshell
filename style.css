@@ -632,31 +632,27 @@ popover.dock-preview-popover > arrow {
   border-radius: 2px;
 }
 
-/* The lift is the drag's own feedback: a widget sitting still casts nothing
-   and sits flat; a grabbed one grows a touch and throws a shadow, fast enough
-   to read as a response to the grab rather than as an animation of its own. */
+/* The lift is the drag's own feedback: a grabbed widget throws a shadow but
+   keeps its size, so what is held is exactly what lands. */
 .widget-slot {
   border-radius: 24px;
-  transition: box-shadow 120ms ease-out, transform 120ms ease-out;
+  transition: box-shadow 160ms ease-out;
 }
 
 .widget-slot.dragging {
-  box-shadow: 0 25px 50px alpha(#000000, 0.55);
-  transform: scale(1.03);
+  box-shadow: 0 24px 48px alpha(#000000, 0.5);
 }
 
-/* The placeholder where the widget would settle: a filled, quiet slab rather
-   than an outline. Faint where the drop would be refused, since the widget
-   will glide back. */
-.widget-preview {
+/* The cell a drag would drop on: a filled, quiet slab rather than an
+   outline. */
+.desktop-landing {
+  border-radius: 12px;
+  background-color: alpha(#fafafa, 0.1);
+  border: 1px solid alpha(#fafafa, 0.2);
+}
+
+.desktop-landing.widget {
   border-radius: 24px;
-  background-color: alpha(#fafafa, 0.12);
-  border: 1px solid alpha(#fafafa, 0.25);
-}
-
-.widget-preview.taken {
-  background-color: alpha(#fafafa, 0.04);
-  border-color: alpha(#fafafa, 0.1);
 }
 
 /* ── context menu ─────────────────────────────────────────────────────── */

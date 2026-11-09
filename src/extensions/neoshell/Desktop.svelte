@@ -9,7 +9,7 @@
   import WidgetSlot from './WidgetSlot.svelte'
   import { DesktopStore } from './desktopStore.svelte'
   import type { MenuItem } from './desktopStore.svelte'
-  import type { Point, Size } from './freeform'
+  import type { Point } from './grid'
   import { dragOf, pressOf, SECONDARY_BUTTON } from './gestures'
 
   // The desktop: the background-layer view that owns everything behind the
@@ -25,6 +25,7 @@
   // that moves.
 
   const CALL_TIMEOUT_MS = 10000
+  const LANDING_GLIDE_MS = 120
 
   interface WallpaperEntry {
     name: string
@@ -43,7 +44,6 @@
   // The release that ends a rubber band also arrives as a press on the
   // background, which must not throw the selection the band just made away.
   let bandMoved = false
-  let preview = $state<{ point: Point; box: Size; allowed: boolean } | null>(null)
   // The registry is outside Svelte's reactivity, so a widget provider that
   // registers after the desktop is up is picked up by bumping this.
   let generation = $state(0)
@@ -272,19 +272,12 @@
     void bus.call('desktop:newfolder', {}, CALL_TIMEOUT_MS)
   }
 
-  function showPreview(point: Point | null, box: Size, allowed: boolean): void {
-    if (point === null) {
-      preview = null
-      return
+  // A widget's landing is drawn with its own corners, an icon's with a cell's.
+  function landingClass(width: number): string {
+    if (width > store.layout.iconSize.width) {
+      return 'desktop-landing widget'
     }
-    preview = { point, box, allowed }
-  }
-
-  function previewClass(allowed: boolean): string {
-    if (allowed) {
-      return 'widget-preview free'
-    }
-    return 'widget-preview taken'
+    return 'desktop-landing'
   }
 </script>
 
@@ -313,21 +306,24 @@
     ondragend={endBand}
   ></gtkpressable>
 
-  {#if preview !== null}
+  <!-- Where a drag would drop: the store's own answer, so the placeholder and
+       the drop always agree. -->
+  {#each store.layout.landings as landing, index (index)}
     <gtkbox
       overlay
-      class={previewClass(preview.allowed)}
+      class={landingClass(landing.width)}
       halign="start"
       valign="start"
-      margin-start={preview.point.x}
-      margin-top={preview.point.y}
-      width={preview.box.width}
-      height={preview.box.height}
+      margin-start={landing.x}
+      margin-top={landing.y}
+      width={landing.width}
+      height={landing.height}
+      glide={LANDING_GLIDE_MS}
     ></gtkbox>
-  {/if}
+  {/each}
 
   {#each store.widgetPlacements() as placement (placement.id)}
-    <WidgetSlot {placement} {bus} {registry} {generation} {store} onpreview={showPreview} />
+    <WidgetSlot {placement} {bus} {registry} {generation} {store} />
   {/each}
 
   <!-- Icons come after the widgets so a dragged icon travels over them. -->
