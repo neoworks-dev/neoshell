@@ -73,6 +73,8 @@ export class DesktopStore {
   viewportHeight = $state(1080)
   desktopLocked = $state(false)
   sortMode = $state('name')
+  // The widget gallery is open: widgets show their remove badge.
+  editing = $state(false)
 
   private storedIcons = $state<Record<string, Cell>>({})
   // Replaced whole, never changed in place.

@@ -18,6 +18,8 @@
 
   const DRAG_THRESHOLD_PX = 4
   const GLIDE_MS = 220
+  // Matches .widget-slot.removing's animation in style.css.
+  const REMOVE_ANIMATION_MS = 180
 
   let {
     placement,
@@ -37,12 +39,13 @@
   const carryGroup = `widget-slot-${instanceId}`
 
   let moving = $state(false)
+  let removing = $state(false)
   let dragging = false
 
   // Reading `generation` is what re-resolves the type when a widget provider's
   // views register after the desktop is already up.
   const View = $derived(viewFor(placement.type, generation))
-  const slotClass = $derived(slotClassOf(moving))
+  const slotClass = $derived(slotClassOf(moving, removing))
   const carry = $derived(carryOf(store.widgetDraggable(placement.id)))
 
   function viewFor(type: string, _generation: number): ViewComponent | undefined {
@@ -56,11 +59,20 @@
     return ''
   }
 
-  function slotClassOf(isMoving: boolean): string {
+  function slotClassOf(isMoving: boolean, isRemoving: boolean): string {
+    if (isRemoving) {
+      return 'widget-slot removing'
+    }
     if (isMoving) {
       return 'widget-slot dragging'
     }
     return 'widget-slot'
+  }
+
+  // The widget shrinks away (.widget-slot.removing) before it leaves.
+  function remove(): void {
+    removing = true
+    setTimeout(() => store.removeWidget(placement.id), REMOVE_ANIMATION_MS)
   }
 
   function handlePress(event: { detail: unknown }): void {
@@ -117,7 +129,7 @@
       },
       { label: 'Size', children: sizeItems() },
       { separator: true },
-      { label: 'Remove Widget', danger: true, action: () => store.removeWidget(placement.id) },
+      { label: 'Remove Widget', danger: true, action: remove },
     ]
   }
 
@@ -154,18 +166,35 @@
     ondragmove={moveDrag}
     ondragend={endDrag}
   >
-    <!-- The card is told its own size rather than measuring it: the store
-         already holds it, and a change from the widget's context menu reaches
-         the card as a prop instead of as a resize it has to observe. -->
-    <View
-      {bus}
-      {registry}
-      args={{
-        size: placement.size,
-        width: placement.box.width,
-        height: placement.box.height,
-      }}
-      id={placement.id}
-    />
+    <gtkoverlay hexpand vexpand>
+      <!-- The card is told its own size rather than measuring it: the store
+           already holds it, and a change from the widget's context menu
+           reaches the card as a prop instead of as a resize it has to
+           observe. -->
+      <View
+        {bus}
+        {registry}
+        args={{
+          size: placement.size,
+          width: placement.box.width,
+          height: placement.box.height,
+        }}
+        id={placement.id}
+      />
+      <!-- While the gallery is open, every widget can be taken off. -->
+      {#if store.editing && !removing}
+        <gtkbutton
+          overlay
+          class="widget-remove"
+          halign="start"
+          valign="start"
+          frame={false}
+          tooltip="Remove Widget"
+          onclicked={remove}
+        >
+          <gtkicon icon="list-remove-symbolic" size={12}></gtkicon>
+        </gtkbutton>
+      {/if}
+    </gtkoverlay>
   </gtkpressable>
 {/if}

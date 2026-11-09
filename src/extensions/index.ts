@@ -48,6 +48,8 @@ export interface WidgetDeclaration {
   description: string
   sizes: string[]
   defaultSize: string
+  // A theme icon name for the gallery's category list.
+  icon?: string
   // The installed program a widget comes from; absent for the shell's own.
   source?: string
 }
@@ -362,7 +364,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
         // The wallpaper and the widgets are the host's views, embedded.
         desktop: {
           permissions: {
-            subscribe: ['desktop.entries', 'hypr.monitors', 'widgets:add'],
+            subscribe: ['desktop.entries', 'hypr.monitors', 'widgets:add', 'widgets:gallery'],
             call: ['desktop:*', 'config:set'],
             publish: ['widgets:gallery'],
             configKeys: ['widgets', 'icons', 'desktop.*'],
@@ -553,6 +555,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           type: 'weather.card',
           name: 'Weather',
           category: 'Weather',
+          icon: 'weather-few-clouds-symbolic',
           description: 'Current conditions, the next hours, and the coming days.',
           sizes: ['small', 'medium', 'large'],
           defaultSize: 'small',
@@ -579,6 +582,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           type: 'airquality.card',
           name: 'Air Quality',
           category: 'Weather',
+          icon: 'weather-fog-symbolic',
           description: 'The air quality index, the next hours, and the pollutants behind it.',
           sizes: ['small', 'medium', 'large'],
           defaultSize: 'small',
