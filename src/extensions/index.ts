@@ -17,6 +17,7 @@ import pomodoroViews from './pomodoro/views.js'
 import quickShareBackend from './quickshare/backend.js'
 import filesBackend from './files/backend.js'
 import trayBackend from './tray/backend.js'
+import dockBackend from './dock/backend.js'
 import networkBackend from './network/backend.js'
 import bluetoothBackend from './bluetooth/backend.js'
 import weatherBackend from './weather/backend.js'
@@ -182,6 +183,10 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     manifest: { id: 'tray', inject: ['bus'] },
     backend: trayBackend as Plugin.Object,
   },
+  dock: {
+    manifest: { id: 'dock', inject: ['bus'] },
+    backend: dockBackend as Plugin.Object,
+  },
   network: {
     manifest: { id: 'network', inject: ['bus'] },
     backend: networkBackend as Plugin.Object,
@@ -262,6 +267,21 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
             publish: ['settings:open'],
             configKeys: ['notch.nook', 'notch.openOn', 'quickshare.visibility'],
             embed: ['neoshell.nook.*'],
+          },
+        },
+        // Launching goes through dock:launch, which only runs what an
+        // installed application or dock.apps names.
+        dock: {
+          permissions: {
+            subscribe: ['dock.windows'],
+            call: [
+              'apps:list',
+              'dock:launch',
+              'dock:capture',
+              { type: 'hypr:dispatch', fields: { dispatcher: ['focuswindow'] } },
+            ],
+            publish: [],
+            configKeys: ['dock.pinned', 'dock.apps'],
           },
         },
       },
