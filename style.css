@@ -588,7 +588,7 @@ popover.dock-preview-popover > arrow {
   transition: background-color 120ms;
 }
 
-/* The copy that follows the pointer while the original stays put. */
+/* An icon a drag carries, while a copy holds the place it left. */
 .desktop-icon.ghost {
   opacity: 0.6;
   background-color: alpha(#fafafa, 0.12);
