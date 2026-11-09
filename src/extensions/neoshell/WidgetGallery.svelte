@@ -37,6 +37,8 @@
     name: string
     category: string
     description: string
+    // The installed program it comes from, or '' for the shell's own.
+    source: string
   }
 
   let { bus, registry, args }: ViewProps = $props()
@@ -128,7 +130,7 @@
     if (needle === '') {
       return true
     }
-    return `${entry.name} ${entry.category} ${entry.description}`.toLowerCase().includes(needle)
+    return `${entry.name} ${entry.category} ${entry.description} ${entry.source}`.toLowerCase().includes(needle)
   }
 
   function entriesOf(value: unknown): CatalogEntry[] {
@@ -149,8 +151,16 @@
         name: raw.name,
         category: stringOr(raw.category, 'Other'),
         description: stringOf(raw.description),
+        source: stringOf(raw.source),
       },
     ]
+  }
+
+  function subtitleOf(entry: CatalogEntry): string {
+    if (entry.source === '') {
+      return entry.category
+    }
+    return `${entry.category} · from ${entry.source}`
   }
 
   function stringOr(value: unknown, fallback: string): string {
@@ -242,7 +252,7 @@
                   {entry.name}
                 </gtklabel>
                 <gtklabel class="gallery-tile-category" halign="start" ellipsize="end">
-                  {entry.category}
+                  {subtitleOf(entry)}
                 </gtklabel>
               </gtkpressable>
             {/each}
