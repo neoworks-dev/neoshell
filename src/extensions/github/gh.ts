@@ -22,6 +22,12 @@ export async function ghApi(args: string[]): Promise<GhResult> {
   return { ok: true, data }
 }
 
+/** Runs a gh api call whose reply is empty, such as marking a thread read. */
+export async function ghApiSucceeds(args: string[]): Promise<boolean> {
+  const outcome = await runGh(['gh', 'api', ...args])
+  return outcome.ok
+}
+
 interface Outcome {
   ok: boolean
   stdout: string

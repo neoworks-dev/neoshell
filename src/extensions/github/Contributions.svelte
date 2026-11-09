@@ -4,6 +4,7 @@
   import { widgetBoxOf } from '../../lib/widget'
   import GithubCard from './GithubCard.svelte'
   import Heatmap from './Heatmap.svelte'
+  import Link from './Link.svelte'
   import HeatmapLegend from './HeatmapLegend.svelte'
   import Stat from './Stat.svelte'
   import TickingNumber from './TickingNumber.svelte'
@@ -45,6 +46,7 @@
   const message = $derived(messageOf(contributions))
   const title = $derived(titleOf(contributions, box.size))
   const weekTotals = $derived(weekTotalsOf(contributions))
+  const profileUrl = $derived(profileUrlOf(contributions))
 
   $effect(() => clock.connect())
   $effect(() =>
@@ -58,6 +60,13 @@
       return 'loading'
     }
     return current.status
+  }
+
+  function profileUrlOf(current: ContributionsState | null): string {
+    if (current === null) {
+      return ''
+    }
+    return current.profileUrl
   }
 
   function messageOf(current: ContributionsState | null): string {
@@ -119,6 +128,7 @@
   {status}
   {message}
   compact={box.size === 'small'}
+  url={profileUrl}
 >
   {#if contributions !== null}
     {#if box.size === 'small'}
@@ -129,7 +139,9 @@
         <gtklabel class="gh-streak" halign="start" margin-bottom={6}>
           {pluralize(contributions.currentStreak, 'day')} streak
         </gtklabel>
-        <Heatmap columns={weeksFor(contributions, 6, 2)} cellSize={6} gap={2} />
+        <Link {bus} url={contributions.profileUrl}>
+          <Heatmap columns={weeksFor(contributions, 6, 2)} cellSize={6} gap={2} />
+        </Link>
       </gtkbox>
     {:else if box.size === 'medium'}
       <gtkbox orientation="horizontal" spacing={16}>
@@ -143,13 +155,17 @@
         </gtkbox>
       </gtkbox>
       <gtkbox vexpand></gtkbox>
-      <Heatmap columns={weeksFor(contributions, 6, 3)} cellSize={6} gap={3} showMonths />
+      <Link {bus} url={contributions.profileUrl}>
+        <Heatmap columns={weeksFor(contributions, 6, 3)} cellSize={6} gap={3} showMonths />
+      </Link>
     {:else}
       <gtkbox orientation="vertical" halign="start">
         <TickingNumber class="gh-total" value={contributions.total} />
         <gtklabel class="card-hint" halign="start">contributions in the last year</gtklabel>
       </gtkbox>
-      <Heatmap columns={weeksFor(contributions, 10, 3)} cellSize={10} gap={3} showMonths />
+      <Link {bus} url={contributions.profileUrl}>
+        <Heatmap columns={weeksFor(contributions, 10, 3)} cellSize={10} gap={3} showMonths />
+      </Link>
       <gtkbox orientation="horizontal">
         <gtklabel class="card-hint" hexpand halign="start">
           Updated {relativeTime(contributions.updatedAt, clock.now)}

@@ -1619,10 +1619,6 @@ button.qs-row-action:hover {
   color: #e3b341;
 }
 
-.gh-commit {
-  padding: 3px 0;
-}
-
 .gh-sha {
   font-family: monospace;
   font-size: 11px;
@@ -1631,10 +1627,6 @@ button.qs-row-action:hover {
 
 .gh-commit-subject {
   font-size: 12px;
-}
-
-.gh-row {
-  padding: 4px 0;
 }
 
 .gh-row-title {

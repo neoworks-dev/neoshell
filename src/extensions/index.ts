@@ -633,7 +633,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
       client: {
         permissions: {
           subscribe: ['github.contributions', 'github.repos', 'github.issues'],
-          call: ['github:refresh', 'config:set'],
+          call: ['github:refresh', 'github:open', 'config:set'],
           publish: [],
           configKeys: ['github.*'],
         },
