@@ -11,7 +11,7 @@
   } from '@neoworks/gtk-ui'
   import { untrack } from 'svelte'
   import { subscribeTo } from '../../lib/bus'
-  import { arrayOf, numberOf, recordOf, stringOf } from '../../lib/record'
+  import { arrayOf, numberOf, recordOf, stringListOf, stringOf } from '../../lib/record'
   import { Settings } from '../../lib/settings.svelte'
   import type { ViewProps } from '../../host/plugins/views'
   import type { NotchWidgetDeclaration } from '../index'
@@ -50,6 +50,8 @@
   const openOn = $derived(settings.string('notch.openOn', 'click'))
   const receiving = $derived(settings.string('quickshare.visibility', 'invisible') === 'visible')
   const deviceName = $derived(settings.string('quickshare.deviceName', ''))
+  const trusted = $derived(stringListOf(settings.value('quickshare.trusted')))
+  let trustDraft = $state('')
 
   $effect(() => settings.connect())
 
@@ -73,6 +75,22 @@
       return
     }
     settings.set('quickshare.visibility', 'invisible')
+  }
+
+  function trust(name: string): void {
+    const trimmed = name.trim()
+    trustDraft = ''
+    if (trimmed === '' || trusted.includes(trimmed)) {
+      return
+    }
+    settings.set('quickshare.trusted', [...trusted, trimmed])
+  }
+
+  function distrust(name: string): void {
+    settings.set(
+      'quickshare.trusted',
+      trusted.filter((entry) => entry !== name),
+    )
   }
 
   function save(next: NookEntry[]): void {
@@ -204,6 +222,28 @@
             value={deviceName}
             onsubmit={(name) => settings.set('quickshare.deviceName', name.trim())}
           />
+        </gtkbox>
+      {/snippet}
+    </ListRow>
+  </Card>
+
+  <SectionHeader
+    title="Always accept from"
+    description="Shares from these devices are accepted without asking. Devices are matched by the name they announce, which anyone nearby could copy."
+    level={4}
+  />
+  <Card padding="none">
+    {#each trusted as name (name)}
+      <ListRow title={name}>
+        {#snippet trailing()}
+          <IconButton icon="user-trash-symbolic" label="Stop accepting from {name}" size="sm" onclick={() => distrust(name)} />
+        {/snippet}
+      </ListRow>
+    {/each}
+    <ListRow title="Add a device" subtitle="Its name as it appears on a share; Enter adds it.">
+      {#snippet trailing()}
+        <gtkbox css="min-width: 220px;">
+          <TextField label="Device to trust" placeholder="Pixel 9" bind:value={trustDraft} onsubmit={trust} />
         </gtkbox>
       {/snippet}
     </ListRow>

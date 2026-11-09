@@ -32,7 +32,13 @@ import type { QuickShareState, Transfer } from './state.js'
 // and stays on across restarts:
 //
 //   "quickshare": {"visibility": "invisible" | "visible", "deviceName": "…",
-//                  "downloadDir": "…", "helper": "/path/to/neoshell-quickshare"}
+//                  "downloadDir": "…", "helper": "/path/to/neoshell-quickshare",
+//                  "trusted": ["Pixel 9"]}
+//
+// A share from a trusted device is accepted without asking. Trust goes by the
+// name the sender announces, which anyone nearby can copy; Android's own
+// account-based trust needs Google's certificates, which rqs_lib has no way to
+// present.
 
 const HELPER_PATH = ['helpers', 'quickshare', 'target', 'release', 'neoshell-quickshare']
 const RESTART_DELAY_MS = 5000
@@ -46,6 +52,7 @@ interface HelperOptions {
   visibility: string
   deviceName: string
   downloadDir: string
+  trusted: string[]
 }
 
 const quickShareExtension: Plugin.Object = {
@@ -247,6 +254,9 @@ class QuickShare {
   }
 
   private applyTransfer(transfer: Transfer): void {
+    if (this.acceptsTrusted(transfer)) {
+      return
+    }
     this.state = { ...this.state, transfers: withTransfer(this.state.transfers, transfer) }
     if (!ENDED_STATES.has(transfer.state)) {
       return
@@ -255,6 +265,17 @@ class QuickShare {
       this.bus.publish('quickshare:received', { paths: transfer.savedPaths })
     }
     setTimeout(() => this.dropTransfer(transfer.id), ENDED_LINGER_MS)
+  }
+
+  // The request never reaches the screen: it is answered here, and the
+  // transfer shows up again once it is receiving.
+  private acceptsTrusted(transfer: Transfer): boolean {
+    const trusted = this.options !== null && this.options.trusted.includes(transfer.peer)
+    if (!trusted || transfer.direction !== 'incoming' || transfer.state !== 'waitingForUserConsent') {
+      return false
+    }
+    this.command({ cmd: 'accept', id: transfer.id })
+    return true
   }
 
   private dropTransfer(id: string): void {
@@ -273,6 +294,7 @@ function optionsOf(section: Record<string, unknown>): HelperOptions {
     visibility: visibilityOf(stringOf(section.visibility)),
     deviceName: stringOf(section.deviceName),
     downloadDir: stringOf(section.downloadDir),
+    trusted: stringListOf(section.trusted),
   }
 }
 
