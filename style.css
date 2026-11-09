@@ -1585,6 +1585,12 @@ button.nook-config-pick {
 .nook-config-name { color: var(--ui-text); font-weight: 600; }
 .nook-config-cells { color: var(--ui-text-muted); font-size: 12px; }
 
+/* ── runcat ───────────────────────────────────────────────────────────── */
+
+.runcat-percent { font-size: 24px; font-weight: 300; color: var(--base-content); }
+.runcat-load { font-size: 15px; font-weight: 600; color: var(--base-content); }
+.runcat-chart { border-radius: 6px; background-color: alpha(#fafafa, 0.05); }
+
 /* ── usb ──────────────────────────────────────────────────────────────── */
 
 .usb-row { padding: 9px 4px; }

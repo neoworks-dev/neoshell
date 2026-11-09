@@ -3,6 +3,8 @@
   import type { ViewRegistry } from './host/plugins/views'
   import ControlCentre from './extensions/quicksettings/ControlCentre.svelte'
   import AgendaMenu from './extensions/agenda/AgendaMenu.svelte'
+  import RunCatMenu from './extensions/runcat/RunCatMenu.svelte'
+  import RunCatIcon from './extensions/runcat/RunCatIcon.svelte'
   import UsbMenu from './extensions/usb/UsbMenu.svelte'
   import PomodoroMenu from './extensions/pomodoro/PomodoroMenu.svelte'
   import PomodoroIcon from './extensions/pomodoro/PomodoroIcon.svelte'
@@ -120,6 +122,12 @@
       </gtkbox>
       <gtkbox class="status-menu" orientation="vertical" valign="start">
         <UsbMenu {bus} {registry} args={{ close: () => {} }} id="smoke.usb" />
+      </gtkbox>
+      <gtkbox class="status-menu" orientation="vertical" valign="start">
+        <RunCatMenu {bus} {registry} args={{ close: () => {} }} id="smoke.runcat" />
+      </gtkbox>
+      <gtkbox class="status-menu" orientation="horizontal" valign="start">
+        <RunCatIcon {bus} {registry} args={{}} id="smoke.runcat.icon" />
       </gtkbox>
       <WidgetGallery {bus} {registry} args={{}} id="smoke.gallery" />
 

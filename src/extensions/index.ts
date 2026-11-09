@@ -6,6 +6,8 @@ import mediaBackend from './media/backend.js'
 import calendarBackend from './calendar/backend.js'
 import calendarViews from './calendar/views.js'
 import agendaViews from './agenda/views.js'
+import runcatBackend from './runcat/backend.js'
+import runcatViews from './runcat/views.js'
 import usbBackend from './usb/backend.js'
 import usbViews from './usb/views.js'
 import pomodoroBackend from './pomodoro/backend.js'
@@ -235,6 +237,15 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     },
     backend: usbBackend as Plugin.Object,
     views: usbViews,
+  },
+  runcat: {
+    manifest: {
+      id: 'runcat',
+      inject: ['bus', 'ui'],
+      statusItems: [{ id: 'runcat', label: 'CPU', icon: 'runcat.icon', menu: 'runcat.menu', order: 10 }],
+    },
+    backend: runcatBackend as Plugin.Object,
+    views: runcatViews,
   },
   // The bar's status area and the window its menus open in.
   status: {

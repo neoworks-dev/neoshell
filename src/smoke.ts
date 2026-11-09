@@ -81,6 +81,12 @@ bus.retain('usb.devices', {
   ],
 })
 
+bus.retain('system.cpu', {
+  percent: 37,
+  history: [5, 12, 40, 80, 100, 37, 20, 3],
+  loadAverage: [0.52, 0.6, 0.58],
+})
+
 bus.retain('hypr.monitors', [{ width: 1920, height: 1080 }])
 bus.retain('calendar.sources', {
   sources: [{ id: 'cal-smoke', name: 'Smoke', status: 'ok', message: '', eventCount: 2 }],
