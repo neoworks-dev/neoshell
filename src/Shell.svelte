@@ -66,6 +66,16 @@
   $effect(() => displays.connect())
   $effect(() => settings.connect())
 
+  // The connected displays, for views that cannot ask GDK themselves — the
+  // Displays settings page runs as a client.
+  //
+  //   displays.connected   {displays: [{connector, description}]}
+  $effect(() =>
+    bus.retain('displays.connected', {
+      displays: displays.list.map((entry) => ({ connector: entry.connector, description: entry.description })),
+    }),
+  )
+
   // As a string so that config edits elsewhere, which republish the whole
   // snapshot, leave the windows and their args alone.
   const placementJson = $derived(JSON.stringify(recordOf(settings.value(DISPLAYS_KEY))))

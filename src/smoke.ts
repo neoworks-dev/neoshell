@@ -11,7 +11,6 @@ import { remoteView } from './host/clients/remoteView.js'
 import { paintableOf, thumbnailHandle } from './host/paintables.js'
 import { ViewRegistry } from './host/plugins/views.js'
 import Smoke from './Smoke.svelte'
-import NotchSettings from './extensions/neoshell/NotchSettings.svelte'
 import { clientEventDetail, filesOfDrop } from './host/drops.js'
 import { registerFile } from './host/fileHandles.js'
 import { isLaunchable } from './extensions/dock/backend.js'
@@ -59,7 +58,8 @@ bus.retain('widgets.catalog', {
 // The Nook widgets run in the notch's client, which embeds them back.
 registry.register('neoshell.nook.media', remoteView('neoshell-notch', 'nookMedia'))
 registry.register('neoshell.nook.calendar', remoteView('neoshell-notch', 'nookCalendar'))
-registry.register('neoshell.notch.settings', NotchSettings)
+registry.register('neoshell.notch.settings', remoteView('neoshell-settings', 'notch'))
+bus.retain('displays.connected', { displays: [{ connector: 'SMOKE-1', description: 'Smoke Display' }] })
 bus.retain('notch.catalog', { widgets: notchWidgetCatalog() })
 bus.retain('settings.catalog', { sections: settingsCatalog() })
 
@@ -345,6 +345,10 @@ const REMOTE_CARDS: [string, string][] = [
   ['smoke-remote-desktop', 'Smoke Folder'],
   ['smoke-remote-gallery', 'Smoke weather'],
   ['smoke-remote-gallery', 'Smoke'],
+  // The Settings pages, each its extension's client, drawn with gtk-ui.
+  ['smoke-remote-notchsettings', 'Opens on'],
+  ['smoke-remote-displays', 'Main display'],
+  ['smoke-remote-calendarsettings', 'Smoke'],
   ['smoke-remote-bar', new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date())],
 ]
 
