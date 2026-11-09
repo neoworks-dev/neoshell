@@ -27,7 +27,10 @@ still describe the earlier webview/bun build and are out of date.
   icons glide into place. The following, gliding and rubber band are the
   host's (`carry`/`carried-by`/`glide`/`banded-by`, svelte-gtk4's
   `carry.ts`), so they stay on the pointer's frame when the view runs as a
-  client; the view only computes landings. Rubber band on the background,
+  client; the view only computes landings. The desktop runs as the
+  `neoshell-desktop` client: its file actions are `desktop:*`
+  (`extensions/desktop/backend.ts`), which refuse any path the desktop does
+  not show, and the wallpaper and widgets are host views it embeds. Rubber band on the background,
   ctrl-click toggles. Widgets lift on grab, show a filled placeholder at the
   landing, and glide there or back if the spot is taken.
 - **Live wallpaper.** A video path in `appearance.wallpaper` (mp4, m4v, webm,

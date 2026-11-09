@@ -18,6 +18,7 @@ import quickShareBackend from './quickshare/backend.js'
 import filesBackend from './files/backend.js'
 import trayBackend from './tray/backend.js'
 import dockBackend from './dock/backend.js'
+import desktopBackend from './desktop/backend.js'
 import networkBackend from './network/backend.js'
 import bluetoothBackend from './bluetooth/backend.js'
 import weatherBackend from './weather/backend.js'
@@ -115,6 +116,18 @@ export function declaredClient(
   extensions: Record<string, ExtensionModule>,
   name: string,
 ): ClientDeclaration | undefined {
+  const declaration = declarationIn(extensions, name)
+  if (declaration === undefined || declaration.permissions.embed === undefined) {
+    return declaration
+  }
+  const embed = declaration.permissions.embed.flatMap((entry) => embedEntriesOf(extensions, entry))
+  return { ...declaration, permissions: { ...declaration.permissions, embed } }
+}
+
+function declarationIn(
+  extensions: Record<string, ExtensionModule>,
+  name: string,
+): ClientDeclaration | undefined {
   const { extension, part } = clientNameParts(name)
   const found = extensions[extension]
   if (found === undefined) {
@@ -127,6 +140,27 @@ export function declaredClient(
     return undefined
   }
   return found.manifest.clients[part]
+}
+
+// An embed permission may name a set every extension adds to instead of
+// view types: "@widgets" is every desktop widget's view, "@nook" every Nook
+// widget's. One installed later is covered without the client changing.
+function embedEntriesOf(extensions: Record<string, ExtensionModule>, entry: string): string[] {
+  const manifests = Object.values(extensions).map((extension) => extension.manifest)
+  if (entry === '@widgets') {
+    return manifests.flatMap((manifest) => typesOf(manifest.widgets))
+  }
+  if (entry === '@nook') {
+    return manifests.flatMap((manifest) => typesOf(manifest.notchWidgets))
+  }
+  return [entry]
+}
+
+function typesOf(declarations: { type: string }[] | undefined): string[] {
+  if (declarations === undefined) {
+    return []
+  }
+  return declarations.map((declaration) => declaration.type)
 }
 
 export interface ExtensionModule {
@@ -186,6 +220,10 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
   dock: {
     manifest: { id: 'dock', inject: ['bus'] },
     backend: dockBackend as Plugin.Object,
+  },
+  desktop: {
+    manifest: { id: 'desktop', inject: ['bus'] },
+    backend: desktopBackend as Plugin.Object,
   },
   network: {
     manifest: { id: 'network', inject: ['bus'] },
@@ -266,7 +304,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
             ],
             publish: ['settings:open'],
             configKeys: ['notch.nook', 'notch.openOn', 'quickshare.visibility'],
-            embed: ['neoshell.nook.*'],
+            embed: ['@nook'],
           },
         },
         // Launching goes through dock:launch, which only runs what an
@@ -282,6 +320,17 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
             ],
             publish: [],
             configKeys: ['dock.pinned', 'dock.apps'],
+          },
+        },
+        // Files only through desktop:*, which acts on what the desktop shows.
+        // The wallpaper and the widgets are the host's views, embedded.
+        desktop: {
+          permissions: {
+            subscribe: ['desktop.entries', 'hypr.monitors', 'widgets:add'],
+            call: ['desktop:*', 'config:set'],
+            publish: ['widgets:gallery'],
+            configKeys: ['widgets', 'icons', 'desktop.*'],
+            embed: ['neoshell.wallpaper', '@widgets'],
           },
         },
       },

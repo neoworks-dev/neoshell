@@ -3,9 +3,9 @@
   import type { ViewProps } from '../../host/plugins/views'
   import { monitorSizeOf } from '../../lib/placement'
   import { recordOf, stringOf } from '../../lib/record'
+  import { resolve } from '../../tree'
   import ContextMenu from './ContextMenu.svelte'
   import DesktopIcons from './DesktopIcons.svelte'
-  import Wallpaper from './Wallpaper.svelte'
   import WidgetSlot from './WidgetSlot.svelte'
   import { DesktopStore } from './desktopStore.svelte'
   import type { MenuItem } from './desktopStore.svelte'
@@ -52,6 +52,7 @@
   // which counts as the main one.
   const monitor = $derived(stringOf(recordOf(args).monitor))
   const isMain = $derived(recordOf(args).mainMonitor !== false)
+  const WallpaperView = $derived(resolve(registry, 'neoshell.wallpaper', generation))
 
   $effect(() => {
     store.setMonitor(monitor, isMain)
@@ -246,7 +247,7 @@
   }
 
   async function wallpaperItems(): Promise<MenuItem[]> {
-    const reply = await bus.call('files:images', {}, CALL_TIMEOUT_MS)
+    const reply = await bus.call('desktop:wallpapers', {}, CALL_TIMEOUT_MS)
     const images = imagesOf(reply)
     if (images.length === 0) {
       return [{ label: 'No images in the wallpaper folder', disabled: true }]
@@ -254,11 +255,7 @@
     return images.map((image) => ({
       label: image.name,
       action: () => {
-        void bus.call(
-          'config:set',
-          { key: 'appearance.wallpaper', value: image.path },
-          CALL_TIMEOUT_MS,
-        )
+        void bus.call('desktop:setwallpaper', { path: image.path }, CALL_TIMEOUT_MS)
       },
     }))
   }
@@ -272,7 +269,7 @@
   }
 
   function newFolder(): void {
-    void bus.call('files:newfolder', {}, CALL_TIMEOUT_MS)
+    void bus.call('desktop:newfolder', {}, CALL_TIMEOUT_MS)
   }
 
   function showPreview(point: Point | null, box: Size, allowed: boolean): void {
@@ -294,8 +291,12 @@
 <gtkoverlay class="desktop" hexpand vexpand>
   <!-- The wallpaper is the overlay's main child, so it is measured and fills
        the surface: one surface per monitor instead of a wallpaper surface
-       under the desktop's. Everything else is an overlay child on top of it. -->
-  <Wallpaper {bus} {registry} {args} id="wallpaper" />
+       under the desktop's. Everything else is an overlay child on top of it.
+       It is the host's view (it decodes images and plays video), reached
+       through the registry so a desktop run as a client embeds it. -->
+  {#if WallpaperView !== undefined}
+    <WallpaperView {bus} {registry} {args} id="wallpaper" />
+  {/if}
 
   <!-- The background takes the rubber band and the menu. -->
   <gtkpressable
