@@ -69,17 +69,23 @@
 </script>
 
 <gtkbox class="settings-content" orientation="vertical" spacing={8}>
-  <SectionHeader title="Weather" description="What the weather cards on the desktop show." level={3} />
-  <TextField
-    label="Location"
-    placeholder="City"
-    icon="mark-location-symbolic"
-    bind:value={placeDraft}
-    supportingText="Every card shows this place unless it has one of its own."
-    oninput={placeTyped}
-    onsubmit={applyPlace}
-  />
+  <SectionHeader title="All cards" level={3} />
   <List variant="card" dividers>
+    <ListRow title="Location" subtitle="Shown unless a card has its own">
+      {#snippet trailing()}
+        <gtkbox css="min-width: 240px;">
+          <TextField
+            label="Location"
+            hideLabel
+            placeholder="City"
+            icon="mark-location-symbolic"
+            bind:value={placeDraft}
+            oninput={placeTyped}
+            onsubmit={applyPlace}
+          />
+        </gtkbox>
+      {/snippet}
+    </ListRow>
     <ListRow title="Units">
       {#snippet trailing()}
         <SegmentedButton
@@ -92,8 +98,7 @@
     </ListRow>
   </List>
 
-  {#if configLoaded && cards.length > 0}
-    <SectionHeader title="Cards" description="The weather cards on your desktops." level={3} />
+  {#if configLoaded}
     {#each cards as card, index (card.id)}
       <WeatherCardSettings {settings} {card} number={index + 1} {defaultPlace} />
     {/each}

@@ -1525,6 +1525,12 @@ button.qs-row-action:hover {
   color: #fcd34d;
 }
 
+/* The gear sits in the card's top-right corner; the wide cards' condition
+   icon steps left of it. */
+.weather-icon-beside-gear {
+  margin-right: 30px;
+}
+
 /* The large card is three sections, split by hairlines. */
 .weather-large .card-strip,
 .weather-large .card-days {
@@ -2028,44 +2034,83 @@ button.qs-row-action:hover {
 /* The sidebar floats inset from the window's edges as a rounded panel. */
 box.settings-sidebar { padding: 8px 0 8px 8px; }
 box.settings-sidebar:only-child { padding: 8px; }
-box.settings-sidebar box.ui-drawer {
-  padding: 10px 8px;
-  border-radius: 14px;
+box.settings-sidebar-panel {
+  padding: 12px 10px;
+  border-radius: 16px;
   border: 1px solid var(--ui-line);
   background-color: var(--ui-sunken);
 }
-.settings-search { margin-bottom: 10px; }
-box.settings-sidebar box.ui-drawer box.ui-search { background-color: var(--ui-hover); border-radius: 8px; }
-
-box.settings-sidebar button.ui-drawer-item {
+.settings-search { margin-bottom: 12px; }
+box.settings-sidebar-panel box.ui-search {
   min-height: 30px;
+  border-radius: 9px;
+  background-color: var(--ui-hover);
+}
+box.settings-sidebar-gap { min-height: 14px; }
+
+button.settings-sidebar-item,
+button.settings-sidebar-item:backdrop {
+  min-height: 32px;
   padding: 0 6px;
+  border: none;
   border-radius: 8px;
+  background-image: none;
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--ui-text);
 }
 
-/* Each section's icon on a filled grey tile, white glyph. Neutral: the tones
-   are for status, not for telling sections apart. */
-box.settings-sidebar box.ui-icon-circle {
-  min-width: 22px;
-  min-height: 22px;
-  border-radius: 6px;
-  background-image: linear-gradient(var(--ui-grey-9), var(--ui-grey-11));
+button.settings-sidebar-item:hover { background-color: var(--ui-hover); }
+
+button.settings-sidebar-item.active,
+button.settings-sidebar-item.active:backdrop {
+  background-color: var(--ui-focus);
   color: #ffffff;
 }
 
-box.settings-sidebar button.ui-drawer-item.ui-drawer-item-active box.ui-icon-circle {
-  background-image: none;
-  background-color: alpha(#ffffff, 0.22);
+label.settings-sidebar-label { font-size: 13px; font-weight: 500; }
+
+/* Each section's icon on its own coloured tile, white glyph, lit from above. */
+box.settings-tile {
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: 7px;
+  color: #ffffff;
+  box-shadow: inset 0 1px alpha(#ffffff, 0.25), 0 1px 1px alpha(#000000, 0.12);
 }
 
-box.settings-main box.ui-top-app-bar { min-height: 52px; padding: 0 18px; }
-box.settings-history { margin-right: 6px; }
+box.settings-tile-blue { background-image: linear-gradient(#4c9bff, #0a64e8); }
+box.settings-tile-sky { background-image: linear-gradient(#6cc8ff, #1e98e8); }
+box.settings-tile-teal { background-image: linear-gradient(#5ad6c4, #16a394); }
+box.settings-tile-green { background-image: linear-gradient(#5fd97a, #22a845); }
+box.settings-tile-yellow { background-image: linear-gradient(#ffd54a, #f0a800); }
+box.settings-tile-orange { background-image: linear-gradient(#ffa64d, #f06a0a); }
+box.settings-tile-red { background-image: linear-gradient(#ff6b6b, #e02c2c); }
+box.settings-tile-pink { background-image: linear-gradient(#ff7eb3, #e83c80); }
+box.settings-tile-purple { background-image: linear-gradient(#b48cff, #7a45e0); }
+box.settings-tile-grey { background-image: linear-gradient(#a3a3ab, #6e6e78); }
+
+box.settings-main box.ui-top-app-bar { min-height: 56px; padding: 0 24px; }
+box.settings-main label.ui-top-app-bar-title { font-size: 17px; }
+
+/* Back and forward share one capsule, split by a hairline. */
+box.settings-history {
+  margin-right: 8px;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--ui-line);
+  background-color: var(--ui-sunken);
+}
+box.settings-history button { border-radius: 999px; }
+box.settings-history button:first-child { border-right: 1px solid var(--ui-line); border-top-right-radius: 0; border-bottom-right-radius: 0; }
+box.settings-history button:last-child { border-top-left-radius: 0; border-bottom-left-radius: 0; }
 
 /* Grouped like a macOS settings pane: pages space their children 8px apart,
    so a heading sits close above its card, and a heading after the first
    stands the group apart from the one before. */
 .settings-content { margin: 4px 24px 28px 24px; }
-.settings-content > box.ui-section-header:not(:first-child) { margin-top: 18px; }
+.settings-content > box.ui-section-header:not(:first-child),
+.settings-content > box.settings-group { margin-top: 18px; }
 .settings-content label.ui-section-title { font-size: var(--ui-text-body); font-weight: 700; }
 
 .settings-content box.ui-list.ui-list-card { border-radius: 12px; }

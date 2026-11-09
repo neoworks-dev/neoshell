@@ -49,7 +49,7 @@
       </gtklabel>
     </gtkbox>
     <gtkbox orientation="vertical" spacing={2} halign="end">
-      <gtkicon class={iconTone} {icon} size={ICON_SMALL} halign="end"></gtkicon>
+      <gtkicon class="weather-icon-beside-gear {iconTone}" {icon} size={ICON_SMALL} halign="end"></gtkicon>
       <gtklabel class="card-body" halign="end" ellipsize="end">
         {current.description}
       </gtklabel>

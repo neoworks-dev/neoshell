@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { IconButton, NavigationDrawer, Search, TopAppBar, Window } from '@neoworks/gtk-ui'
+  import { IconButton, TopAppBar, Window } from '@neoworks/gtk-ui'
   import { subscribeTo } from '../../lib/bus'
   import { recordOf, stringOf } from '../../lib/record'
   import type { ViewProps } from '../../host/plugins/views'
   import { resolve } from '../../tree'
   import { History } from './history.svelte'
-  import { matching, navSectionsOf, sectionsOf } from './sections'
+  import SettingsSidebar from './SettingsSidebar.svelte'
+  import { groupsOf, matching, sectionsOf } from './sections'
   import type { Section } from './sections'
 
   // The unified Settings window. It knows nothing about any one setting: every
@@ -42,7 +43,7 @@
   let generation = $state(0)
 
   const compact = $derived(windowWidth > 0 && windowWidth < COMPACT_WIDTH)
-  const shown = $derived(navSectionsOf(matching(sections, query)))
+  const shown = $derived(groupsOf(matching(sections, query)))
   const selected = $derived(selectedSection(sections, history.current))
   const Page = $derived(viewFor(selected, generation))
 
@@ -122,13 +123,7 @@
       <gtkbox class="settings-root" orientation="horizontal">
         {#if showsSidebar(compact, pageShown)}
           <gtkbox class="settings-sidebar" hexpand={compact} css="min-width: {SIDEBAR_WIDTH}px;">
-            <NavigationDrawer sections={shown} current={idOf(selected)} onselect={choose}>
-              {#snippet header()}
-                <gtkbox class="settings-search">
-                  <Search placeholder="Search" size="sm" bind:value={query} />
-                </gtkbox>
-              {/snippet}
-            </NavigationDrawer>
+            <SettingsSidebar groups={shown} current={idOf(selected)} onselect={choose} bind:query />
           </gtkbox>
         {/if}
         {#if showsPage(compact, pageShown)}
@@ -166,7 +161,7 @@
   {#if compact}
     <IconButton icon="go-previous-symbolic" label="All settings" size="sm" onclick={() => (pageShown = false)} />
   {:else}
-    <gtkbox class="settings-history" spacing={2}>
+    <gtkbox class="settings-history">
       <IconButton
         icon="go-previous-symbolic"
         label="Back"
