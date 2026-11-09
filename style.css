@@ -1693,6 +1693,58 @@ button.qs-row-action:hover {
 .container-more { margin-top: 2px; }
 .container-footer-error { color: var(--error); }
 
+/* ── AI usage card ────────────────────────────────────────────────────── */
+
+.usage-agent { padding: 2px 0; }
+
+.usage-agent-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: alpha(#fafafa, 0.85);
+}
+
+/* text-5xl font-light, a little smaller than the weather's reading so the
+   caption beside it still fits a half-width column. */
+.usage-percent {
+  font-size: 34px;
+  font-weight: 300;
+}
+
+.usage-percent-small {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.usage-caption { margin-bottom: 7px; }
+
+/* The plan an agent reports: a small tag after its name. */
+.usage-plan {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 6px;
+  color: alpha(#fafafa, 0.7);
+  background-color: alpha(#fafafa, 0.1);
+}
+
+.usage-session {
+  padding: 5px 4px;
+  border-radius: 10px;
+}
+
+.usage-model { color: alpha(#fafafa, 0.45); }
+
+/* The hours' bars: their height is an inline min-height that the transition
+   carries from nothing when the card appears. */
+.usage-bar {
+  min-height: 2px;
+  border-radius: 3px;
+  background-color: alpha(#a78bfa, 0.45);
+  transition: min-height 600ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.usage-bar-now { background-color: var(--accent); }
+
 /* ── picture gallery card ─────────────────────────────────────────────── */
 
 /* The pictures sit close to the card's edge: the card's 24px radius less its
