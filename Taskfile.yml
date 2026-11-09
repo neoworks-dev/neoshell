@@ -45,8 +45,20 @@ tasks:
     cmds:
       - cargo build --release
 
+  runner:
+    desc: Build svelte-gtk4's QuickJS runner, which every client view runs in
+    deps: [install]
+    dir: node_modules/@neoworks/svelte-gtk4/runner
+    sources:
+      - Cargo.toml
+      - src/**/*
+    generates:
+      - target/release/svelte-gtk4-runner
+    cmds:
+      - cargo build --release
+
   build:
-    desc: Bundle the shell into a single ESM file GJS can run
+    desc: Bundle the shell into a single ESM file GJS can run, and every client
     deps: [install]
     cmds:
       - node build.mjs
@@ -54,7 +66,7 @@ tasks:
   start:
     aliases: [run]
     desc: Build and run the whole shell — takes over the session it runs in
-    deps: [install, tools]
+    deps: [install, tools, runner]
     interactive: true
     cmds:
       - node build.mjs
@@ -62,14 +74,14 @@ tasks:
 
   dev:
     desc: Run the shell and rebuild and restart it on every source or style change
-    deps: [install, tools]
+    deps: [install, tools, runner]
     interactive: true
     cmds:
       - node dev.mjs
 
   smoke:
     desc: Build every view once in a plain window and exit
-    deps: [install]
+    deps: [install, runner]
     cmds:
       - node smoke.mjs
       - gjs -m dist/smoke.js

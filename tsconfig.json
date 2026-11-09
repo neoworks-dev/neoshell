@@ -9,7 +9,11 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["gjs-esm-types"]
+    "types": ["gjs-esm-types"],
+    "paths": {
+      "@neoworks/svelte-gtk4/host": ["./node_modules/@neoworks/svelte-gtk4/src/remote/index.ts"],
+      "@neoworks/svelte-gtk4/client": ["./node_modules/@neoworks/svelte-gtk4/src/remote/client.svelte.ts"]
+    }
   },
   "include": [
     "src",
