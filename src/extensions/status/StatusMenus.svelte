@@ -4,7 +4,7 @@
   import { Displays } from '../../lib/displays.svelte'
   import { numberOf, recordOf } from '../../lib/record'
   import type { ViewProps } from '../../host/plugins/views'
-  import { anchorOf, keyboardOf, layerOf, resolve } from '../../tree'
+  import { anchorOf, exclusiveZoneOf, keyboardOf, layerOf, resolve } from '../../tree'
   import { NO_MENU, openMenuOf, statusItemsOf } from './statusItems'
   import type { OpenMenu, StatusItem } from './statusItems'
 
@@ -122,6 +122,7 @@
       monitor={displays.monitorFor(current.monitor)}
       layer={layerOf(windowArgs)}
       anchor={anchorOf(windowArgs)}
+      exclusive-zone={exclusiveZoneOf(windowArgs)}
       keyboard-mode={keyboardOf(windowArgs)}
       decorated={false}
     >
