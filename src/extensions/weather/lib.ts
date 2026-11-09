@@ -79,6 +79,47 @@ function cloudyIconOf(code: number): string {
   return 'weather-storm-symbolic'
 }
 
+// The card's background, as a style class: one sky per icon group, and a
+// night version of the two that are mostly sky.
+export function skyOf(code: number, isDay: boolean): string {
+  const group = skyGroupOf(code)
+  if (group !== 'clear' && group !== 'cloudy') {
+    return `weather-sky-${group}`
+  }
+  if (isDay) {
+    return `weather-sky-${group}-day`
+  }
+  return `weather-sky-${group}-night`
+}
+
+function skyGroupOf(code: number): string {
+  if (code <= 1) {
+    return 'clear'
+  }
+  if (code <= 3) {
+    return 'cloudy'
+  }
+  if (code <= 48) {
+    return 'fog'
+  }
+  if (code <= 67 || (code >= 80 && code <= 82)) {
+    return 'rain'
+  }
+  if (code <= 86) {
+    return 'snow'
+  }
+  return 'storm'
+}
+
+// Only the clear daytime sun is drawn in colour; the other icons stay white
+// against the sky.
+export function iconToneOf(code: number, isDay: boolean): string {
+  if (code <= 1 && isDay) {
+    return 'weather-sun'
+  }
+  return ''
+}
+
 // An entry the backend sent incomplete is dropped, not defaulted: a fabricated
 // 0° in an hourly strip reads as a real forecast. flatMap does the dropping so
 // each entry is validated where it is built.

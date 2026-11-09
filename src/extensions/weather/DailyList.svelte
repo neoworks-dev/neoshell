@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { weatherIcon } from './lib'
+  import { iconToneOf, weatherIcon } from './lib'
   import type { DayEntry } from './lib'
 
   // One row per forecast day: the weekday, its condition, and the day's range
@@ -51,7 +51,7 @@
       <gtklabel class="card-body" width={36} halign="start" ellipsize="end">
         {day.label}
       </gtklabel>
-      <gtkicon icon={weatherIcon(day.code, true)} size={ICON_PIXELS}></gtkicon>
+      <gtkicon class={iconToneOf(day.code, true)} icon={weatherIcon(day.code, true)} size={ICON_PIXELS}></gtkicon>
       <gtklabel class="card-hint card-day-low" tabular width={26} halign="end">{day.low}°</gtklabel>
       <gtkbox class="card-day-track" orientation="horizontal" width={trackWidth} valign="center">
         <gtkbox width={bar.left}></gtkbox>

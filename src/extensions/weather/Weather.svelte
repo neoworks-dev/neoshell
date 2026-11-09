@@ -6,7 +6,7 @@
   import WeatherSettings from './WeatherSettings.svelte'
   import HourlyStrip from './HourlyStrip.svelte'
   import DailyList from './DailyList.svelte'
-  import { currentOf } from './lib'
+  import { currentOf, skyOf } from './lib'
   import type { DayEntry, WeatherCurrent } from './lib'
 
   // The desktop weather card in the three widget sizes:
@@ -34,6 +34,7 @@
   const box = $derived(widgetBoxOf(args))
   const comingDays = $derived(comingDaysOf(current))
   const trackWidth = $derived(Math.max(40, box.width - DAY_ROW_FURNITURE_PX))
+  const cardClass = $derived(`card weather-card weather-${box.size} ${skyClassOf(current)}`)
 
   // One topic per card: the backend keeps a card per instance so two weather
   // widgets can show two places, and learns this one exists from the watch
@@ -90,6 +91,14 @@
     return state.unit === '°F'
   }
 
+  // A card with nothing to show yet keeps a neutral sky.
+  function skyClassOf(state: WeatherCurrent | null): string {
+    if (state === null) {
+      return 'weather-sky-cloudy-night'
+    }
+    return skyOf(state.code, state.isDay)
+  }
+
   // The day list starts tomorrow: today's high and low are already on the
   // summary above it.
   function comingDaysOf(state: WeatherCurrent | null): DayEntry[] {
@@ -100,7 +109,7 @@
   }
 </script>
 
-<gtkoverlay class="card" hexpand vexpand>
+<gtkoverlay class={cardClass} hexpand vexpand>
   <gtkbox orientation="vertical" spacing={10} hexpand vexpand>
     {#if editing}
       <WeatherSettings
