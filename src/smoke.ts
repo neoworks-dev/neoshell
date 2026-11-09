@@ -13,6 +13,7 @@ import { ViewRegistry } from './host/plugins/views.js'
 import Smoke from './Smoke.svelte'
 import { SMOKE_EXTERNAL_TEXT, startSmokeExternal } from './smokeExternal.js'
 import { gridFailure } from './smokeGrid.js'
+import { revealFailure } from './smokeReveal.js'
 import { clientEventDetail, filesOfDrop } from './host/drops.js'
 import { registerFile } from './host/fileHandles.js'
 import { isLaunchable } from './extensions/dock/backend.js'
@@ -271,6 +272,13 @@ bus.retain('dock.windows', [
   { address: '0x5eed', class: 'smoke-app', title: 'Smoke window', workspace: { name: '1' }, command: 'smoke' },
 ])
 
+// A shown desktop holding one window, pictured as it went.
+bus.retain('reveal.state', {
+  hidden: true,
+  reason: 'corner',
+  windows: [{ address: '0x5eed', title: 'Smoke Window', appClass: 'smoke-app', handle: thumbnailHandle(SMOKE_AVATAR, 120) }],
+})
+
 // Some surfaces render nothing but an input marker while closed, so the
 // gallery's tiles only exist once it is opened. The commands are retained
 // rather than published: the views subscribe from an effect, which runs after
@@ -306,6 +314,10 @@ GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
     print('neoshell: the desktop, run as a client, did not show the image icon\'s handle')
     System.exit(1)
   }
+  if (!remotePictureShows('smoke-remote-reveal')) {
+    print('neoshell: the hidden windows\' strip, run as a client, did not show the window\'s picture')
+    System.exit(1)
+  }
   if (!remoteTooltipShows('smoke-remote-dock', 'smoke-app')) {
     print('neoshell: the dock, run as a client, did not draw a tile for the open window')
     System.exit(1)
@@ -321,6 +333,11 @@ GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
   const desktopGridFailure = gridFailure()
   if (desktopGridFailure !== null) {
     print(`neoshell: ${desktopGridFailure}`)
+    System.exit(1)
+  }
+  const desktopRevealFailure = revealFailure()
+  if (desktopRevealFailure !== null) {
+    print(`neoshell: ${desktopRevealFailure}`)
     System.exit(1)
   }
   const externalFailure = smokeExternal.failure()
@@ -344,6 +361,7 @@ const REMOTE_CARDS: [string, string][] = [
   ['smoke-remote-weather', 'Smoke'],
   // Got with Get and then replaced by a Changed signal from the "program".
   ['smoke-remote-external', SMOKE_EXTERNAL_TEXT],
+  ['smoke-remote-reveal', 'Smoke Window'],
   ['smoke-remote-airquality', 'Fair'],
   ['smoke-remote-runcat', '37%'],
   ['smoke-remote-usb', 'Smoke Keyboard'],

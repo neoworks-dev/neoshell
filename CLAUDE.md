@@ -56,6 +56,14 @@ still describe the earlier webview/bun build and are out of date.
   **Never trigger a lock from a test or smoke**: a broken locker traps the
   session. Set `misc:allow_session_lock_restore = true` in Hyprland so a
   crashed locker can be replaced.
+- **Showing the desktop** (`src/extensions/reveal/`). The widget gallery
+  opening, or the pointer pushed into the top-left hot corner, moves the
+  focused workspace's windows to `special:neoshell-desktop`, picturing each
+  first (a hidden window is not drawn). They show as a strip down the left
+  edge (`RevealStrip.svelte`); a click brings them all back with that one in
+  front. The gallery closing brings back what it hid; quitting the shell
+  brings back everything. A crashed shell leaves them on the special
+  workspace (`hyprctl dispatch togglespecialworkspace neoshell-desktop`).
 - **Installed programs' extensions** (`src/host/external/`, `sdk/`). At
   startup the shell reads `<data dir>/neoshell/extensions/<id>/`
   (`manifest.json` + `client.js`) and adds each one to the extension table:

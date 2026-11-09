@@ -1097,6 +1097,50 @@ button.qs-row-action:hover {
   background-color: alpha(#60a5fa, 0.85);
 }
 
+/* ── shown desktop: hidden windows and the hot corner ─────────────────── */
+
+.reveal-strip {
+  padding: 24px 0 24px 20px;
+}
+
+.reveal-card {
+  transition: transform 160ms ease-out;
+}
+
+.reveal-card:hover {
+  transform: translateX(6px);
+}
+
+.reveal-picture {
+  border-radius: 12px;
+  background-color: alpha(#141416, 0.85);
+  border: 1px solid alpha(#fafafa, 0.12);
+  box-shadow: 0 12px 28px alpha(#000000, 0.45);
+}
+
+.reveal-app {
+  font-size: 13px;
+  font-weight: 500;
+  color: alpha(#fafafa, 0.7);
+}
+
+.reveal-title {
+  font-size: 11px;
+  color: alpha(#fafafa, 0.85);
+  text-shadow: 0 1px 3px alpha(#000000, 0.8);
+}
+
+.reveal-all {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background-color: alpha(#141416, 0.7);
+  font-size: 12px;
+}
+
+.reveal-all:hover {
+  background-color: alpha(#262629, 0.85);
+}
+
 /* ── widget gallery ───────────────────────────────────────────────────── */
 
 /* rounded-t-3xl bg-base-300/80 ring-1 ring-base-content/10 shadow-2xl

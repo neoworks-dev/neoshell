@@ -25,6 +25,7 @@ import weatherBackend from './weather/backend.js'
 import airQualityBackend from './airquality/backend.js'
 import neoshellViews from './neoshell/views.js'
 import lockBackend from './lock/backend.js'
+import revealBackend from './reveal/backend.js'
 import lockViews from './lock/views.js'
 import quicksettingsBackend from './quicksettings/backend.js'
 import quicksettingsViews from './quicksettings/views.js'
@@ -246,6 +247,10 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     manifest: { id: 'desktop', inject: ['bus'] },
     backend: desktopBackend as Plugin.Object,
   },
+  reveal: {
+    manifest: { id: 'reveal', inject: ['bus'] },
+    backend: revealBackend as Plugin.Object,
+  },
   network: {
     manifest: { id: 'network', inject: ['bus'] },
     backend: networkBackend as Plugin.Object,
@@ -326,6 +331,16 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
             publish: ['settings:open'],
             configKeys: ['notch.nook', 'notch.openOn', 'quickshare.visibility'],
             embed: ['@nook'],
+          },
+        },
+        // The strip of windows the shown desktop sent away, and the hot corner
+        // that shows it.
+        reveal: {
+          permissions: {
+            subscribe: ['reveal.state'],
+            call: ['reveal:restore', 'reveal:toggle'],
+            publish: [],
+            configKeys: [],
           },
         },
         // Launching goes through dock:launch, which only runs what an
