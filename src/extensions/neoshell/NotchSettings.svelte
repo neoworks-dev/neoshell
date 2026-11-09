@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
-    Card,
     IconButton,
+    List,
     ListRow,
     SectionHeader,
     SegmentedButton,
@@ -179,7 +179,7 @@
   }
 </script>
 
-<gtkbox class="settings-content" orientation="vertical" spacing={20}>
+<gtkbox class="settings-content" orientation="vertical" spacing={8}>
   <gtkbox halign="center">
     <SegmentedButton label="Notch settings page" options={PAGES} bind:value={page} variant="tonal" />
   </gtkbox>
@@ -192,8 +192,8 @@
 </gtkbox>
 
 {#snippet general()}
-  <SectionHeader title="Behaviour" level={4} />
-  <Card padding="none">
+  <SectionHeader title="Behaviour" level={3} />
+  <List variant="card" dividers>
     <ListRow title="Opens on" subtitle="Closes again when the pointer leaves">
       {#snippet trailing()}
         <SegmentedButton
@@ -205,10 +205,10 @@
         />
       {/snippet}
     </ListRow>
-  </Card>
+  </List>
 
-  <SectionHeader title="Quick Share" description="Send and receive files with Android phones nearby." level={4} />
-  <Card padding="none">
+  <SectionHeader title="Quick Share" description="Send and receive files with Android phones nearby." level={3} />
+  <List variant="card" dividers>
     <ListRow title="Receiving" subtitle="Visible to everyone nearby while on">
       {#snippet trailing()}
         <Switch label="Receiving" hideLabel checked={receiving} onchange={setReceiving} />
@@ -219,20 +219,21 @@
         <gtkbox css="min-width: 220px;">
           <TextField
             label="Device name"
+            hideLabel
             value={deviceName}
             onsubmit={(name) => settings.set('quickshare.deviceName', name.trim())}
           />
         </gtkbox>
       {/snippet}
     </ListRow>
-  </Card>
+  </List>
 
   <SectionHeader
     title="Always accept from"
     description="Shares from these devices are accepted without asking. Devices are matched by the name they announce, which anyone nearby could copy."
-    level={4}
+    level={3}
   />
-  <Card padding="none">
+  <List variant="card" dividers>
     {#each trusted as name (name)}
       <ListRow title={name}>
         {#snippet trailing()}
@@ -243,11 +244,11 @@
     <ListRow title="Add a device" subtitle="Its name as it appears on a share; Enter adds it.">
       {#snippet trailing()}
         <gtkbox css="min-width: 220px;">
-          <TextField label="Device to trust" placeholder="Pixel 9" bind:value={trustDraft} onsubmit={trust} />
+          <TextField label="Device to trust" hideLabel placeholder="Pixel 9" bind:value={trustDraft} onsubmit={trust} />
         </gtkbox>
       {/snippet}
     </ListRow>
-  </Card>
+  </List>
 {/snippet}
 
 {#snippet widgets()}
@@ -300,7 +301,7 @@
   </gtkscrolledwindow>
 
   {#if chosen !== undefined && chosenWidget !== undefined}
-    <Card padding="none">
+    <List variant="card" dividers>
       <ListRow title="Width" subtitle="{chosenWidget.name}, in cells">
         {#snippet trailing()}
           <gtkbox css="min-width: 260px;">
@@ -338,6 +339,6 @@
           </gtkbox>
         {/snippet}
       </ListRow>
-    </Card>
+    </List>
   {/if}
 {/snippet}

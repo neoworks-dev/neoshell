@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button, Card, IconButton, ListRow, SectionHeader, TextField } from '@neoworks/gtk-ui'
+  import { Button, IconButton, List, ListRow, SectionHeader, TextField } from '@neoworks/gtk-ui'
   import { subscribeTo } from '../../lib/bus'
   import { arrayOf, numberOf, recordOf, stringOf } from '../../lib/record'
   import type { ViewProps } from '../../host/plugins/views'
@@ -74,9 +74,9 @@
   }
 </script>
 
-<gtkbox class="settings-content" orientation="vertical" spacing={20}>
-  <SectionHeader title="Calendars" description="Events show in the notch's calendar." level={4} />
-  <Card padding="none">
+<gtkbox class="settings-content" orientation="vertical" spacing={8}>
+  <SectionHeader title="Calendars" description="Events show in the notch's calendar." level={3} />
+  <List variant="card" dividers>
     {#each sources as source (source.id)}
       <ListRow title={source.name} subtitle={subtitleOf(source)}>
         {#snippet trailing()}
@@ -86,9 +86,9 @@
     {:else}
       <ListRow title="No calendars yet" subtitle="Add one below." />
     {/each}
-  </Card>
+  </List>
 
-  <SectionHeader title="Add a calendar" description="Any iCal (.ics) address works." level={4} />
+  <SectionHeader title="Add a calendar" description="Any iCal (.ics) address works." level={3} />
   <gtklabel class="settings-hint" halign="fill" xalign={0} wrap>{GOOGLE_HINT}</gtklabel>
   <gtkbox orientation="vertical" spacing={12}>
     <TextField label="Name" placeholder="Work" bind:value={name} disabled={adding} />

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Card, ListRow, SectionHeader, Select } from '@neoworks/gtk-ui'
+  import { List, ListRow, SectionHeader, Select } from '@neoworks/gtk-ui'
   import type { SelectOption } from '@neoworks/gtk-ui'
   import { untrack } from 'svelte'
   import { subscribeTo } from '../../lib/bus'
@@ -84,26 +84,26 @@
   }
 </script>
 
-<gtkbox class="settings-content" orientation="vertical" spacing={20}>
+<gtkbox class="settings-content" orientation="vertical" spacing={8}>
   <SectionHeader
     title="Main display"
     description="Surfaces set to the main display go here, and so do the desktop's icons."
-    level={4}
+    level={3}
   />
-  <Card padding="none">
+  <List variant="card" dividers>
     <ListRow title="Main display">
       {#snippet trailing()}
         <Select options={mainOptions} value={main} size="sm" onChange={setMain} />
       {/snippet}
     </ListRow>
-  </Card>
+  </List>
 
   <SectionHeader
     title="Surfaces"
     description="A surface on a display that is unplugged moves to the main display."
-    level={4}
+    level={3}
   />
-  <Card padding="none">
+  <List variant="card" dividers>
     {#each surfaces as surface (surface.id)}
       <ListRow title={surface.label}>
         {#snippet trailing()}
@@ -116,5 +116,5 @@
         {/snippet}
       </ListRow>
     {/each}
-  </Card>
+  </List>
 </gtkbox>

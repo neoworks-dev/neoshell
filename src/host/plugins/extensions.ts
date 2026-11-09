@@ -30,7 +30,7 @@ import type {
 // the gallery because its extension is present, not because it is running.
 // Settings tabs and Nook widgets are aggregated the same way:
 //
-//   settings.catalog  {sections: [{id, title, icon, view, order?}]}
+//   settings.catalog  {sections: [{id, title, icon, view, order?, group?, keywords?}]}
 //   notch.catalog     {widgets: [{type, name, icon, defaultCells, minCells, maxCells}]}
 
 interface ExtensionEntry {

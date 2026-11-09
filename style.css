@@ -1504,7 +1504,12 @@ button.qs-row-action:hover {
 
 /* The window and its controls are @neoworks/gtk-ui; these are the pages'
    own pieces, on the same --ui-* tokens so they follow light and dark. */
-.settings-content { margin: 20px 28px 28px 28px; }
+.settings-content { margin: 4px 24px 28px 24px; }
+/* Grouped like a macOS settings pane: pages space their children 8px apart,
+   so a heading sits close above its card, and a heading after the first
+   stands the group apart from the one before. */
+.settings-content > box.ui-section-header:not(:first-child) { margin-top: 18px; }
+.settings-search { margin-bottom: 8px; }
 .settings-missing { color: var(--ui-text-muted); }
 label.settings-hint { color: var(--ui-text-muted); font-size: var(--ui-text-caption); }
 

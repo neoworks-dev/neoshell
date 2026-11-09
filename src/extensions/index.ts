@@ -46,6 +46,10 @@ export interface SettingsDeclaration {
   view: string
   // Lower comes first; ties keep declaration order.
   order?: number
+  // Sections with the same group sit together in the sidebar, groups apart.
+  group?: string
+  // Further words the sidebar's search matches, besides the title.
+  keywords?: string[]
 }
 
 // A widget the notch's Nook can show. Its width is counted in cells, which
@@ -97,7 +101,15 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
       id: 'calendar',
       inject: ['bus', 'ui'],
       settings: [
-        { id: 'calendar', title: 'Calendar', icon: 'x-office-calendar-symbolic', view: 'calendar.settings', order: 20 },
+        {
+          id: 'calendar',
+          title: 'Calendar',
+          icon: 'x-office-calendar-symbolic',
+          view: 'calendar.settings',
+          order: 20,
+          group: 'shell',
+          keywords: ['events', 'ics', 'ical', 'google'],
+        },
       ],
     },
     backend: calendarBackend as Plugin.Object,
@@ -124,7 +136,15 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
       id: 'neoshell',
       inject: ['bus', 'ui'],
       settings: [
-        { id: 'notch', title: 'Notch', icon: 'view-grid-symbolic', view: 'neoshell.notch.settings', order: 10 },
+        {
+          id: 'notch',
+          title: 'Notch',
+          icon: 'view-grid-symbolic',
+          view: 'neoshell.notch.settings',
+          order: 10,
+          group: 'shell',
+          keywords: ['widgets', 'nook', 'tray', 'quick share', 'receive', 'trusted'],
+        },
       ],
       notchWidgets: [
         {
@@ -161,7 +181,15 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
       id: 'settings',
       inject: ['bus', 'ui'],
       settings: [
-        { id: 'displays', title: 'Displays', icon: 'video-display-symbolic', view: 'settings.displays', order: 0 },
+        {
+          id: 'displays',
+          title: 'Displays',
+          icon: 'video-display-symbolic',
+          view: 'settings.displays',
+          order: 0,
+          group: 'system',
+          keywords: ['monitor', 'screen', 'main display'],
+        },
       ],
     },
     views: settingsViews,
