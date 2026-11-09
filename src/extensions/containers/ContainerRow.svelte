@@ -93,14 +93,14 @@
   <gtkbox class={rowClass(busy)} orientation="horizontal" spacing={10}>
     <gtkbox class={dotClass} valign="center"></gtkbox>
     <gtkbox orientation="vertical" hexpand valign="center">
-      <gtklabel class="container-name" halign="start" ellipsize="end" xalign={0}>{item.name}</gtklabel>
-      <gtklabel class="card-range" halign="start" ellipsize="end" xalign={0}>{sublineOf(item)}</gtklabel>
+      <gtklabel class="card-body" halign="start" ellipsize="end" xalign={0}>{item.name}</gtklabel>
+      <gtklabel class="card-hint" halign="start" ellipsize="end" xalign={0}>{sublineOf(item)}</gtklabel>
     </gtkbox>
     {#if full && hasUsage(item)}
       <gtkbox orientation="vertical" spacing={2} valign="center" halign="end">
         <gtkbox orientation="horizontal" spacing={6} halign="end">
-          <gtklabel class="card-range" tabular>{item.memory}</gtklabel>
-          <gtklabel class="container-cpu" tabular>{cpuLabelOf(item)}</gtklabel>
+          <gtklabel class="card-hint" tabular>{item.memory}</gtklabel>
+          <gtklabel class="card-hint" tabular>{cpuLabelOf(item)}</gtklabel>
         </gtkbox>
         <FillMeter fraction={cpuFractionOf(item)} width={METER_WIDTH_PX} tone={cpuToneOf(item)} />
       </gtkbox>

@@ -48,16 +48,16 @@
   {#each days as day (day.label)}
     {@const bar = barOf(day)}
     <gtkbox orientation="horizontal" spacing={8} vexpand>
-      <gtklabel class="card-day-label" width={36} halign="start" ellipsize="end">
+      <gtklabel class="card-body" width={36} halign="start" ellipsize="end">
         {day.label}
       </gtklabel>
       <gtkicon icon={weatherIcon(day.code, true)} size={ICON_PIXELS}></gtkicon>
-      <gtklabel class="card-day-low" tabular width={26} halign="end">{day.low}°</gtklabel>
+      <gtklabel class="card-hint card-day-low" tabular width={26} halign="end">{day.low}°</gtklabel>
       <gtkbox class="card-day-track" orientation="horizontal" width={trackWidth} valign="center">
         <gtkbox width={bar.left}></gtkbox>
         <gtkbox class="card-day-fill" width={bar.width}></gtkbox>
       </gtkbox>
-      <gtklabel class="card-day-high" tabular width={26} halign="end">{day.high}°</gtklabel>
+      <gtklabel class="card-body" tabular width={26} halign="end">{day.high}°</gtklabel>
     </gtkbox>
   {/each}
 </gtkbox>

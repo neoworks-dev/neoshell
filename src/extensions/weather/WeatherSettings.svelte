@@ -46,7 +46,7 @@
 
 <gtkbox class="card-settings" orientation="vertical" spacing={8} vexpand>
   <gtkbox orientation="vertical" spacing={2}>
-    <gtklabel class="card-settings-label" halign="start">Location</gtklabel>
+    <gtklabel class="card-hint" halign="start">Location</gtklabel>
     <gtkentry
       class="card-settings-entry"
       placeholder="City"
@@ -57,7 +57,7 @@
   </gtkbox>
 
   <gtkbox orientation="horizontal" spacing={8}>
-    <gtklabel class="card-settings-label" hexpand halign="start">Units</gtklabel>
+    <gtklabel class="card-hint" hexpand halign="start">Units</gtklabel>
     <gtkbutton
       class="card-settings-button"
       frame={false}

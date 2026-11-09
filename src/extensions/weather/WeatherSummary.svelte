@@ -22,18 +22,18 @@
 {#if stacked}
   <gtkbox class="card-summary" orientation="vertical" spacing={6} vexpand>
     <gtkbox orientation="horizontal" spacing={4}>
-      <gtklabel class="card-place" halign="start" ellipsize="end">{current.place}</gtklabel>
+      <gtklabel class="card-title" halign="start" ellipsize="end">{current.place}</gtklabel>
     </gtkbox>
     <gtklabel class="card-reading" tabular halign="start">
       {current.temperature}{current.unit}
     </gtklabel>
     <gtkbox orientation="vertical" spacing={2} valign="end" vexpand>
       <gtkicon {icon} size={ICON_LARGE} halign="start"></gtkicon>
-      <gtklabel class="card-condition" halign="start" ellipsize="end">
+      <gtklabel class="card-body" halign="start" ellipsize="end">
         {current.description}
       </gtklabel>
       {#if showsRange}
-        <gtklabel class="card-range" tabular halign="start">
+        <gtklabel class="card-hint" tabular halign="start">
           H:{current.high}° L:{current.low}°
         </gtklabel>
       {/if}
@@ -42,18 +42,18 @@
 {:else}
   <gtkbox class="card-summary" orientation="horizontal" spacing={12}>
     <gtkbox orientation="vertical" hexpand halign="start">
-      <gtklabel class="card-place" halign="start" ellipsize="end">{current.place}</gtklabel>
+      <gtklabel class="card-title" halign="start" ellipsize="end">{current.place}</gtklabel>
       <gtklabel class="card-reading" tabular halign="start">
         {current.temperature}{current.unit}
       </gtklabel>
     </gtkbox>
     <gtkbox orientation="vertical" spacing={2} halign="end">
       <gtkicon {icon} size={ICON_SMALL} halign="end"></gtkicon>
-      <gtklabel class="card-condition" halign="end" ellipsize="end">
+      <gtklabel class="card-body" halign="end" ellipsize="end">
         {current.description}
       </gtklabel>
       {#if showsRange}
-        <gtklabel class="card-range" tabular halign="end">
+        <gtklabel class="card-hint" tabular halign="end">
           H:{current.high}° L:{current.low}°
         </gtklabel>
       {/if}

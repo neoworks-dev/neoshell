@@ -157,13 +157,13 @@
     {#if agents.length > 1}
       <gtkbox orientation="horizontal" spacing={6} valign="end">
         <gtkbox class={sessionDotClass} valign="center"></gtkbox>
-        <gtklabel class="card-range" halign="start">{sessionCountLineOf(sessions)}</gtklabel>
+        <gtklabel class="card-hint" halign="start">{sessionCountLineOf(sessions)}</gtklabel>
       </gtkbox>
     {/if}
   {:else}
     <gtkbox orientation="horizontal" spacing={8}>
       <gtklabel class="card-title" hexpand halign="start">AI usage</gtklabel>
-      <gtklabel class="card-range" halign="end">{formatTokens(todayTotal)} tokens today</gtklabel>
+      <gtklabel class="card-hint" halign="end">{formatTokens(todayTotal)} tokens today</gtklabel>
     </gtkbox>
     <gtkbox orientation="horizontal" spacing={COLUMN_GAP_PX}>
       {#each agents as agent (agent.id)}
@@ -173,7 +173,7 @@
       {/each}
     </gtkbox>
     <gtkbox orientation="vertical" spacing={4}>
-      <gtklabel class="card-range" halign="start">Last 12 hours</gtklabel>
+      <gtklabel class="card-hint" halign="start">Last 12 hours</gtklabel>
       <HourlyBars hours={hourly} height={BARS_HEIGHT_PX} width={innerWidth} />
     </gtkbox>
     <gtkbox orientation="vertical" spacing={2} vexpand valign="start">

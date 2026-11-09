@@ -34,12 +34,12 @@
     </gtkbox>
     <gtkbox orientation="vertical" hexpand valign="center">
       <gtkbox orientation="horizontal" spacing={8}>
-        <gtklabel class="container-name" hexpand halign="start" ellipsize="end" xalign={0}>
+        <gtklabel class="card-body" hexpand halign="start" ellipsize="end" xalign={0}>
           {senderOf(message)}
         </gtklabel>
-        <gtklabel class="card-range" tabular halign="end">{relativeTimeOf(message.time, now)}</gtklabel>
+        <gtklabel class="card-hint" tabular halign="end">{relativeTimeOf(message.time, now)}</gtklabel>
       </gtkbox>
-      <gtklabel class="card-range" halign="start" ellipsize="end" xalign={0}>{subjectOf(message)}</gtklabel>
+      <gtklabel class="card-hint" halign="start" ellipsize="end" xalign={0}>{subjectOf(message)}</gtklabel>
     </gtkbox>
   </gtkbox>
 </gtkrevealer>

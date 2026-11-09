@@ -38,33 +38,33 @@
 {#if compact}
   <gtkbox class="usage-agent" orientation="vertical" spacing={3} tooltip={limitNoteOf(usageWindow)}>
     <gtkbox orientation="horizontal" spacing={6}>
-      <gtklabel class="usage-agent-name" hexpand halign="start" ellipsize="end">{agent.name}</gtklabel>
-      <gtklabel class="usage-percent-small" tabular halign="end">{headlineOf(usageWindow)}</gtklabel>
+      <gtklabel class="card-title" hexpand halign="start" ellipsize="end">{agent.name}</gtklabel>
+      <gtklabel class="card-title" tabular halign="end">{headlineOf(usageWindow)}</gtklabel>
     </gtkbox>
     <FillMeter fraction={meterFractionOf(usageWindow)} width={trackWidth} {tone} />
-    <gtklabel class="card-range" halign="start" ellipsize="end">{compactDetailOf(agent, now)}</gtklabel>
+    <gtklabel class="card-hint" halign="start" ellipsize="end">{compactDetailOf(agent, now)}</gtklabel>
   </gtkbox>
 {:else}
   <gtkbox class="usage-agent" orientation="vertical" spacing={4} hexpand tooltip={limitNoteOf(usageWindow)}>
     <gtkbox orientation="horizontal" spacing={6}>
-      <gtklabel class="usage-agent-name" halign="start" ellipsize="end">{agent.name}</gtklabel>
+      <gtklabel class="card-title" halign="start" ellipsize="end">{agent.name}</gtklabel>
       {#if agent.plan !== ''}
         <gtklabel class="usage-plan" halign="start" valign="center">{agent.plan}</gtklabel>
       {/if}
     </gtkbox>
     <gtkbox orientation="horizontal" spacing={6}>
-      <gtklabel class="usage-percent" tabular halign="start">{headlineOf(usageWindow)}</gtklabel>
-      <gtklabel class="card-range usage-caption" halign="start" valign="end" ellipsize="end">
+      <gtklabel class="card-reading compact" tabular halign="start">{headlineOf(usageWindow)}</gtklabel>
+      <gtklabel class="card-hint usage-caption" halign="start" valign="end" ellipsize="end">
         {headlineCaptionOf(usageWindow, agent)}
       </gtklabel>
     </gtkbox>
     <FillMeter fraction={meterFractionOf(usageWindow)} width={trackWidth} {tone} />
-    <gtklabel class="card-range" halign="start" ellipsize="end">{resetLineOf(usageWindow, now)}</gtklabel>
-    <gtklabel class="card-range" halign="start" ellipsize="end">{todayLineOf(agent)}</gtklabel>
+    <gtklabel class="card-hint" halign="start" ellipsize="end">{resetLineOf(usageWindow, now)}</gtklabel>
+    <gtklabel class="card-hint" halign="start" ellipsize="end">{todayLineOf(agent)}</gtklabel>
     {#if weekly !== null}
       <gtkbox orientation="horizontal" spacing={6}>
-        <gtklabel class="card-range" halign="start">{weekly.label}</gtklabel>
-        <gtklabel class="card-range" tabular hexpand halign="end">{weekly.percent}%</gtklabel>
+        <gtklabel class="card-hint" halign="start">{weekly.label}</gtklabel>
+        <gtklabel class="card-hint" tabular hexpand halign="end">{weekly.percent}%</gtklabel>
       </gtkbox>
       <FillMeter fraction={meterFractionOf(weekly)} width={trackWidth} tone={meterToneOf(weekly.percent)} />
     {/if}

@@ -9,7 +9,7 @@
 
 <gtkbox class="gh-commit" orientation="horizontal" spacing={8} tooltip="{commit.author}: {commit.message}">
   <gtklabel class="gh-sha" valign="center">{commit.sha}</gtklabel>
-  <gtklabel class="gh-commit-subject" hexpand halign="start" ellipsize="end" xalign={0}>
+  <gtklabel class="card-body" hexpand halign="start" ellipsize="end" xalign={0}>
     {commit.message}
   </gtklabel>
   <gtklabel class="card-hint" valign="center">{relativeTime(commit.date, now)}</gtklabel>

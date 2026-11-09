@@ -73,8 +73,8 @@
     <gtklabel class="card-title" halign="start">Air Quality</gtklabel>
     <gtklabel class="card-reading" tabular halign="start">{current.index}</gtklabel>
     <gtkbox orientation="vertical" valign="end" vexpand>
-      <gtklabel class="card-condition" halign="start" ellipsize="end">{current.category}</gtklabel>
-      <gtklabel class="card-range" halign="start">{age}</gtklabel>
+      <gtklabel class="card-body" halign="start" ellipsize="end">{current.category}</gtklabel>
+      <gtklabel class="card-hint" halign="start">{age}</gtklabel>
     </gtkbox>
     {@render scaleBar()}
   </gtkbox>
@@ -86,9 +86,9 @@
         <gtklabel class="card-reading" tabular halign="start">{current.index}</gtklabel>
       </gtkbox>
       <gtkbox orientation="vertical" halign="end">
-        <gtklabel class="card-place" halign="end" ellipsize="end">{current.place}</gtklabel>
-        <gtklabel class="card-condition" halign="end" ellipsize="end">{current.category}</gtklabel>
-        <gtklabel class="card-range" halign="end">{age}</gtklabel>
+        <gtklabel class="card-title" halign="end" ellipsize="end">{current.place}</gtklabel>
+        <gtklabel class="card-body" halign="end" ellipsize="end">{current.category}</gtklabel>
+        <gtklabel class="card-hint" halign="end">{age}</gtklabel>
       </gtkbox>
     </gtkbox>
     {@render scaleBar()}

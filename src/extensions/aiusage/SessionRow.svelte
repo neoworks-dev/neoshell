@@ -77,15 +77,15 @@
     <gtkbox class={dotClass} valign="center"></gtkbox>
     <gtkbox orientation="vertical" hexpand valign="center">
       <gtkbox orientation="horizontal" spacing={8}>
-        <gtklabel class="container-name" hexpand halign="start" ellipsize="end" xalign={0}>{title}</gtklabel>
+        <gtklabel class="card-body" hexpand halign="start" ellipsize="end" xalign={0}>{title}</gtklabel>
         {#if !compact}
-          <gtklabel class="card-range" halign="end">{contextLabelOf(session.contextTokens)}</gtklabel>
+          <gtklabel class="card-hint" halign="end">{contextLabelOf(session.contextTokens)}</gtklabel>
         {/if}
       </gtkbox>
       <gtkbox orientation="horizontal" spacing={8}>
-        <gtklabel class="card-range" hexpand halign="start" ellipsize="end" xalign={0}>{detail}</gtklabel>
+        <gtklabel class="card-hint" hexpand halign="start" ellipsize="end" xalign={0}>{detail}</gtklabel>
         {#if !compact}
-          <gtklabel class="card-range usage-model" halign="end">{modelLine}</gtklabel>
+          <gtklabel class="card-hint" halign="end">{modelLine}</gtklabel>
         {/if}
       </gtkbox>
     </gtkbox>

@@ -78,7 +78,7 @@
     <gtkbox orientation="horizontal">
       {#each segments as segment, index (segment.label + segment.columns)}
         <gtklabel
-          class="gh-month"
+          class="card-hint gh-month"
           halign="start"
           xalign={0}
           ellipsize="end"

@@ -1355,11 +1355,18 @@ button.qs-row-action:hover {
 
 /* ── desktop widget cards ─────────────────────────────────────────────── */
 
-/* rounded-3xl bg-base-300/65 p-4 shadow-lg ring-1 ring-base-content/10
-   backdrop-blur-xl — the blur is the compositor's, asked for by the node. */
+/* Dark frosted glass. The blur is the compositor's, asked for by the desktop
+   node, which ignores everything under its blurIgnoreAlpha (0.5): the fill
+   has to stay above that and the shadow below it. The fill is opaque enough
+   to keep the text legible over a bright wallpaper even where the blur
+   averages it out.
+
+   Type, shared by every card: .card-title names a card or a row's subject,
+   .card-reading is the headline number (.compact for a second one), .card-body
+   is the text that is read, .card-hint is everything quieter. */
 .card {
-  background-color: alpha(#141416, 0.65);
-  border: 1px solid alpha(#fafafa, 0.1);
+  background-color: alpha(#141416, 0.84);
+  border: 1px solid alpha(#fafafa, 0.14);
   border-radius: 24px;
   padding: 14px;
   box-shadow: 0 10px 20px alpha(#000000, 0.35);
@@ -1381,7 +1388,7 @@ button.qs-row-action:hover {
 .card-meter trough {
   min-height: 4px;
   border-radius: 2px;
-  background-color: alpha(#fafafa, 0.15);
+  background-color: alpha(#fafafa, 0.28);
   border: none;
   padding: 0;
   box-shadow: none;
@@ -1407,39 +1414,33 @@ button.qs-row-action:hover {
   margin: 0;
 }
 
-/* text-sm font-medium */
 .card-title {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
+  color: alpha(#fafafa, 0.96);
 }
 
-/* text-xs leading-snug text-base-content/60 */
 .card-hint {
   font-size: 11px;
-  color: alpha(#fafafa, 0.6);
-}
-
-.card-place {
-  font-size: 13px;
   font-weight: 500;
+  color: alpha(#fafafa, 0.76);
 }
 
-/* text-5xl leading-tight font-light — the headline reading. */
+/* The headline reading. */
 .card-reading {
   font-size: 44px;
   font-weight: 300;
+  color: var(--base-content);
 }
 
-/* text-sm text-base-content/90 */
-.card-condition {
+.card-reading.compact {
+  font-size: 30px;
+}
+
+.card-body {
   font-size: 13px;
-  color: alpha(#fafafa, 0.9);
-}
-
-/* text-xs text-base-content/60 */
-.card-range {
-  font-size: 11px;
-  color: alpha(#fafafa, 0.6);
+  font-weight: 500;
+  color: alpha(#fafafa, 0.96);
 }
 
 /* The gear was revealed on group-hover. GTK CSS cannot key a child's opacity
@@ -1448,42 +1449,23 @@ button.qs-row-action:hover {
   padding: 4px;
   margin: 2px;
   border-radius: 12px;
-  color: alpha(#fafafa, 0.45);
+  color: alpha(#fafafa, 0.72);
 }
 
 .card-gear:hover {
-  background-color: alpha(#fafafa, 0.1);
+  background-color: alpha(#fafafa, 0.16);
   color: var(--base-content);
 }
 
-.card-strip-label {
-  font-size: 11px;
-  color: alpha(#fafafa, 0.6);
-}
-
-.card-strip-value {
-  font-size: 13px;
-}
-
-.card-day-label {
-  font-size: 13px;
-  color: alpha(#fafafa, 0.7);
-}
-
 .card-day-low {
-  font-size: 13px;
-  color: alpha(#fafafa, 0.6);
+  color: alpha(#fafafa, 0.76);
 }
 
-.card-day-high {
-  font-size: 13px;
-}
-
-/* h-1 rounded-full bg-base-content/15, with the day's range laid over it. */
+/* A day's range is laid over this track. */
 .card-day-track {
   min-height: 4px;
   border-radius: 2px;
-  background-color: alpha(#fafafa, 0.15);
+  background-color: alpha(#fafafa, 0.28);
 }
 
 /* bg-linear-to-r from-info to-warning */
@@ -1495,17 +1477,12 @@ button.qs-row-action:hover {
 
 /* ── weather card: settings face ──────────────────────────────────────── */
 
-.card-settings-label {
-  font-size: 11px;
-  color: alpha(#fafafa, 0.6);
-}
-
 .card-settings-entry {
   font-size: 13px;
   min-height: 0;
   padding: 2px 8px;
   background-color: alpha(#000000, 0.6);
-  border: 1px solid alpha(#fafafa, 0.15);
+  border: 1px solid alpha(#fafafa, 0.28);
   border-radius: 8px;
 }
 
@@ -1517,7 +1494,7 @@ button.qs-row-action:hover {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 8px;
-  border: 1px solid alpha(#fafafa, 0.15);
+  border: 1px solid alpha(#fafafa, 0.28);
 }
 
 .card-settings-button:hover {
@@ -1534,12 +1511,7 @@ button.qs-row-action:hover {
 
 .gh-header-icon,
 .gh-notice-icon {
-  color: alpha(#fafafa, 0.55);
-}
-
-.gh-total {
-  font-size: 30px;
-  font-weight: 300;
+  color: alpha(#fafafa, 0.72);
 }
 
 /* The refresh button's default margin would make the header taller than its
@@ -1549,31 +1521,21 @@ button.qs-row-action:hover {
   margin: 0;
 }
 
-.gh-total-secondary {
-  font-size: 22px;
-  font-weight: 300;
-}
-
-.gh-streak {
-  font-size: 12px;
-  color: alpha(#fafafa, 0.8);
-}
-
 .gh-stat-value {
   font-size: 17px;
   font-weight: 500;
+  color: var(--base-content);
 }
 
 .gh-section {
-  font-size: 11px;
   font-weight: 600;
-  color: alpha(#fafafa, 0.6);
 }
 
+/* The graph's axis and legend labels are the one place a hint is set smaller
+   than the card's own: the columns they label are 11px apart. */
 .gh-month,
 .gh-legend {
-  font-size: 9px;
-  color: alpha(#fafafa, 0.5);
+  font-size: 10px;
 }
 
 /* The graph's five shades are GitHub's own greens. A cell fades in when the
@@ -1585,35 +1547,30 @@ button.qs-row-action:hover {
 }
 
 .gh-cell.gh-shown { opacity: 1; }
-.gh-level-0 { background-color: alpha(#fafafa, 0.07); }
-.gh-level-1 { background-color: #0e4429; }
-.gh-level-2 { background-color: #006d32; }
-.gh-level-3 { background-color: #26a641; }
-.gh-level-4 { background-color: #39d353; }
+.gh-level-0 { background-color: alpha(#fafafa, 0.2); }
+.gh-level-1 { background-color: #1d6b3a; }
+.gh-level-2 { background-color: #1f9347; }
+.gh-level-3 { background-color: #3fc45f; }
+.gh-level-4 { background-color: #6ae88a; }
 
 .gh-today {
-  border: 1px solid alpha(#fafafa, 0.6);
+  border: 1px solid alpha(#fafafa, 0.85);
 }
 
 .gh-week-bar {
   border-radius: 2px;
-  background-color: #26a641;
+  background-color: #3fc45f;
 }
 
 .gh-spark {
   border-radius: 2px;
-  background-color: alpha(#fafafa, 0.14);
+  background-color: alpha(#fafafa, 0.28);
   opacity: 0;
   transition: opacity 300ms ease-out;
 }
 
 .gh-spark.gh-shown { opacity: 1; }
-.gh-spark-active { background-color: #2ea043; }
-
-.gh-repo-name {
-  font-size: 13px;
-  font-weight: 600;
-}
+.gh-spark-active { background-color: #3fc45f; }
 
 .gh-star {
   color: #e3b341;
@@ -1626,57 +1583,50 @@ button.qs-row-action:hover {
 .gh-sha {
   font-family: monospace;
   font-size: 11px;
-  color: var(--info);
-}
-
-.gh-commit-subject {
-  font-size: 12px;
+  color: #8fc2ff;
 }
 
 .gh-row {
   padding: 4px 0;
 }
 
-.gh-row-title {
-  font-size: 12px;
-  font-weight: 500;
-}
-
 .gh-chip {
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   padding: 1px 0;
   border-radius: 8px;
 }
 
 .gh-chip-issue {
-  background-color: alpha(#3fb950, 0.18);
-  color: #56d364;
+  background-color: alpha(#3fb950, 0.3);
+  color: #7ee890;
 }
 
 .gh-chip-pull {
-  background-color: alpha(#a371f7, 0.2);
-  color: #c297ff;
+  background-color: alpha(#a371f7, 0.34);
+  color: #dcc6ff;
 }
 
 .gh-unread-dot {
   border-radius: 4px;
-  background-color: alpha(#fafafa, 0.15);
+  background-color: alpha(#fafafa, 0.32);
   transition: background-color 300ms ease-out;
 }
 
 .gh-unread {
-  background-color: #388bfd;
+  background-color: #5aa2ff;
 }
 
 .gh-badge {
   padding: 2px 8px;
   border-radius: 10px;
-  background-color: alpha(#fafafa, 0.08);
+  background-color: alpha(#fafafa, 0.18);
 }
 
 .gh-badge-label {
   font-size: 11px;
+  font-weight: 500;
+  color: alpha(#fafafa, 0.96);
 }
 
 /* ── air quality card ─────────────────────────────────────────────────── */
@@ -1703,7 +1653,7 @@ button.qs-row-action:hover {
 
 .aqi-bar-track {
   border-radius: 3px;
-  background-color: alpha(#fafafa, 0.15);
+  background-color: alpha(#fafafa, 0.28);
 }
 
 /* The webview mixed a colour per reading with color-mix(). GTK CSS cannot
@@ -1723,7 +1673,7 @@ button.qs-row-action:hover {
 .aqi-level trough {
   min-height: 4px;
   border-radius: 2px;
-  background-color: alpha(#fafafa, 0.15);
+  background-color: alpha(#fafafa, 0.28);
   border: none;
   padding: 0;
   box-shadow: none;
@@ -1756,7 +1706,7 @@ button.qs-row-action:hover {
    transition is what makes it grow. */
 .fill-meter {
   border-radius: 3px;
-  background-color: alpha(#fafafa, 0.15);
+  background-color: alpha(#fafafa, 0.28);
 }
 
 .fill-meter-bar {
@@ -1800,13 +1750,6 @@ button.qs-row-action:hover {
    follows the action reports the new state. */
 .container-row.working { opacity: 0.6; }
 
-.container-name {
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.container-cpu { font-size: 11px; }
-
 .container-attention {
   font-size: 12px;
   font-weight: 500;
@@ -1815,14 +1758,12 @@ button.qs-row-action:hover {
 .attention-success { color: var(--success); }
 .attention-warning { color: var(--warning); }
 .attention-error { color: var(--error); }
-.attention-neutral { color: alpha(#fafafa, 0.6); }
-
-.card-reading.container-count { font-size: 30px; }
+.attention-neutral { color: alpha(#fafafa, 0.76); }
 
 .container-action {
   padding: 4px;
   border-radius: 8px;
-  color: alpha(#fafafa, 0.55);
+  color: alpha(#fafafa, 0.72);
   transition: background-color 150ms, color 150ms;
 }
 
@@ -1880,24 +1821,6 @@ button.qs-row-action:hover {
 
 .usage-agent { padding: 2px 0; }
 
-.usage-agent-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: alpha(#fafafa, 0.85);
-}
-
-/* text-5xl font-light, a little smaller than the weather's reading so the
-   caption beside it still fits a half-width column. */
-.usage-percent {
-  font-size: 34px;
-  font-weight: 300;
-}
-
-.usage-percent-small {
-  font-size: 13px;
-  font-weight: 600;
-}
-
 .usage-caption { margin-bottom: 7px; }
 
 /* The plan an agent reports: a small tag after its name. */
@@ -1906,8 +1829,8 @@ button.qs-row-action:hover {
   font-weight: 600;
   padding: 1px 6px;
   border-radius: 6px;
-  color: alpha(#fafafa, 0.7);
-  background-color: alpha(#fafafa, 0.1);
+  color: alpha(#fafafa, 0.92);
+  background-color: alpha(#fafafa, 0.2);
 }
 
 .usage-session {
@@ -1915,14 +1838,12 @@ button.qs-row-action:hover {
   border-radius: 10px;
 }
 
-.usage-model { color: alpha(#fafafa, 0.45); }
-
 /* The hours' bars: their height is an inline min-height that the transition
    carries from nothing when the card appears. */
 .usage-bar {
   min-height: 2px;
   border-radius: 3px;
-  background-color: alpha(#a78bfa, 0.45);
+  background-color: alpha(#a78bfa, 0.7);
   transition: min-height 600ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
