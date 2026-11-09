@@ -16,6 +16,7 @@ import NotchSettings from './extensions/neoshell/NotchSettings.svelte'
 import { clientEventDetail, filesOfDrop } from './host/drops.js'
 import { registerFile } from './host/fileHandles.js'
 import { isLaunchable } from './extensions/dock/backend.js'
+import { DesktopFolder } from './extensions/desktop/backend.js'
 import { recordOf } from './lib/record.js'
 import { notchWidgetCatalog, settingsCatalog } from './host/plugins/extensions.js'
 
@@ -244,6 +245,22 @@ bus.retain('tray.files', {
   ],
 })
 
+// The desktop folder as the desktop backend publishes it.
+bus.retain('desktop.entries', {
+  path: '/nonexistent/Desktop',
+  entries: [
+    { name: 'Smoke Folder', path: '/nonexistent/Desktop/Smoke Folder', directory: true, icon: 'folder', image: false, thumbnail: '' },
+    {
+      name: 'smoke.png',
+      path: '/nonexistent/Desktop/smoke.png',
+      directory: false,
+      icon: 'image-x-generic',
+      image: true,
+      thumbnail: thumbnailHandle(SMOKE_AVATAR, 96),
+    },
+  ],
+})
+
 // One open window, as the dock backend publishes it; with no desktop entry
 // to match it gets a tile of its own named by its class.
 bus.retain('dock.windows', [
@@ -281,8 +298,16 @@ GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
     print('neoshell: the Tray, run as a client, did not show the thumbnail handle')
     System.exit(1)
   }
+  if (!remotePictureShows('smoke-remote-desktop')) {
+    print('neoshell: the desktop, run as a client, did not show the image icon\'s handle')
+    System.exit(1)
+  }
   if (!remoteTooltipShows('smoke-remote-dock', 'smoke-app')) {
     print('neoshell: the dock, run as a client, did not draw a tile for the open window')
+    System.exit(1)
+  }
+  if (!desktopRefusesStrangers()) {
+    print('neoshell: the desktop backend would act on a file the desktop does not show')
     System.exit(1)
   }
   if (isLaunchable('rm -rf ~', [], ['firefox %u']) || !isLaunchable('firefox %u', [], ['firefox %u'])) {
@@ -316,6 +341,7 @@ const REMOTE_CARDS: [string, string][] = [
   // into the notch through the host.
   ['smoke-remote-notch', 'Smoke Test'],
   ['smoke-remote-tray', 'style.css'],
+  ['smoke-remote-desktop', 'Smoke Folder'],
   ['smoke-remote-bar', new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date())],
 ]
 
@@ -337,6 +363,17 @@ function remotePictureShows(boxClass: string): boolean {
     }
   }
   return false
+}
+
+// On a bus of its own, so nothing it would forward reaches a real backend.
+function desktopRefusesStrangers(): boolean {
+  const folder = new DesktopFolder(new Bus())
+  folder.apply({ path: '/nonexistent/Desktop', entries: [{ name: 'a', path: '/nonexistent/Desktop/a' }] })
+  const renamed = recordOf(folder.rename({ path: '/etc/passwd', name: 'x' }))
+  const trashed = recordOf(folder.trash({ paths: ['/nonexistent/Desktop/a', '/etc/passwd'] }))
+  const opened = recordOf(folder.forwardPath('files:open', { path: '/etc/passwd' }))
+  folder.withdraw()
+  return renamed.error !== undefined && trashed.error !== undefined && opened.error !== undefined
 }
 
 function remoteTooltipShows(boxClass: string, tooltip: string): boolean {

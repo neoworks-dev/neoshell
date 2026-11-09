@@ -31,6 +31,7 @@
   const RemoteControlCentre = remoteView('quicksettings', 'menu')
   const RemoteNotch = remoteView('neoshell-notch', 'notch')
   const RemoteDock = remoteView('neoshell-dock', 'dock')
+  const RemoteDesktop = remoteView('neoshell-desktop', 'desktop')
 
   // The smoke harness's markup: every view added for the quick settings tray
   // and the widget gallery, built once in a plain window.
@@ -200,6 +201,11 @@
         </gtkbox>
         <gtkbox class="smoke-remote-tray" valign="start">
           <RemoteNotch {bus} {registry} args={{ tab: 'tray' }} id="smoke.notch.tray" />
+        </gtkbox>
+        <!-- The desktop, run as its client: its folder's icons, one of them an
+             image shown through its picture handle. -->
+        <gtkbox class="smoke-remote-desktop" width={900} height={500} valign="start">
+          <RemoteDesktop {bus} {registry} args={{ monitor: '', mainMonitor: true, widgets: [] }} id="smoke.desktop" />
         </gtkbox>
         <!-- The dock, run as its client, with a tile for the one open window. -->
         <gtkbox class="smoke-remote-dock" width={560} height={96} valign="start">

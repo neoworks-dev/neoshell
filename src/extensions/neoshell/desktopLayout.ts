@@ -32,6 +32,8 @@ export interface DesktopEntry {
   directory: boolean
   icon: string
   image: boolean
+  // A picture handle for an image file's own picture, or ''.
+  thumbnail: string
 }
 
 // WidgetSeed is one entry of the desktop node's args: what to put on a desktop
@@ -388,6 +390,7 @@ function entryOf(raw: unknown): DesktopEntry | null {
     directory: record.directory === true,
     icon: stringOr(record.icon, 'text-x-generic'),
     image: record.image === true,
+    thumbnail: stringOr(record.thumbnail, ''),
   }
 }
 

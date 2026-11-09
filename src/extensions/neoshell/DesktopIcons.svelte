@@ -25,7 +25,9 @@
   // to the points this view gives them — or jump back, when it refuses.
   //
   // Icon art comes from the icon theme by freedesktop name; an image file shows
-  // itself.
+  // itself, through the picture handle desktop.entries carries for it. Every
+  // file operation goes through desktop:*, which only acts on what the
+  // desktop shows.
 
   const CALL_TIMEOUT_MS = 10000
   const DRAG_THRESHOLD_PX = 4
@@ -44,7 +46,6 @@
   interface Handler {
     id: string
     name: string
-    command: string
   }
 
   let { bus, store }: { bus: BusService; store: DesktopStore } = $props()
@@ -62,7 +63,7 @@
   let lastDragMoved = false
 
   $effect(() =>
-    subscribeTo(bus, 'files.desktop', (message) => {
+    subscribeTo(bus, 'desktop.entries', (message) => {
       store.applyDesktopFolder(message.data)
     }),
   )
@@ -109,12 +110,12 @@
   }
 
   function open(entry: DesktopEntry): void {
-    void bus.call('files:open', { path: entry.path }, CALL_TIMEOUT_MS)
+    void bus.call('desktop:open',{ path: entry.path }, CALL_TIMEOUT_MS)
   }
 
   function openSelection(): void {
     for (const path of store.selection) {
-      void bus.call('files:open', { path }, CALL_TIMEOUT_MS)
+      void bus.call('desktop:open',{ path }, CALL_TIMEOUT_MS)
     }
   }
 
@@ -270,7 +271,7 @@
   }
 
   async function handlerItems(entry: DesktopEntry): Promise<MenuItem[]> {
-    const reply = await bus.call('files:handlers', { path: entry.path }, CALL_TIMEOUT_MS)
+    const reply = await bus.call('desktop:handlers', { path: entry.path }, CALL_TIMEOUT_MS)
     const handlers = handlersOf(reply)
     if (handlers.length === 0) {
       return [{ label: 'No applications found', disabled: true }]
@@ -278,11 +279,7 @@
     return handlers.map((handler) => ({
       label: handler.name,
       action: () => {
-        void bus.call(
-          'files:openwith',
-          { path: entry.path, command: handler.command },
-          CALL_TIMEOUT_MS,
-        )
+        void bus.call('desktop:openwith', { path: entry.path, handler: handler.id }, CALL_TIMEOUT_MS)
       },
     }))
   }
@@ -309,11 +306,11 @@
     if (name === '' || name === entry.name) {
       return
     }
-    void bus.call('files:rename', { path: entry.path, name }, CALL_TIMEOUT_MS)
+    void bus.call('desktop:rename', { path: entry.path, name }, CALL_TIMEOUT_MS)
   }
 
   function trashSelection(): void {
-    void bus.call('files:trash', { paths: [...store.selection] }, CALL_TIMEOUT_MS)
+    void bus.call('desktop:trash', { paths: [...store.selection] }, CALL_TIMEOUT_MS)
     store.clearSelection()
   }
 
@@ -329,10 +326,10 @@
 </script>
 
 {#snippet art(entry: DesktopEntry)}
-  {#if entry.image}
+  {#if entry.thumbnail !== ''}
     <gtkpicture
       class="desktop-icon-art"
-      file={entry.path}
+      handle={entry.thumbnail}
       fit="contain"
       width={ICON_PIXELS}
       height={ICON_PIXELS}
