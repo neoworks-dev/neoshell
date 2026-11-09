@@ -3,6 +3,7 @@
   import type { ViewRegistry } from './host/plugins/views'
   import AiUsage from './extensions/aiusage/AiUsage.svelte'
   import Containers from './extensions/containers/Containers.svelte'
+  import Email from './extensions/email/Email.svelte'
   import Gallery from './extensions/gallery/Gallery.svelte'
   import { MAX_UNIT_PX, sizePx, spanOf } from './extensions/neoshell/grid'
   import { remoteView } from './host/clients/remoteView'
@@ -17,6 +18,8 @@
   const RemoteAiUsageSettings = remoteView('aiusage', 'settings')
   const RemoteContainersCard = remoteView('containers', 'card')
   const RemoteContainersSettings = remoteView('containers', 'settings')
+  const RemoteEmailCard = remoteView('email', 'card')
+  const RemoteEmailSettings = remoteView('email', 'settings')
   const RemoteGalleryCard = remoteView('gallery', 'card')
   const RemoteGallerySettings = remoteView('gallery', 'settings')
 
@@ -55,6 +58,17 @@
     {#each CARD_SIZES as size (size)}
       {@const box = boxFor(size)}
       <gtkbox width={box.width} height={box.height} valign="start">
+        <Email {bus} {registry} args={box} id={`smoke.email.${size}`} />
+      </gtkbox>
+    {/each}
+    <gtkbox class="smoke-remote-email-card" width={boxFor('medium').width} height={boxFor('medium').height} valign="start">
+      <RemoteEmailCard {bus} {registry} args={boxFor('medium')} id="smoke.email.remote" />
+    </gtkbox>
+  </gtkbox>
+  <gtkbox orientation="horizontal" spacing={12} valign="start">
+    {#each CARD_SIZES as size (size)}
+      {@const box = boxFor(size)}
+      <gtkbox width={box.width} height={box.height} valign="start">
         <Gallery {bus} {registry} args={box} id={`smoke.gallery.${size}`} />
       </gtkbox>
     {/each}
@@ -66,5 +80,6 @@
     <RemoteGallerySettings {bus} {registry} args={{}} id="smoke.gallery.settings" />
     <RemoteContainersSettings {bus} {registry} args={{}} id="smoke.containers.settings" />
     <RemoteAiUsageSettings {bus} {registry} args={{}} id="smoke.aiusage.settings" />
+    <RemoteEmailSettings {bus} {registry} args={{}} id="smoke.email.settings" />
   </gtkbox>
 </gtkbox>

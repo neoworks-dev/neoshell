@@ -39,6 +39,8 @@ import containersBackend from './containers/backend.js'
 import containersViews from './containers/views.js'
 import aiUsageBackend from './aiusage/backend.js'
 import aiUsageViews from './aiusage/views.js'
+import emailBackend from './email/backend.js'
+import emailViews from './email/views.js'
 
 // The extension registry. In the bun host an extension was a directory the
 // loader found by scanning for manifest.json and imported at runtime; one GJS
@@ -720,5 +722,46 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     },
     backend: aiUsageBackend as Plugin.Object,
     views: aiUsageViews,
+  },
+  // Unread mail from IMAP accounts, with the passwords in the keyring.
+  email: {
+    manifest: {
+      id: 'email',
+      inject: ['bus', 'ui'],
+      widgets: [
+        {
+          type: 'email.card',
+          name: 'Email',
+          category: 'Communication',
+          icon: 'mail-unread-symbolic',
+          description: 'The unread count and the newest unread senders and subjects.',
+          sizes: ['small', 'medium', 'large'],
+          defaultSize: 'medium',
+        },
+      ],
+      settings: [
+        {
+          id: 'email',
+          title: 'Email',
+          icon: 'mail-unread-symbolic',
+          view: 'email.settings',
+          order: 60,
+          group: 'shell',
+          keywords: ['mail', 'imap', 'inbox', 'gmail', 'accounts', 'unread'],
+        },
+      ],
+      // The passwords go to the backend, which keeps them in the keyring; the
+      // client only ever sees names and statuses.
+      client: {
+        permissions: {
+          subscribe: ['email.inbox'],
+          call: ['email:add', 'email:remove', 'email:refresh', 'config:set'],
+          publish: ['settings:open'],
+          configKeys: ['email.pollMinutes'],
+        },
+      },
+    },
+    backend: emailBackend as Plugin.Object,
+    views: emailViews,
   },
 }
