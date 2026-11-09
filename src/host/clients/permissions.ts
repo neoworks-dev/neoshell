@@ -8,18 +8,35 @@ export interface ClientPermissions {
   // Topics it may subscribe to. A request for a wider pattern than one listed
   // here is refused, not narrowed.
   subscribe: string[]
-  // Commands it may call.
-  call: string[]
+  // Commands it may call: by name, or by name with the only values some of
+  // the request's fields may take.
+  call: (string | CallRule)[]
   // Topics it may publish or retain.
   publish: string[]
   // Config keys it may read and `config:set` may write, as patterns. A client
   // with any may subscribe to `config`, and sees only these keys of it.
   configKeys: string[]
+  // View types it may embed with <gtkembed>, as patterns.
+  embed?: string[]
+}
+
+// { type: 'hypr:dispatch', fields: { dispatcher: ['workspace'] } }: the
+// command, and only with those dispatchers.
+export interface CallRule {
+  type: string
+  fields: Record<string, string[]>
 }
 
 export const CONFIG_TOPIC = 'config'
 
 export const NO_PERMISSIONS: ClientPermissions = { subscribe: [], call: [], publish: [], configKeys: [] }
+
+export function mayEmbed(permissions: ClientPermissions, view: string): boolean {
+  if (permissions.embed === undefined || view.includes('*')) {
+    return false
+  }
+  return permissions.embed.some((allowed) => matchesPattern(allowed, view))
+}
 
 export function maySubscribe(permissions: ClientPermissions, pattern: string): boolean {
   if (pattern === CONFIG_TOPIC && permissions.configKeys.length > 0) {
@@ -77,13 +94,31 @@ export function mayPublish(permissions: ClientPermissions, type: string): boolea
 }
 
 export function mayCall(permissions: ClientPermissions, type: string, data: unknown): boolean {
-  if (type.includes('*') || !permissions.call.some((allowed) => matchesPattern(allowed, type))) {
+  if (type.includes('*') || !permissions.call.some((allowed) => allowsCall(allowed, type, data))) {
     return false
   }
   if (type !== 'config:set') {
     return true
   }
   return mayWriteConfig(permissions, data)
+}
+
+function allowsCall(allowed: string | CallRule, type: string, data: unknown): boolean {
+  if (typeof allowed === 'string') {
+    return matchesPattern(allowed, type)
+  }
+  if (!matchesPattern(allowed.type, type)) {
+    return false
+  }
+  const record = recordOf(data)
+  return Object.entries(allowed.fields).every(([field, values]) => values.includes(String(record[field])))
+}
+
+function recordOf(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) {
+    return {}
+  }
+  return value as Record<string, unknown>
 }
 
 function mayWriteConfig(permissions: ClientPermissions, data: unknown): boolean {

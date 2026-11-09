@@ -7,7 +7,9 @@ import { joinPath } from '../../gjs/fs.js'
 import type { BusAnswer } from '../../lib/remoteBus.js'
 import { buildLocaleProfile } from '../../lib/localeProfile.js'
 import type { LocaleProfile } from '../../lib/localeProfile.js'
+import type { ViewRegistry } from '../plugins/views.js'
 import { BusBridge } from './bridge.js'
+import { shellEmbedder } from './embedder.svelte.js'
 import type { ClientPermissions } from './permissions.js'
 import { clientArgv, DEFAULT_RUNNER_LIMITS } from './sandbox.js'
 import type { RunnerLimits } from './sandbox.js'
@@ -44,11 +46,13 @@ const IDLE_STOP_MS = 30_000
 
 export class ClientManager {
   private readonly bus: Bus
+  private readonly registry: ViewRegistry
   private readonly declarationOf: (name: string) => ClientDeclaration | undefined
   private readonly running = new Map<string, Running>()
 
-  constructor(bus: Bus, declarationOf: (name: string) => ClientDeclaration | undefined) {
+  constructor(bus: Bus, registry: ViewRegistry, declarationOf: (name: string) => ClientDeclaration | undefined) {
     this.bus = bus
+    this.registry = registry
     this.declarationOf = declarationOf
   }
 
@@ -115,6 +119,7 @@ export class ClientManager {
       argv: clientArgv(runnerPath(), bundle, limitsOf(declaration)),
       policy: defaultPolicy(`client:${name}`),
       greeting: () => ({ locale: localeProfile() }),
+      embedder: shellEmbedder(name, this.bus, this.registry, permissions),
       onApp: (data) => bridge.handle(data),
       onStatus: (status, detail) => {
         if (status === 'restarting' || status === 'failed') {
