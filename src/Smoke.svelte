@@ -35,6 +35,10 @@
   const RemoteNotchSettings = remoteView('neoshell-settings', 'notch')
   const RemoteDisplaysSettings = remoteView('settings', 'displays')
   const RemoteCalendarSettings = remoteView('calendar', 'settings')
+  const RemoteGithubContributions = remoteView('github', 'contributions')
+  const RemoteGithubRepos = remoteView('github', 'repos')
+  const RemoteGithubIssues = remoteView('github', 'issues')
+  const RemoteGithubSettings = remoteView('github', 'settings')
 
   // The smoke harness's markup: every view added for the quick settings tray
   // and the widget gallery, built once in a plain window.
@@ -206,6 +210,20 @@
           </gtkbox>
         </gtkbox>
       {/each}
+      {#each CARD_SIZES as size (size)}
+        {@const box = boxFor(size)}
+        <gtkbox class={`smoke-remote-github-${size}`} orientation="vertical" spacing={12} valign="start">
+          <gtkbox width={box.width} height={box.height}>
+            <RemoteGithubContributions {bus} {registry} args={box} id={`smoke.github.contributions.${size}`} />
+          </gtkbox>
+          <gtkbox width={box.width} height={box.height}>
+            <RemoteGithubRepos {bus} {registry} args={box} id={`smoke.github.repos.${size}`} />
+          </gtkbox>
+          <gtkbox width={box.width} height={box.height}>
+            <RemoteGithubIssues {bus} {registry} args={box} id={`smoke.github.issues.${size}`} />
+          </gtkbox>
+        </gtkbox>
+      {/each}
       <!-- The notch, run as its client, opened (notch:open is retained) on
            its Nook, which embeds the client's own media widget back, and on
            its Tray. Then both pages of its settings. -->
@@ -237,6 +255,9 @@
         </gtkbox>
         <gtkbox class="smoke-remote-calendarsettings" orientation="vertical">
           <RemoteCalendarSettings {bus} {registry} args={{}} id="smoke.calendar" />
+        </gtkbox>
+        <gtkbox class="smoke-remote-githubsettings" orientation="vertical">
+          <RemoteGithubSettings {bus} {registry} args={{}} id="smoke.github.settings" />
         </gtkbox>
       </gtkbox>
       <!-- One monitor's lock surface, in a box instead of a session-lock
