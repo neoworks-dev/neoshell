@@ -1,7 +1,9 @@
 <script lang="ts">
+  import type Gdk from 'gi://Gdk?version=4.0'
   import { subscribeTo } from '../../lib/bus'
   import type { ViewProps } from '../../host/plugins/views'
-  import { recordOf } from '../../lib/record'
+  import { monitorSizeOf } from '../../lib/placement'
+  import { recordOf, stringOf } from '../../lib/record'
   import { createLivePlayer } from './livePlayer'
   import type { LivePlayer } from './livePlayer'
   import {
@@ -12,14 +14,14 @@
     onBatteryPower,
     shouldPlay,
   } from './liveWallpaper'
+  import { wallpaperTexture } from './wallpaperImage'
+  import type { PixelSize } from './wallpaperImage'
 
   // The desktop background: the configured wallpaper, a flat dark fill when
   // none is set.
   //
-  // The webview build fetched this through a host route, because a page served
-  // over http cannot read file://. GTK loads the file directly, so the
-  // /wallpaper route and the neoshell-bg daemon it stood in front of are both
-  // gone — the path from config is the path GdkPixbuf opens.
+  // A still image is decoded at the size that covers this view's output
+  // (wallpaperImage.ts), once per output size.
   //
   // A video path is a live wallpaper: a looping, muted player rendered into a
   // paintable the same picture shows. It holds still while a fullscreen window
@@ -28,7 +30,7 @@
   // second. Both rules and the playback speed live under
   // appearance.liveWallpaper.
 
-  let { bus }: ViewProps = $props()
+  let { bus, args }: ViewProps = $props()
 
   let wallpaperPath = $state('')
   let options = $state(DEFAULT_LIVE_OPTIONS)
@@ -63,6 +65,12 @@
   )
 
   const isLive = $derived(isVideoPath(wallpaperPath))
+
+  // Kept as plain numbers so a hypr.monitors republish that leaves this
+  // output's size alone does not decode the image again.
+  const outputWidth = $derived(outputSizeOf(monitors).width)
+  const outputHeight = $derived(outputSizeOf(monitors).height)
+  const still = $derived.by(() => stillOf(wallpaperPath, isLive, outputWidth, outputHeight))
   const playing = $derived(
     shouldPlay(options, fullscreenShowing(workspaces, monitors), onBatteryPower(battery)),
   )
@@ -101,12 +109,28 @@
     }
     return ''
   }
+
+  function outputSizeOf(snapshot: unknown): PixelSize {
+    const size = monitorSizeOf(snapshot, stringOf(recordOf(args).monitor))
+    if (size === null) {
+      return { width: 0, height: 0 }
+    }
+    return size
+  }
+
+  // Waits for the output's size rather than decoding at the photo's own.
+  function stillOf(path: string, live: boolean, width: number, height: number): Gdk.Texture | null {
+    if (path === '' || live || width === 0 || height === 0) {
+      return null
+    }
+    return wallpaperTexture(path, { width, height })
+  }
 </script>
 
 <gtkbox class="wallpaper" hexpand vexpand>
   {#if player !== null}
     <gtkpicture paintable={player.paintable} fit="cover" hexpand vexpand></gtkpicture>
-  {:else if wallpaperPath !== '' && !isLive}
-    <gtkpicture file={wallpaperPath} fit="cover" hexpand vexpand></gtkpicture>
+  {:else if still !== null}
+    <gtkpicture paintable={still} fit="cover" hexpand vexpand></gtkpicture>
   {/if}
 </gtkbox>
