@@ -378,25 +378,30 @@
   }
 </script>
 
-<gtkbox class="control-centre" orientation="vertical" spacing={10} width={WIDTH}>
-  {#if page === 'wifi' && network !== null}
-    <WifiPage {bus} networkState={network} {networks} onBack={() => (page = 'main')} />
-  {:else if page === 'bluetooth' && bluetooth !== null}
-    <BluetoothPage {bus} bluetoothState={bluetooth} {devices} onBack={() => (page = 'main')} />
-  {:else if page === 'power'}
-    {@render powerPage()}
-  {:else}
-    {@render header()}
-    {@render tiles()}
-    {#if volume >= 0}
-      <gtkbox class="cc-block" orientation="vertical" spacing={8}>
-        <SliderRow icon={volumeIcon(muted)} label="Volume" value={volume} onInput={setVolume} onIconClick={toggleMute} />
-      </gtkbox>
-    {/if}
-    {#if track !== null}
-      {@render media(track)}
-    {/if}
-  {/if}
+<!-- Each page is a fresh box, so switching pages replays .cc-page's slide. -->
+<gtkbox class="control-centre" orientation="vertical" width={WIDTH}>
+  {#key page}
+    <gtkbox class="cc-page" orientation="vertical" spacing={10}>
+      {#if page === 'wifi' && network !== null}
+        <WifiPage {bus} networkState={network} {networks} onBack={() => (page = 'main')} />
+      {:else if page === 'bluetooth' && bluetooth !== null}
+        <BluetoothPage {bus} bluetoothState={bluetooth} {devices} onBack={() => (page = 'main')} />
+      {:else if page === 'power'}
+        {@render powerPage()}
+      {:else}
+        {@render header()}
+        {@render tiles()}
+        {#if volume >= 0}
+          <gtkbox class="cc-block" orientation="vertical" spacing={8}>
+            <SliderRow icon={volumeIcon(muted)} label="Volume" value={volume} onInput={setVolume} onIconClick={toggleMute} />
+          </gtkbox>
+        {/if}
+        {#if track !== null}
+          {@render media(track)}
+        {/if}
+      {/if}
+    </gtkbox>
+  {/key}
 </gtkbox>
 
 {#snippet header()}

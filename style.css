@@ -720,9 +720,14 @@ popover.dock-preview-popover > arrow {
 
 /* ── status area and its menus ────────────────────────────────────────── */
 
+/* A pill centred in the bar, not a full-height column: the theme gives
+   buttons a taller minimum than the bar has room to frame. */
 .topbar button.status-item {
-  padding: 2px 8px;
+  min-height: 22px;
+  padding: 0 8px;
+  margin: 4px 0;
   border-radius: 6px;
+  transition: background-color 150ms ease-out;
 }
 
 .topbar button.status-item:hover { background-color: alpha(#fafafa, 0.08); }
@@ -732,12 +737,17 @@ popover.dock-preview-popover > arrow {
    compositor's, asked for by the node, so the surface is translucent enough
    to show it. */
 .status-menu {
-  background-color: alpha(#1c1c1f, 0.88);
+  background-color: alpha(#1c1c1f, 0.72);
   border: 1px solid alpha(#fafafa, 0.1);
   border-radius: 18px;
   padding: 12px;
   box-shadow: 0 25px 50px alpha(#000000, 0.6);
-  animation: qs-unroll 160ms ease-out;
+  animation: qs-unroll 180ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+/* Closing plays the drop in reverse before the host lets go of the menu. */
+.status-menu.status-menu-closing {
+  animation: qs-roll-up 120ms ease-in forwards;
 }
 
 /* The menu drops out from under the bar rather than fading, so it reads as
@@ -745,12 +755,50 @@ popover.dock-preview-popover > arrow {
 @keyframes qs-unroll {
   from {
     opacity: 0;
-    transform: translateY(-10px);
+    transform: translateY(-10px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
+}
+
+@keyframes qs-roll-up {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+}
+
+/* A menu's content, and each page inside one, comes in with a short fade:
+   switching from one item's menu to another, or to the Wi-Fi list, does not
+   snap. */
+.status-menu-content { animation: status-content-in 160ms ease-out; }
+.cc-page { animation: cc-page-in 180ms cubic-bezier(0.2, 0.9, 0.3, 1); }
+
+@keyframes status-content-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes cc-page-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Every control in a menu eases between its states. */
+.status-menu button {
+  transition: background-color 150ms ease-out, color 150ms ease-out, opacity 150ms ease-out;
 }
 
 /* ── Control Centre ───────────────────────────────────────────────────── */
@@ -817,6 +865,7 @@ popover.dock-preview-popover > arrow {
   border-radius: 16px;
   background-color: alpha(#fafafa, 0.14);
   color: var(--base-content);
+  transition: background-color 220ms ease-out, color 220ms ease-out;
 }
 
 .status-menu .cc-circle.cc-circle-on,

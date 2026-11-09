@@ -18,6 +18,8 @@
   //   args.offsetTop   the bar's height plus the gap the box hangs below it
 
   const EDGE_GAP = 6
+  // Matches .status-menu-closing's animation in style.css.
+  const CLOSE_ANIMATION_MS = 120
 
   let { bus, registry, args }: ViewProps = $props()
 
@@ -26,6 +28,8 @@
 
   let items = $state<StatusItem[]>([])
   let current = $state<OpenMenu>(NO_MENU)
+  let closing = $state(false)
+  let closeTimer: ReturnType<typeof setTimeout> | null = null
   let generation = $state(0)
 
   const item = $derived(items.find((candidate) => candidate.id === current.id))
@@ -60,14 +64,39 @@
   // A request for another monitor closes this one's menu: one menu at a time.
   function toggle(requested: OpenMenu): void {
     if (requested.monitor !== monitor || requested.id === current.id) {
-      current = NO_MENU
+      close()
       return
     }
+    cancelClosing()
     current = requested
   }
 
+  // The box rolls back up first (.status-menu-closing), then the menu goes.
   function close(): void {
-    current = NO_MENU
+    if (current.id === '' || closeTimer !== null) {
+      return
+    }
+    closing = true
+    closeTimer = setTimeout(() => {
+      closeTimer = null
+      closing = false
+      current = NO_MENU
+    }, CLOSE_ANIMATION_MS)
+  }
+
+  function cancelClosing(): void {
+    if (closeTimer !== null) {
+      clearTimeout(closeTimer)
+      closeTimer = null
+    }
+    closing = false
+  }
+
+  function menuClass(isClosing: boolean): string {
+    if (isClosing) {
+      return 'status-menu status-menu-closing'
+    }
+    return 'status-menu'
   }
 
   function menuOf(open: StatusItem | undefined, currentGeneration: number) {
@@ -83,7 +112,7 @@
     <gtkpressable class="menu-backdrop" hexpand vexpand input onpress={close}></gtkpressable>
     <gtkbox
       overlay
-      class="status-menu"
+      class={menuClass(closing)}
       orientation="vertical"
       halign="end"
       valign="start"
@@ -92,7 +121,9 @@
       input
     >
       {#key current.id}
-        <Menu {bus} {registry} args={{ monitor, close }} id={current.id} />
+        <gtkbox class="status-menu-content" orientation="vertical">
+          <Menu {bus} {registry} args={{ monitor, close }} id={current.id} />
+        </gtkbox>
       {/key}
     </gtkbox>
   </gtkoverlay>

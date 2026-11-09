@@ -112,6 +112,7 @@
       <gtkbutton
         class={itemClass(item, openId)}
         frame={false}
+        valign="center"
         tooltip={item.label}
         onclicked={(event: { target: { widget: Gtk.Widget } }) => toggle(item, event.target.widget)}
       >
