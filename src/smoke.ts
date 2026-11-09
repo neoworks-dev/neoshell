@@ -2,8 +2,11 @@
 // runtime: it installs the DOM globals that runtime reads at module scope.
 import { start } from '@neoworks/svelte-gtk4'
 import GLib from 'gi://GLib'
+import Gtk from 'gi://Gtk?version=4.0'
 import System from 'system'
 import { Bus } from './host/bus.js'
+import { EXTENSIONS } from './extensions/index.js'
+import { startClients } from './host/clients/index.js'
 import { ViewRegistry } from './host/plugins/views.js'
 import Smoke from './Smoke.svelte'
 import SmokeCard from './SmokeCard.svelte'
@@ -26,6 +29,7 @@ const EXIT_AFTER_MS = 2000
 
 const bus = new Bus()
 const registry = new ViewRegistry()
+startClients(bus, (name) => EXTENSIONS[name].manifest.client)
 
 // The gallery lists what the catalog holds and previews each entry with the
 // registered view for its type, so a catalog with no provider behind it would
@@ -197,10 +201,56 @@ bus.retain('settings:open', { section: 'notch' })
 bus.retain('widgets:gallery', { open: true })
 
 GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
+  if (!remoteCardShows('Smoke')) {
+    print('neoshell: the weather card run as a client did not draw its place')
+    System.exit(1)
+  }
   print('neoshell: built every view — the tray, the gallery, both widget cards, the notch and settings — without error')
   System.exit(0)
   return GLib.SOURCE_REMOVE
 })
+
+// The client's card is only drawn once the runner has started, mounted it and
+// had its bus subscription answered, so finding the place in it proves the
+// whole path.
+function remoteCardShows(text: string): boolean {
+  for (const window of Gtk.Window.list_toplevels()) {
+    const box = firstWithClass(window as Gtk.Widget, 'smoke-remote')
+    if (box !== null && hasLabel(box, text)) {
+      return true
+    }
+  }
+  return false
+}
+
+function firstWithClass(widget: Gtk.Widget, name: string): Gtk.Widget | null {
+  if (widget.has_css_class(name)) {
+    return widget
+  }
+  let child = widget.get_first_child()
+  while (child !== null) {
+    const found = firstWithClass(child, name)
+    if (found !== null) {
+      return found
+    }
+    child = child.get_next_sibling()
+  }
+  return null
+}
+
+function hasLabel(widget: Gtk.Widget, text: string): boolean {
+  if (widget instanceof Gtk.Label && widget.get_label() === text) {
+    return true
+  }
+  let child = widget.get_first_child()
+  while (child !== null) {
+    if (hasLabel(child, text)) {
+      return true
+    }
+    child = child.get_next_sibling()
+  }
+  return false
+}
 
 start(
   Smoke,

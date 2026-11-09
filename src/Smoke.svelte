@@ -24,6 +24,9 @@
   import CalendarSettings from './extensions/calendar/CalendarSettings.svelte'
   import { MAX_UNIT_PX, sizePx, spanOf } from './extensions/neoshell/freeform'
   import type { BluetoothState, NetworkState } from './extensions/quicksettings/types'
+  import { remoteView } from './host/clients/remoteView'
+
+  const RemoteWeather = remoteView('weather', 'card')
 
   // The smoke harness's markup: every view added for the quick settings tray
   // and the widget gallery, built once in a plain window.
@@ -156,6 +159,11 @@
         </gtkbox>
       </gtkbox>
 
+      <!-- The weather card again, run as its client: the same view, replayed
+           from the runner through the bus bridge. -->
+      <gtkbox class="smoke-remote" width={boxFor('small').width} height={boxFor('small').height} valign="start">
+        <RemoteWeather {bus} {registry} args={boxFor('small')} id="smoke.weather.small" />
+      </gtkbox>
       {#each CARD_SIZES as size (size)}
         {@const box = boxFor(size)}
         <gtkbox orientation="vertical" spacing={12} valign="start">
