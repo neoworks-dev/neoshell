@@ -142,6 +142,6 @@ You may use git. Work in this order: change → test → commit → push.
 - Commit messages: short, to-the-point title; add a body only when the
   change is not obvious from the title. If a change spans unrelated
   concerns, split it into multiple commits.
-- No commit you author may include the trailer
-  `Co-Authored-By: Claude <noreply@anthropic.com>`.
+- No trailers, ever: no `Co-Authored-By` of any kind on a commit, no
+  "Generated with Claude Code" on a PR.
 - Push only after tests pass. Never force-push.
