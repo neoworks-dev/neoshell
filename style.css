@@ -1585,6 +1585,36 @@ button.nook-config-pick {
 .nook-config-name { color: var(--ui-text); font-weight: 600; }
 .nook-config-cells { color: var(--ui-text-muted); font-size: 12px; }
 
+/* ── usb ──────────────────────────────────────────────────────────────── */
+
+.usb-row { padding: 9px 4px; }
+.usb-glyph { color: alpha(#fafafa, 0.75); margin-top: 1px; }
+
+.usb-separator {
+  min-height: 1px;
+  background-color: alpha(#fafafa, 0.08);
+}
+
+.usb-chip {
+  padding: 0 7px;
+  border: 1px solid alpha(#fafafa, 0.22);
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 600;
+  color: alpha(#fafafa, 0.8);
+}
+
+.status-menu entry.usb-search {
+  min-height: 30px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 10px;
+  box-shadow: none;
+  font-size: 12px;
+  color: var(--base-content);
+  background-color: alpha(#fafafa, 0.07);
+}
+
 /* ── pomodoro ─────────────────────────────────────────────────────────── */
 
 /* The time left in the bar: a 16px outlined pill inside the 22px item. */

@@ -6,6 +6,8 @@ import mediaBackend from './media/backend.js'
 import calendarBackend from './calendar/backend.js'
 import calendarViews from './calendar/views.js'
 import agendaViews from './agenda/views.js'
+import usbBackend from './usb/backend.js'
+import usbViews from './usb/views.js'
 import pomodoroBackend from './pomodoro/backend.js'
 import pomodoroViews from './pomodoro/views.js'
 import quickShareBackend from './quickshare/backend.js'
@@ -224,6 +226,15 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     },
     backend: pomodoroBackend as Plugin.Object,
     views: pomodoroViews,
+  },
+  usb: {
+    manifest: {
+      id: 'usb',
+      inject: ['bus', 'ui'],
+      statusItems: [{ id: 'usb', label: 'USB devices', icon: 'usb.icon', menu: 'usb.menu', order: 30 }],
+    },
+    backend: usbBackend as Plugin.Object,
+    views: usbViews,
   },
   // The bar's status area and the window its menus open in.
   status: {

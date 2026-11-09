@@ -3,6 +3,7 @@
   import type { ViewRegistry } from './host/plugins/views'
   import ControlCentre from './extensions/quicksettings/ControlCentre.svelte'
   import AgendaMenu from './extensions/agenda/AgendaMenu.svelte'
+  import UsbMenu from './extensions/usb/UsbMenu.svelte'
   import PomodoroMenu from './extensions/pomodoro/PomodoroMenu.svelte'
   import PomodoroIcon from './extensions/pomodoro/PomodoroIcon.svelte'
   import WifiPage from './extensions/quicksettings/WifiPage.svelte'
@@ -116,6 +117,9 @@
       </gtkbox>
       <gtkbox class="status-menu" orientation="horizontal" valign="start">
         <PomodoroIcon {bus} {registry} args={{}} id="smoke.pomodoro.icon" />
+      </gtkbox>
+      <gtkbox class="status-menu" orientation="vertical" valign="start">
+        <UsbMenu {bus} {registry} args={{ close: () => {} }} id="smoke.usb" />
       </gtkbox>
       <WidgetGallery {bus} {registry} args={{}} id="smoke.gallery" />
 

@@ -64,6 +64,23 @@ bus.retain('config', {
 
 bus.retain('pomodoro.state', { durationSeconds: 1500, remainingSeconds: 1234, running: true, endsAt: Date.now() + 1_234_000 })
 
+bus.retain('usb.devices', {
+  devices: [
+    {
+      id: '1-1',
+      name: 'Smoke Keyboard',
+      vendor: 'Smoke Inc.',
+      vendorId: '1234',
+      productId: 'abcd',
+      serial: 'SMOKE0001',
+      speed: 'USB 2.0 @ 480 Mb/s',
+      power: '100 mA',
+      deviceClass: '00',
+    },
+    { id: '1-2', name: 'USB device', vendor: '', vendorId: '', productId: '', serial: '', speed: '', power: '', deviceClass: 'e0' },
+  ],
+})
+
 bus.retain('hypr.monitors', [{ width: 1920, height: 1080 }])
 bus.retain('calendar.sources', {
   sources: [{ id: 'cal-smoke', name: 'Smoke', status: 'ok', message: '', eventCount: 2 }],
