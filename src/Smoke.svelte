@@ -30,6 +30,7 @@
   const RemoteAirQuality = remoteView('airquality', 'card')
   const RemoteRunCatMenu = remoteView('runcat', 'menu')
   const RemoteUsbMenu = remoteView('usb', 'menu')
+  const RemoteAgendaMenu = remoteView('agenda', 'menu')
 
   // The smoke harness's markup: every view added for the quick settings tray
   // and the widget gallery, built once in a plain window.
@@ -177,6 +178,9 @@
       </gtkbox>
       <gtkbox class="status-menu smoke-remote-usb" orientation="vertical" valign="start">
         <RemoteUsbMenu {bus} {registry} args={{ close: () => {} }} id="smoke.remote.usb" />
+      </gtkbox>
+      <gtkbox class="status-menu smoke-remote-agenda" orientation="vertical" valign="start">
+        <RemoteAgendaMenu {bus} {registry} args={{ close: () => {} }} id="smoke.remote.agenda" />
       </gtkbox>
       {#each CARD_SIZES as size (size)}
         {@const box = boxFor(size)}

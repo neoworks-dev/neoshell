@@ -1,11 +1,18 @@
 import { sendApp, startClient } from '@neoworks/svelte-gtk4/client'
 import { RemoteBus } from '../lib/remoteBus.js'
 import type { BusAnswer, BusRequest } from '../lib/remoteBus.js'
+import type { LocaleProfile } from '../lib/localeProfile.js'
+import { installDateTimeFormat, setLocaleProfile } from './intl.js'
 
 // What every shell client's entry calls: its views by name, each mounted with
 // the props a view in the shell gets. The bus is the client's connection to
 // the host's; the registry is an empty one, since a client renders no views
-// but its own.
+// but its own. The host's first message is its locale, for the
+// Intl.DateTimeFormat views format with.
+
+// Installed while this module evaluates, before the views' modules do: some
+// build their formats at the top level.
+installDateTimeFormat()
 
 const emptyRegistry = {
   resolve: () => undefined,
@@ -13,10 +20,26 @@ const emptyRegistry = {
   register: () => () => {},
 }
 
+export interface ClientGreeting {
+  locale: LocaleProfile
+}
+
 export function startShellClient(views: Record<string, unknown>): void {
   const bus = new RemoteBus((request: BusRequest) => sendApp(request))
   startClient(views, {
     props: () => ({ bus, registry: emptyRegistry }),
-    onApp: (data) => bus.receive(data as BusAnswer),
+    onApp: (data) => receive(bus, data),
   })
+}
+
+function receive(bus: RemoteBus, data: unknown): void {
+  if (isGreeting(data)) {
+    setLocaleProfile(data.locale)
+    return
+  }
+  bus.receive(data as BusAnswer)
+}
+
+function isGreeting(data: unknown): data is ClientGreeting {
+  return typeof data === 'object' && data !== null && 'locale' in data
 }
