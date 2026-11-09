@@ -371,14 +371,14 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           },
         },
         // Files only through desktop:*, which acts on what the desktop shows.
-        // The wallpaper and the widgets are the host's views, embedded.
+        // The widgets are the host's views, embedded.
         desktop: {
           permissions: {
             subscribe: ['desktop.entries', 'hypr.monitors', 'widgets:add', 'widgets:gallery', 'widgets:dragging'],
             call: ['desktop:*', 'config:set'],
             publish: ['widgets:gallery'],
             configKeys: ['widgets', 'icons', 'desktop.*'],
-            embed: ['neoshell.wallpaper', '@widgets'],
+            embed: ['@widgets'],
           },
         },
         settings: {
