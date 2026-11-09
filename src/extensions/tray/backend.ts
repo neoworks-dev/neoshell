@@ -1,6 +1,6 @@
 import type { Plugin } from '@neoworks/extension-system'
 import { requireService } from '../../lib/services.js'
-import { registerFunction, subscribeTo } from '../../lib/bus.js'
+import { registerFunction, RetainedTopics, subscribeTo } from '../../lib/bus.js'
 import type { BusService } from '../../lib/bus.js'
 import { recordOf, stringListOf, stringOf } from '../../lib/record.js'
 import { valueAt } from '../../lib/settings.svelte.js'
@@ -37,6 +37,7 @@ const plugin: Plugin.Object = {
   apply(context) {
     const bus = requireService<BusService>(context, 'bus')
     const tray = new Tray(bus)
+    context.effect(() => () => tray.withdraw())
     context.effect(() => subscribeTo(bus, 'config', (message) => tray.applyConfig(message.data)))
     context.effect(() =>
       subscribeTo(bus, 'quickshare:received', (message) => tray.keep(stringListOf(recordOf(message.data).paths))),
@@ -56,15 +57,21 @@ export default plugin
 
 class Tray {
   private readonly bus: BusService
+  private readonly retained: RetainedTopics
   private staged: string[] = []
 
   constructor(bus: BusService) {
     this.bus = bus
+    this.retained = new RetainedTopics(bus)
   }
 
   applyConfig(snapshot: unknown): void {
     this.staged = stringListOf(valueAt(recordOf(snapshot), STAGED_KEY))
-    this.bus.retain('tray.files', { files: this.staged.map(tileFor) })
+    this.retained.set('tray.files', { files: this.staged.map(tileFor) })
+  }
+
+  withdraw(): void {
+    this.retained.withdrawAll()
   }
 
   keep(paths: string[]): { ok: boolean } {

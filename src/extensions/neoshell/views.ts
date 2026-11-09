@@ -2,7 +2,6 @@ import type { Plugin } from '@neoworks/extension-system'
 import { requireService } from '../../lib/services.js'
 import type { ViewRegistry } from '../../host/plugins/views.js'
 import { remoteView } from '../../host/clients/remoteView.js'
-import Dock from './Dock.svelte'
 import Wallpaper from './Wallpaper.svelte'
 import Desktop from './Desktop.svelte'
 import WidgetGallery from './WidgetGallery.svelte'
@@ -12,7 +11,8 @@ import NotchSettings from './NotchSettings.svelte'
 // an effect, so a view type leaves the registry with the extension and the
 // shell drops the window that was showing it. The bar, the clock and the
 // battery run as the neoshell-bar client (clients/bar.ts); the notch and its
-// Nook widgets as neoshell-notch (clients/notch.ts).
+// Nook widgets as neoshell-notch (clients/notch.ts), the dock as
+// neoshell-dock (clients/dock.ts).
 
 const plugin: Plugin.Object = {
   name: 'neoshell-views',
@@ -23,7 +23,7 @@ const plugin: Plugin.Object = {
     context.effect(() => ui.register('neoshell.notch', remoteView('neoshell-notch', 'notch')))
     context.effect(() => ui.register('neoshell.clock', remoteView('neoshell-bar', 'clock')))
     context.effect(() => ui.register('neoshell.battery', remoteView('neoshell-bar', 'battery')))
-    context.effect(() => ui.register('neoshell.dock', Dock))
+    context.effect(() => ui.register('neoshell.dock', remoteView('neoshell-dock', 'dock')))
     context.effect(() => ui.register('neoshell.wallpaper', Wallpaper))
     context.effect(() => ui.register('neoshell.desktop', Desktop))
     context.effect(() => ui.register('neoshell.widgetgallery', WidgetGallery))

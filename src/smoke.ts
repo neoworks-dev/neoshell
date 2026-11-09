@@ -15,6 +15,7 @@ import SmokeCard from './SmokeCard.svelte'
 import NotchSettings from './extensions/neoshell/NotchSettings.svelte'
 import { clientEventDetail, filesOfDrop } from './host/drops.js'
 import { registerFile } from './host/fileHandles.js'
+import { isLaunchable } from './extensions/dock/backend.js'
 import { recordOf } from './lib/record.js'
 import { notchWidgetCatalog, settingsCatalog } from './host/plugins/extensions.js'
 
@@ -243,6 +244,12 @@ bus.retain('tray.files', {
   ],
 })
 
+// One open window, as the dock backend publishes it; with no desktop entry
+// to match it gets a tile of its own named by its class.
+bus.retain('dock.windows', [
+  { address: '0x5eed', class: 'smoke-app', title: 'Smoke window', workspace: { name: '1' }, command: 'smoke' },
+])
+
 // Some surfaces render nothing but an input marker while closed, so the
 // gallery's tiles only exist once it is opened. The commands are retained
 // rather than published: the views subscribe from an effect, which runs after
@@ -272,6 +279,14 @@ GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
   }
   if (!remotePictureShows('smoke-remote-tray')) {
     print('neoshell: the Tray, run as a client, did not show the thumbnail handle')
+    System.exit(1)
+  }
+  if (!remoteTooltipShows('smoke-remote-dock', 'smoke-app')) {
+    print('neoshell: the dock, run as a client, did not draw a tile for the open window')
+    System.exit(1)
+  }
+  if (isLaunchable('rm -rf ~', [], ['firefox %u']) || !isLaunchable('firefox %u', [], ['firefox %u'])) {
+    print('neoshell: the dock backend would launch a command no application carries')
     System.exit(1)
   }
   if (!dropResolved) {
@@ -320,6 +335,30 @@ function remotePictureShows(boxClass: string): boolean {
     if (box !== null && hasPaintedPicture(box)) {
       return true
     }
+  }
+  return false
+}
+
+function remoteTooltipShows(boxClass: string, tooltip: string): boolean {
+  for (const window of Gtk.Window.list_toplevels()) {
+    const box = firstWithClass(window as Gtk.Widget, boxClass)
+    if (box !== null && hasTooltip(box, tooltip)) {
+      return true
+    }
+  }
+  return false
+}
+
+function hasTooltip(widget: Gtk.Widget, tooltip: string): boolean {
+  if (widget.get_tooltip_text() === tooltip) {
+    return true
+  }
+  let child = widget.get_first_child()
+  while (child !== null) {
+    if (hasTooltip(child, tooltip)) {
+      return true
+    }
+    child = child.get_next_sibling()
   }
   return false
 }

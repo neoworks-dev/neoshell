@@ -1,9 +1,7 @@
 <script lang="ts">
   import { subscribeTo } from '../../lib/bus'
   import type { ViewProps } from '../../host/plugins/views'
-  import { recordOf } from '../../lib/record'
-  import { readTextFile } from '../../gjs/fs'
-  import type Gdk from 'gi://Gdk?version=4.0'
+  import { recordOf, stringOf } from '../../lib/record'
   import { pressOf, SECONDARY_BUTTON } from './gestures'
 
   // The dock: a centred floating panel of launchers, hidden below the screen
@@ -22,6 +20,11 @@
   // its window instead of launching a second instance; with several windows
   // open it raises a panel of window previews to pick from. A right click
   // raises the panel for any running app, one window or many.
+  //
+  // It runs as a client, so the dock backend does what it may not: windows
+  // come with their process names (dock.windows), frames as picture handles
+  // (dock:capture), and a launch is checked against the installed apps
+  // (dock:launch).
 
   interface DockApp {
     id: string
@@ -79,7 +82,7 @@
   // are captured while the pointer rests on a tile, so the panel opens with
   // them already in hand, and refreshed once more when it opens.
   let previewIndex = $state(-1)
-  let previews = $state<Record<string, Gdk.Texture>>({})
+  let previews = $state<Record<string, string>>({})
   let precaptureTimer: number | null = null
 
   // Either half of the hot area keeps the dock open, so travelling from the
@@ -97,7 +100,7 @@
   const openKeys = $derived(new Set(openClasses.map((wmClass) => wmClass.toLowerCase())))
 
   $effect(() =>
-    subscribeTo(bus, 'hypr.windows', (message) => {
+    subscribeTo(bus, 'dock.windows', (message) => {
       openWindows = openWindowsOf(message.data)
       stopLandedLaunches()
       dropClosedPreviews()
@@ -294,7 +297,7 @@
       wmClass: record.class,
       title: '',
       workspace: '',
-      command: commandOfPid(record.pid),
+      command: stringOf(record.command),
     }
     if (typeof record.title === 'string') {
       window.title = record.title
@@ -304,17 +307,6 @@
       window.workspace = workspace.name
     }
     return window
-  }
-
-  function commandOfPid(pid: unknown): string {
-    if (typeof pid !== 'number' || pid <= 0) {
-      return ''
-    }
-    const comm = readTextFile(`/proc/${pid}/comm`)
-    if (comm === null) {
-      return ''
-    }
-    return comm.trim()
   }
 
   function openClassesOf(windows: OpenWindow[]): string[] {
@@ -360,7 +352,7 @@
 
   async function launch(app: DockApp): Promise<void> {
     startLaunch(app.id)
-    const reply = recordOf(await bus.call('apps:launch', { command: app.exec }))
+    const reply = recordOf(await bus.call('dock:launch', { exec: app.exec }))
     if (reply.error === undefined) {
       return
     }
@@ -423,9 +415,9 @@
   async function captureAll(windows: OpenWindow[]): Promise<void> {
     await Promise.all(
       windows.map(async (window) => {
-        const texture = await captureWindow(window)
-        if (texture !== null) {
-          previews = { ...previews, [window.address]: texture }
+        const handle = await captureWindow(window)
+        if (handle !== '') {
+          previews = { ...previews, [window.address]: handle }
         }
       }),
     )
@@ -451,32 +443,31 @@
     precaptureTimer = null
   }
 
-  // Frames of windows that have gone are dropped, so a closed window's
-  // texture is not held for the rest of the session.
+  // Frames of windows that have gone are dropped; the backend releases them.
   function dropClosedPreviews(): void {
     const open = new Set(openWindows.map((window) => window.address))
-    const kept: Record<string, Gdk.Texture> = {}
-    for (const [address, texture] of Object.entries(previews)) {
+    const kept: Record<string, string> = {}
+    for (const [address, handle] of Object.entries(previews)) {
       if (open.has(address)) {
-        kept[address] = texture
+        kept[address] = handle
       }
     }
     previews = kept
   }
 
-  async function captureWindow(window: OpenWindow): Promise<Gdk.Texture | null> {
+  async function captureWindow(window: OpenWindow): Promise<string> {
     const reply = recordOf(
-      await bus.call('hypr:capture', {
+      await bus.call('dock:capture', {
         address: window.address,
         width: PREVIEW_WIDTH,
         height: PREVIEW_HEIGHT,
       }),
     )
-    if (reply.texture !== undefined && reply.texture !== null) {
-      return reply.texture as Gdk.Texture
+    const handle = stringOf(reply.handle)
+    if (handle === '') {
+      console.warn(`dock: no preview for ${window.title}:`, reply.error)
     }
-    console.warn(`dock: no preview for ${window.title}:`, reply.error)
-    return null
+    return handle
   }
 
   function closePreviews(index: number): void {
@@ -633,7 +624,7 @@
                         {#if previews[window.address] !== undefined}
                           <gtkpicture
                             overlay
-                            paintable={previews[window.address]}
+                            handle={previews[window.address]}
                             fit="contain"
                           ></gtkpicture>
                         {:else}
