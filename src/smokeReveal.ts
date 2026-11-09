@@ -1,4 +1,5 @@
 import { focusedWorkspace, hideDispatches, restoreDispatches, stillOpen, windowsOn } from './extensions/reveal/reveal'
+import { luaDispatcher } from './extensions/hypr/backend'
 
 // Showing the desktop, checked on plain values: only the focused workspace's
 // unpinned windows go, and they come back to it with the asked-for one last
@@ -36,6 +37,26 @@ export function revealFailure(): string | null {
   }
   if (stillOpen(['0xa', '0xz'], WINDOWS).join() !== '0xa') {
     return 'a window closed while hidden stays in the strip'
+  }
+  return luaFailure()
+}
+
+// Hyprland with a Lua config takes dispatchers as Lua: every one the shell
+// sends needs a spelling, or it fails on such a session.
+function luaFailure(): string | null {
+  const spelled: [string, string, string][] = [
+    [
+      'movetoworkspacesilent',
+      'special:neoshell-desktop,address:0xa',
+      'hl.dsp.window.move({ workspace = "special:neoshell-desktop", follow = false, window = "address:0xa" })',
+    ],
+    ['movetoworkspace', '5', 'hl.dsp.window.move({ workspace = "5", follow = true })'],
+    ['focuswindow', 'address:0xa', 'hl.dsp.focus({ window = "address:0xa" })'],
+    ['togglespecialworkspace', 'neoshell-desktop', 'hl.dsp.workspace.toggle_special("neoshell-desktop")'],
+  ]
+  const wrong = spelled.find(([dispatcher, arg, lua]) => luaDispatcher(dispatcher, arg) !== lua)
+  if (wrong !== undefined) {
+    return `the Lua spelling of ${wrong[0]} is not ${wrong[2]}`
   }
   return null
 }

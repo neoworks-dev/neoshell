@@ -318,6 +318,10 @@ GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
     print('neoshell: the hidden windows\' strip, run as a client, did not show the window\'s picture')
     System.exit(1)
   }
+  if (!remoteTooltipShows('smoke-remote-gallery', 'Smoke weather — a widget to preview')) {
+    print('neoshell: the gallery, run as a client, did not draw a tile for the catalog entry')
+    System.exit(1)
+  }
   if (!remoteTooltipShows('smoke-remote-dock', 'smoke-app')) {
     print('neoshell: the dock, run as a client, did not draw a tile for the open window')
     System.exit(1)
@@ -376,7 +380,7 @@ const REMOTE_CARDS: [string, string][] = [
   ['smoke-remote-notch', 'Smoke Test'],
   ['smoke-remote-tray', 'style.css'],
   ['smoke-remote-desktop', 'Smoke Folder'],
-  ['smoke-remote-gallery', 'Smoke weather'],
+  // The category's section heading; the tile itself is named in its tooltip.
   ['smoke-remote-gallery', 'Smoke'],
   // The Settings pages, each its extension's client, drawn with gtk-ui.
   ['smoke-remote-notchsettings', 'Opens on'],

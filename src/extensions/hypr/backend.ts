@@ -217,7 +217,7 @@ class HyprPublisher {
 }
 
 // luaDispatcher maps the dispatcher names the views use onto the Lua API.
-function luaDispatcher(dispatcher: string, arg: string): string {
+export function luaDispatcher(dispatcher: string, arg: string): string {
   if (dispatcher === 'focuswindow') {
     return `hl.dsp.focus({ window = ${luaString(arg)} })`
   }
@@ -230,7 +230,24 @@ function luaDispatcher(dispatcher: string, arg: string): string {
   if (dispatcher === 'exit') {
     return 'hl.dsp.exit()'
   }
+  if (dispatcher === 'movetoworkspace' || dispatcher === 'movetoworkspacesilent') {
+    return luaMoveToWorkspace(arg, dispatcher === 'movetoworkspace')
+  }
+  if (dispatcher === 'togglespecialworkspace') {
+    return `hl.dsp.workspace.toggle_special(${luaString(arg)})`
+  }
   throw new Error(`hypr: no Lua spelling for dispatcher ${dispatcher}`)
+}
+
+// The classic argument is "<workspace>" or "<workspace>,<window selector>".
+function luaMoveToWorkspace(arg: string, follow: boolean): string {
+  const comma = arg.indexOf(',')
+  const fields = [`workspace = ${luaString(arg)}`, `follow = ${follow}`]
+  if (comma >= 0) {
+    fields[0] = `workspace = ${luaString(arg.slice(0, comma))}`
+    fields.push(`window = ${luaString(arg.slice(comma + 1))}`)
+  }
+  return `hl.dsp.window.move({ ${fields.join(', ')} })`
 }
 
 function luaString(value: string): string {
