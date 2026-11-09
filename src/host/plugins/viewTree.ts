@@ -72,16 +72,15 @@ const DEFAULT_TREE: TreeNode[] = [
   {
     id: 'statusmenus',
     type: 'status.menus',
-    // The window every status item's menu opens in. It spans the output so a
-    // click anywhere outside the menu can dismiss it; a closed host keeps its
-    // input region empty, so it neither takes input nor covers what is under
-    // it. It goes wherever the bar goes.
+    // Detached: the window every status item's menu opens in exists only while
+    // a menu is open, on the monitor of the bar that opened it. It spans the
+    // output so a click anywhere outside the menu can dismiss it.
     args: {
+      detached: true,
       layer: 'top',
       anchors: ['top', 'bottom', 'left', 'right'],
       keyboard: 'ondemand',
       offsetTop: 36,
-      placedWith: 'bar',
       blur: true,
       // Between the menu box's shadow (≤ 0.6) and its fill (0.72).
       blurIgnoreAlpha: 0.65,
