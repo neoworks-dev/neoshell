@@ -675,8 +675,9 @@ popover.dock-preview-popover > arrow {
 }
 
 /* min-w-52 rounded-xl border border-base-content/10 bg-base-200/95 p-1
-   shadow-2xl backdrop-blur-xl */
-.menu {
+   shadow-2xl backdrop-blur-xl. Not `.menu`: GTK gives every dropdown's and
+   menu button's popover that class. */
+.context-menu {
   background-color: alpha(#0b0b0d, 0.95);
   border: 1px solid alpha(#fafafa, 0.1);
   border-radius: 12px;

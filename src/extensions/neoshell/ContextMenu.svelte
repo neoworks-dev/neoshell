@@ -126,7 +126,7 @@
 
 <gtkbox
   overlay
-  class="menu"
+  class="context-menu"
   orientation="vertical"
   halign="start"
   valign="start"
@@ -163,7 +163,7 @@
     {@const at = submenuOrigin(index)}
     <gtkbox
       overlay
-      class="menu"
+      class="context-menu"
       orientation="vertical"
       halign="start"
       valign="start"
