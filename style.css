@@ -581,13 +581,6 @@ popover.dock-preview-popover > arrow {
 
 /* ── desktop ──────────────────────────────────────────────────────────── */
 
-/* The background is the desktop's own hit area: it has to paint, or the whole
-   window would never be mapped and neither the icons nor the menu would take a
-   click. The wallpaper is a window of its own behind it. */
-.desktop-background {
-  background-color: alpha(#000000, 0.01);
-}
-
 /* flex flex-col items-center gap-1 rounded-lg p-2 text-center */
 .desktop-icon {
   padding: 8px;

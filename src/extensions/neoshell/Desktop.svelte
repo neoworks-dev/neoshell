@@ -5,6 +5,7 @@
   import { recordOf, stringOf } from '../../lib/record'
   import ContextMenu from './ContextMenu.svelte'
   import DesktopIcons from './DesktopIcons.svelte'
+  import Wallpaper from './Wallpaper.svelte'
   import WidgetSlot from './WidgetSlot.svelte'
   import { DesktopStore } from './desktopStore.svelte'
   import type { MenuItem } from './desktopStore.svelte'
@@ -287,10 +288,14 @@
 </script>
 
 <gtkoverlay class="desktop" hexpand vexpand>
-  <!-- The background takes the rubber band and the menu. It is the overlay's
-       main child, so it is measured and fills the surface; everything placed on
-       top of it is an overlay child. -->
+  <!-- The wallpaper is the overlay's main child, so it is measured and fills
+       the surface: one surface per monitor instead of a wallpaper surface
+       under the desktop's. Everything else is an overlay child on top of it. -->
+  <Wallpaper {bus} {registry} {args} id="wallpaper" />
+
+  <!-- The background takes the rubber band and the menu. -->
   <gtkpressable
+    overlay
     class="desktop-background"
     hexpand
     vexpand
