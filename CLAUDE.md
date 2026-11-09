@@ -55,6 +55,12 @@ still describe the earlier webview/bun build and are out of date.
   **Never trigger a lock from a test or smoke**: a broken locker traps the
   session. Set `misc:allow_session_lock_restore = true` in Hyprland so a
   crashed locker can be replaced.
+- **Installed programs' extensions** (`src/host/external/`, `sdk/`). At
+  startup the shell reads `<data dir>/neoshell/extensions/<id>/`
+  (`manifest.json` + `client.js`) and adds each one to the extension table:
+  its widgets run as client `<id>`, and its data comes from the program over
+  D-Bus (`WidgetSource1`, `dbusSource.ts`) as `ext.<id>.*`. The smoke
+  mounts `fixtures/external/` and serves its D-Bus source itself.
 - **Quick settings** is a full-output `top` window: a transparent `input`
   backdrop dismisses it on click-away; the panel hangs at
   `args.offsetTop`/`args.offsetEnd`.

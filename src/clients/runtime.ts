@@ -19,10 +19,15 @@ export interface ClientGreeting {
   locale: LocaleProfile
 }
 
-export function startShellClient(views: Record<string, unknown>): void {
+// `extraProps` adds to what every view gets, from the client's bus.
+export function startShellClient(
+  views: Record<string, unknown>,
+  extraProps: (bus: RemoteBus) => Record<string, unknown> = () => ({}),
+): void {
   const bus = new RemoteBus((request: BusRequest) => sendApp(request))
+  const extra = extraProps(bus)
   startClient(views, {
-    props: () => ({ bus, registry: clientRegistry }),
+    props: () => ({ ...extra, bus, registry: clientRegistry }),
     onApp: (data) => receive(bus, data),
   })
 }

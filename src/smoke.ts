@@ -11,6 +11,7 @@ import { remoteView } from './host/clients/remoteView.js'
 import { paintableOf, thumbnailHandle } from './host/paintables.js'
 import { ViewRegistry } from './host/plugins/views.js'
 import Smoke from './Smoke.svelte'
+import { SMOKE_EXTERNAL_TEXT, startSmokeExternal } from './smokeExternal.js'
 import { clientEventDetail, filesOfDrop } from './host/drops.js'
 import { registerFile } from './host/fileHandles.js'
 import { isLaunchable } from './extensions/dock/backend.js'
@@ -34,6 +35,7 @@ const bus = new Bus()
 const registry = new ViewRegistry()
 startClients(bus, registry, (name) => declaredClient(EXTENSIONS, name))
 setPaintableResolver(paintableOf)
+const smokeExternal = startSmokeExternal(bus, registry)
 
 // The gallery lists what the catalog holds and previews each entry with the
 // registered view for its type, so a catalog with no provider behind it would
@@ -315,6 +317,11 @@ GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
     print('neoshell: the dock backend would launch a command no application carries')
     System.exit(1)
   }
+  const externalFailure = smokeExternal.failure()
+  if (externalFailure !== null) {
+    print(`neoshell: ${externalFailure}`)
+    System.exit(1)
+  }
   if (!dropResolved) {
     print('neoshell: a drop token did not lead back to the dropped files')
     System.exit(1)
@@ -329,6 +336,8 @@ GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
 // proves the whole path.
 const REMOTE_CARDS: [string, string][] = [
   ['smoke-remote-weather', 'Smoke'],
+  // Got with Get and then replaced by a Changed signal from the "program".
+  ['smoke-remote-external', SMOKE_EXTERNAL_TEXT],
   ['smoke-remote-airquality', 'Fair'],
   ['smoke-remote-runcat', '37%'],
   ['smoke-remote-usb', 'Smoke Keyboard'],

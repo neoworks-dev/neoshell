@@ -1,0 +1,10 @@
+{
+  "name": "@neoworks/neoshell-sdk",
+  "private": true,
+  "type": "module",
+  "description": "Write a widget an installed program puts on neoshell: the client runtime, the data source and the bundler.",
+  "exports": {
+    ".": "./index.ts",
+    "./build.mjs": "./build.mjs"
+  }
+}

@@ -47,6 +47,8 @@ export interface WidgetDeclaration {
   description: string
   sizes: string[]
   defaultSize: string
+  // The installed program a widget comes from; absent for the shell's own.
+  source?: string
 }
 
 // A tab in the Settings window. The window draws only the tab; everything
@@ -167,6 +169,15 @@ export interface ExtensionModule {
   manifest: ExtensionManifest
   backend?: Plugin.Object
   views?: Plugin.Object
+}
+
+/** Adds extensions found at startup (host/external), keeping any id already taken. */
+export function addExtensions(found: Record<string, ExtensionModule>): void {
+  for (const [id, extension] of Object.entries(found)) {
+    if (!(id in EXTENSIONS)) {
+      EXTENSIONS[id] = extension
+    }
+  }
 }
 
 export const EXTENSIONS: Record<string, ExtensionModule> = {
