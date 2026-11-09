@@ -101,22 +101,10 @@ const DEFAULT_TREE: TreeNode[] = [
     },
   },
   {
-    id: 'wallpaper',
-    type: 'neoshell.wallpaper',
-    // Behind everything, edge to edge. The webview build had no node for this:
-    // the wallpaper was a separate daemon painting its own surface, which a GTK
-    // picture on the background layer replaces.
-    args: {
-      label: 'Wallpaper',
-      monitors: 'all',
-      layer: 'background',
-      anchors: ['top', 'bottom', 'left', 'right'],
-      keyboard: 'none',
-    },
-  },
-  {
     id: 'desktop',
     type: 'neoshell.desktop',
+    // The desktop draws the wallpaper itself, so there is one background
+    // surface per monitor.
     // Which widgets the desktop shows is config's answer, under widgets.<id>.
     // This list only seeds a desktop that has never been arranged: once
     // anything is written the seed is never consulted again, so removing a
