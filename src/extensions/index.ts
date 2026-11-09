@@ -1,4 +1,5 @@
 import type { Plugin } from '@neoworks/extension-system'
+import type { ClientDeclaration } from '../host/clients/index.js'
 import hyprBackend from './hypr/backend.js'
 import systemBackend from './system/backend.js'
 import appsBackend from './apps/backend.js'
@@ -97,6 +98,9 @@ export interface ExtensionManifest {
   settings?: SettingsDeclaration[]
   notchWidgets?: NotchWidgetDeclaration[]
   statusItems?: StatusItemDeclaration[]
+  // Views that run as a client: their bundle is built from the extension's
+  // client.ts, and this is everything that client may do on the bus.
+  client?: ClientDeclaration
 }
 
 export interface ExtensionModule {
@@ -288,6 +292,14 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           defaultSize: 'small',
         },
       ],
+      client: {
+        permissions: {
+          subscribe: ['weather.current/*'],
+          call: ['weather:watch', 'config:set'],
+          publish: [],
+          configKeys: ['weather.cards.*'],
+        },
+      },
     },
     backend: weatherBackend as Plugin.Object,
     views: weatherViews,
