@@ -109,6 +109,8 @@ const DEFAULT_TREE: TreeNode[] = [
     args: {
       label: 'Wallpaper',
       monitors: 'all',
+      // Goes wherever the desktop above it goes.
+      placedWith: 'desktop',
       layer: 'background',
       anchors: ['top', 'bottom', 'left', 'right'],
       keyboard: 'none',
