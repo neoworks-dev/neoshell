@@ -2027,101 +2027,22 @@ button.qs-row-action:hover {
 
 /* ── settings window ──────────────────────────────────────────────────── */
 
-/* The window and its controls are @neoworks/gtk-ui; these tune them to a
-   macOS settings pane and add the pages' own pieces, on the same --ui-*
-   tokens so they follow light and dark. */
+/* The window and its controls are @neoworks/gtk-ui; these are only the
+   window's own layout. */
 
 /* The sidebar floats inset from the window's edges as a rounded panel. */
 box.settings-sidebar { padding: 8px 0 8px 8px; }
 box.settings-sidebar:only-child { padding: 8px; }
-box.settings-sidebar-panel {
-  padding: 12px 10px;
+box.settings-sidebar box.ui-drawer {
   border-radius: 16px;
-  border: 1px solid var(--ui-line);
-  background-color: var(--ui-sunken);
-}
-.settings-search { margin-bottom: 12px; }
-box.settings-sidebar-panel box.ui-search {
-  min-height: 30px;
-  border-radius: 9px;
-  background-color: var(--ui-hover);
-}
-box.settings-sidebar-gap { min-height: 14px; }
-
-button.settings-sidebar-item,
-button.settings-sidebar-item:backdrop {
-  min-height: 32px;
-  padding: 0 6px;
-  border: none;
-  border-radius: 8px;
-  background-image: none;
-  background-color: transparent;
-  box-shadow: none;
-  color: var(--ui-text);
+  box-shadow: inset 0 0 0 1px var(--ui-line);
 }
 
-button.settings-sidebar-item:hover { background-color: var(--ui-hover); }
-
-button.settings-sidebar-item.active,
-button.settings-sidebar-item.active:backdrop {
-  background-color: var(--ui-focus);
-  color: #ffffff;
-}
-
-label.settings-sidebar-label { font-size: 13px; font-weight: 500; }
-
-/* Each section's icon on its own coloured tile, white glyph, lit from above. */
-box.settings-tile {
-  min-width: 24px;
-  min-height: 24px;
-  border-radius: 7px;
-  color: #ffffff;
-  box-shadow: inset 0 1px alpha(#ffffff, 0.25), 0 1px 1px alpha(#000000, 0.12);
-}
-
-box.settings-tile-blue { background-image: linear-gradient(#4c9bff, #0a64e8); }
-box.settings-tile-sky { background-image: linear-gradient(#6cc8ff, #1e98e8); }
-box.settings-tile-teal { background-image: linear-gradient(#5ad6c4, #16a394); }
-box.settings-tile-green { background-image: linear-gradient(#5fd97a, #22a845); }
-box.settings-tile-yellow { background-image: linear-gradient(#ffd54a, #f0a800); }
-box.settings-tile-orange { background-image: linear-gradient(#ffa64d, #f06a0a); }
-box.settings-tile-red { background-image: linear-gradient(#ff6b6b, #e02c2c); }
-box.settings-tile-pink { background-image: linear-gradient(#ff7eb3, #e83c80); }
-box.settings-tile-purple { background-image: linear-gradient(#b48cff, #7a45e0); }
-box.settings-tile-grey { background-image: linear-gradient(#a3a3ab, #6e6e78); }
-
-box.settings-main box.ui-top-app-bar { min-height: 56px; padding: 0 24px; }
-box.settings-main label.ui-top-app-bar-title { font-size: 17px; }
-
-/* Back and forward share one capsule, split by a hairline. */
-box.settings-history {
-  margin-right: 8px;
-  padding: 2px;
-  border-radius: 999px;
-  border: 1px solid var(--ui-line);
-  background-color: var(--ui-sunken);
-}
-box.settings-history button { border-radius: 999px; }
-box.settings-history button:first-child { border-right: 1px solid var(--ui-line); border-top-right-radius: 0; border-bottom-right-radius: 0; }
-box.settings-history button:last-child { border-top-left-radius: 0; border-bottom-left-radius: 0; }
-
-/* Grouped like a macOS settings pane: pages space their children 8px apart,
-   so a heading sits close above its card, and a heading after the first
-   stands the group apart from the one before. */
+/* Pages space their children 8px apart, so a heading sits close above its
+   card, and a heading after the first stands its group apart. */
 .settings-content { margin: 4px 24px 28px 24px; }
 .settings-content > box.ui-section-header:not(:first-child),
 .settings-content > box.settings-group { margin-top: 18px; }
-.settings-content label.ui-section-title { font-size: var(--ui-text-body); font-weight: 700; }
-
-.settings-content box.ui-list.ui-list-card { border-radius: 12px; }
-
-/* Rows sit inside the card's side padding, so the dividers between them are
-   inset from its edges. */
-.settings-content box.ui-list.ui-list-card > .ui-list-row {
-  min-height: 40px;
-  margin: 0 12px;
-  padding: 4px 0;
-}
 
 .settings-missing { color: var(--ui-text-muted); }
 label.settings-hint { color: var(--ui-text-muted); font-size: var(--ui-text-caption); }

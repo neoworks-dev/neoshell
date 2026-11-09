@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { groupsOf, sectionsOf } from './sections'
+import { groupsOf, navSectionsOf, sectionsOf } from './sections'
 
 describe('sectionsOf', () => {
   test('keeps a known tile colour and greys out the rest', () => {
@@ -21,5 +21,14 @@ describe('groupsOf', () => {
     ])
     const ids = groupsOf(sections).map((group) => group.map((section) => section.id))
     expect(ids).toEqual([['notch', 'calendar'], ['displays']])
+  })
+})
+
+describe('navSectionsOf', () => {
+  test('hands each section to the drawer with its tile colour', () => {
+    const groups = navSectionsOf(sectionsOf([{ id: 'weather', title: 'Weather', icon: 'weather-few-clouds-symbolic', color: 'sky' }]))
+    expect(groups).toEqual([
+      { items: [{ id: 'weather', label: 'Weather', icon: 'weather-few-clouds-symbolic', color: 'sky' }] },
+    ])
   })
 })
