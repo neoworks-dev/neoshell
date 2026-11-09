@@ -23,6 +23,7 @@ import airQualityBackend from './airquality/backend.js'
 import neoshellViews from './neoshell/views.js'
 import lockBackend from './lock/backend.js'
 import lockViews from './lock/views.js'
+import quicksettingsBackend from './quicksettings/backend.js'
 import quicksettingsViews from './quicksettings/views.js'
 import settingsViews from './settings/views.js'
 import statusViews from './status/views.js'
@@ -256,7 +257,40 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
       statusItems: [
         { id: 'controls', label: 'Control Centre', icon: 'quicksettings.icon', menu: 'quicksettings.menu', order: 80 },
       ],
+      client: {
+        permissions: {
+          subscribe: [
+            'quicksettings.account',
+            'network.state',
+            'network.networks',
+            'network.wired',
+            'bluetooth.state',
+            'bluetooth.devices',
+            'system.volume',
+            'system.powerprofile',
+            'quickshare.state',
+            'media.player',
+            'media.artwork',
+          ],
+          call: [
+            'quicksettings:screenshot',
+            'system:power',
+            'system:setPowerProfile',
+            'system:setVolume',
+            'system:setMuted',
+            'network:*',
+            'bluetooth:*',
+            'media:playPause',
+            'media:next',
+            'media:previous',
+            'config:set',
+          ],
+          publish: ['settings:open'],
+          configKeys: ['quickshare.visibility'],
+        },
+      },
     },
+    backend: quicksettingsBackend as Plugin.Object,
     views: quicksettingsViews,
   },
   agenda: {

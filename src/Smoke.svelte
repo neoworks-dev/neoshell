@@ -32,6 +32,7 @@
   const RemoteUsbMenu = remoteView('usb', 'menu')
   const RemoteAgendaMenu = remoteView('agenda', 'menu')
   const RemoteTopbar = remoteView('neoshell-bar', 'topbar')
+  const RemoteControlCentre = remoteView('quicksettings', 'menu')
 
   // The smoke harness's markup: every view added for the quick settings tray
   // and the widget gallery, built once in a plain window.
@@ -182,6 +183,9 @@
       </gtkbox>
       <gtkbox class="status-menu smoke-remote-agenda" orientation="vertical" valign="start">
         <RemoteAgendaMenu {bus} {registry} args={{ close: () => {} }} id="smoke.remote.agenda" />
+      </gtkbox>
+      <gtkbox class="status-menu smoke-remote-controlcentre" orientation="vertical" valign="start">
+        <RemoteControlCentre {bus} {registry} args={{ close: () => {} }} id="smoke.remote.controlcentre" />
       </gtkbox>
       <gtkbox class="ui-dark smoke-remote-bar" width={900} height={30} valign="start">
         <RemoteTopbar {bus} {registry} args={{ centerGap: 120, monitor: '' }} id="smoke.bar" />

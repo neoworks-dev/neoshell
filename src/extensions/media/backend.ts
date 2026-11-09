@@ -3,6 +3,7 @@ import { requireService } from '../../lib/services.js'
 import { RetainedTopics, registerFunction } from '../../lib/bus.js'
 import type { BusService } from '../../lib/bus.js'
 import { output, run, watchLines } from '../../gjs/proc.js'
+import { followArtwork } from './artwork.js'
 
 // media: the current MPRIS track as a retained bus topic, followed through
 // playerctl rather than D-Bus directly — the same shape as the system
@@ -10,6 +11,7 @@ import { output, run, watchLines } from '../../gjs/proc.js'
 //
 //   media.player    {player, status, title, artist, album, artUrl, length, shuffle}
 //   media.position  {position}
+//   media.artwork   {artUrl, handle}    see artwork.ts
 //
 //   media:playPause  {}         → {ok} | {error}
 //   media:next       {}         → {ok} | {error}
@@ -89,6 +91,7 @@ const mediaExtension: Plugin.Object<undefined> = {
     context.effect(() => followPlayers(retained, state))
     context.effect(() => pollPlayerList(retained, state))
     context.effect(() => pollPosition(retained, state))
+    context.effect(() => followArtwork(bus))
     registerCommands(context, bus, state)
   },
 }

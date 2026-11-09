@@ -1,6 +1,6 @@
 // The library must be imported before anything that pulls in Svelte's client
 // runtime: it installs the DOM globals that runtime reads at module scope.
-import { start } from '@neoworks/svelte-gtk4'
+import { setPaintableResolver, start } from '@neoworks/svelte-gtk4'
 import GLib from 'gi://GLib'
 import Gtk from 'gi://Gtk?version=4.0'
 import System from 'system'
@@ -8,6 +8,7 @@ import { Bus } from './host/bus.js'
 import { declaredClient, EXTENSIONS } from './extensions/index.js'
 import { startClients } from './host/clients/index.js'
 import { remoteView } from './host/clients/remoteView.js'
+import { paintableOf, thumbnailHandle } from './host/paintables.js'
 import { ViewRegistry } from './host/plugins/views.js'
 import Smoke from './Smoke.svelte'
 import SmokeCard from './SmokeCard.svelte'
@@ -31,6 +32,7 @@ const EXIT_AFTER_MS = 2000
 const bus = new Bus()
 const registry = new ViewRegistry()
 startClients(bus, registry, (name) => declaredClient(EXTENSIONS, name))
+setPaintableResolver(paintableOf)
 
 // The gallery lists what the catalog holds and previews each entry with the
 // registered view for its type, so a catalog with no provider behind it would
@@ -197,6 +199,15 @@ bus.retain('system.volume', { volume: 40, muted: false })
 bus.retain('system.powerprofile', { active: 'balanced', profiles: ['power-saver', 'balanced', 'performance'] })
 bus.retain('quickshare.state', { available: true, visibility: 'invisible', devices: [], transfers: [] })
 bus.retain('media.player', { title: 'Smoke Test', artist: 'neoshell', status: 'Playing', artUrl: '' })
+// The account, with a picture handle for an avatar the remote Control Centre
+// has to show without reading the file itself.
+const SMOKE_AVATAR = GLib.build_filenamev([GLib.get_current_dir(), 'assets', 'runcat', 'runcat-1-symbolic.svg'])
+bus.retain('quicksettings.account', {
+  realName: 'Smoke Person',
+  accountLabel: 'smoke@neoshell',
+  avatar: thumbnailHandle(SMOKE_AVATAR, 88),
+  canScreenshot: true,
+})
 
 // Some surfaces render nothing but an input marker while closed, so the
 // gallery's tiles only exist once it is opened. The commands are retained
@@ -212,6 +223,10 @@ GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
       print(`neoshell: the card in .${box}, run as a client, did not draw "${text}"`)
       System.exit(1)
     }
+  }
+  if (!remotePictureShows('smoke-remote-controlcentre')) {
+    print('neoshell: the Control Centre, run as a client, did not show the avatar handle')
+    System.exit(1)
   }
   print('neoshell: built every view — the tray, the gallery, both widget cards, the notch and settings — without error')
   System.exit(0)
@@ -230,6 +245,7 @@ const REMOTE_CARDS: [string, string][] = [
   // out as the host's own Intl writes it.
   ['smoke-remote-agenda', new Intl.DateTimeFormat(undefined, { weekday: 'long' }).format(new Date())],
   ['smoke-remote-bar', 'smoke-one'],
+  ['smoke-remote-controlcentre', 'Smoke Person'],
   ['smoke-remote-bar', new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date())],
 ]
 
@@ -239,6 +255,30 @@ function remoteCardShows(boxClass: string, text: string): boolean {
     if (box !== null && hasLabel(box, text)) {
       return true
     }
+  }
+  return false
+}
+
+function remotePictureShows(boxClass: string): boolean {
+  for (const window of Gtk.Window.list_toplevels()) {
+    const box = firstWithClass(window as Gtk.Widget, boxClass)
+    if (box !== null && hasPaintedPicture(box)) {
+      return true
+    }
+  }
+  return false
+}
+
+function hasPaintedPicture(widget: Gtk.Widget): boolean {
+  if (widget instanceof Gtk.Picture && widget.get_paintable() !== null) {
+    return true
+  }
+  let child = widget.get_first_child()
+  while (child !== null) {
+    if (hasPaintedPicture(child)) {
+      return true
+    }
+    child = child.get_next_sibling()
   }
   return false
 }
