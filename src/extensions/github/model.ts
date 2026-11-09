@@ -1,4 +1,5 @@
 import { numberOf, recordOf, stringOf } from '../../lib/record.js'
+import { notificationUrlOf, profileUrlOf, repoUrlOf } from './links.js'
 
 // What the github backend publishes and how it reads what `gh` prints. Pure:
 // nothing here spawns a process or touches the bus, so the backend, the cards
@@ -35,6 +36,7 @@ export interface ContributionsState extends ContributionStats {
   status: FetchStatus
   message: string
   login: string
+  profileUrl: string
   // Oldest first, one entry per calendar day, whole weeks starting on Sunday.
   days: ContributionDay[]
   updatedAt: number
@@ -42,6 +44,7 @@ export interface ContributionsState extends ContributionStats {
 
 export interface RepoCommit {
   sha: string
+  url: string
   message: string
   author: string
   date: string
@@ -49,6 +52,7 @@ export interface RepoCommit {
 
 export interface RepoEntry {
   fullName: string
+  url: string
   description: string
   language: string
   stars: number
@@ -87,12 +91,16 @@ export interface NotificationEntry {
   reason: string
   unread: boolean
   updatedAt: string
+  // The web page of the thread's subject, or its repository.
+  url: string
 }
 
 export interface IssuesState {
   status: FetchStatus
   message: string
   items: IssueEntry[]
+  // github.com's search page for the same items.
+  searchUrl: string
   // GitHub has more open items than were fetched.
   truncated: boolean
   notifications: NotificationEntry[]
@@ -236,6 +244,7 @@ export function parseContributions(payload: unknown, now: number): Contributions
     status: 'ok',
     message: '',
     login: stringOf(account.login),
+    profileUrl: profileUrlOf(stringOf(account.login)),
     days,
     updatedAt: now,
     ...statsOf(days, numberOf(calendar.totalContributions, 0)),
@@ -255,6 +264,7 @@ export function failedContributions(failure: Failure, now: number): Contribution
   return {
     ...failure,
     login: '',
+    profileUrl: '',
     days: [],
     updatedAt: now,
     ...statsOf([], 0),
@@ -280,6 +290,7 @@ function commitOf(value: unknown): RepoCommit {
   const login = recordOf(record.author).login
   return {
     sha: stringOf(record.sha).slice(0, 7),
+    url: stringOf(record.html_url),
     message: subjectOf(stringOf(commit.message)),
     author: authorNameOf(login, author.name),
     date: stringOf(author.date),
@@ -316,6 +327,7 @@ export function parseRepo(repository: unknown, commitsPayload: unknown, now: num
   const dailyCounts = dailyCountsOf(commits, now, COMMIT_DAYS)
   return {
     fullName,
+    url: repoUrlOf(fullName),
     description: stringOf(record.description),
     language: stringOf(record.language),
     stars: numberOf(record.stargazers_count, 0),
@@ -380,9 +392,11 @@ export function parseNotifications(payload: unknown): NotificationEntry[] {
 function notificationOf(value: unknown): NotificationEntry {
   const record = recordOf(value)
   const subject = recordOf(record.subject)
+  const repo = stringOf(recordOf(record.repository).full_name)
   return {
     id: stringOf(record.id),
-    repo: stringOf(recordOf(record.repository).full_name),
+    url: notificationUrlOf(stringOf(subject.url), repo),
+    repo,
     title: stringOf(subject.title),
     kind: stringOf(subject.type),
     reason: stringOf(record.reason),

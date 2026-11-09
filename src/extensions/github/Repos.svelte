@@ -4,6 +4,7 @@
   import { widgetBoxOf } from '../../lib/widget'
   import CommitRow from './CommitRow.svelte'
   import GithubCard from './GithubCard.svelte'
+  import Link from './Link.svelte'
   import RepoHeading from './RepoHeading.svelte'
   import Reveal from './Reveal.svelte'
   import Sparkline from './Sparkline.svelte'
@@ -84,6 +85,14 @@
     return entry.fullName
   }
 
+  // The large card's title is not a repository; its headings link instead.
+  function titleUrlOf(entry: RepoEntry | undefined, size: string): string {
+    if (entry === undefined || size === 'large') {
+      return ''
+    }
+    return entry.url
+  }
+
   function step(direction: number): void {
     selected = (selected + direction + entries.length) % entries.length
   }
@@ -108,6 +117,7 @@
   {status}
   {message}
   compact={box.size === 'small'}
+  url={titleUrlOf(current, box.size)}
   trailing={pager}
 >
   {#if current === undefined}
@@ -125,12 +135,16 @@
         <gtkbox vexpand></gtkbox>
         <Sparkline counts={current.dailyCounts} areaHeight={SMALL_BAR_AREA_PX} barWidth={8} />
         {#if current.commits.length > 0}
-          <gtklabel class="card-body" halign="start" ellipsize="end" margin-top={8}>
-            {current.commits[0].message}
-          </gtklabel>
-          <gtklabel class="card-hint" halign="start" ellipsize="end">
-            {current.commits[0].author} · {relativeTime(current.commits[0].date, clock.now)}
-          </gtklabel>
+          <gtkbox margin-top={8}>
+            <Link {bus} url={current.commits[0].url} row>
+              <gtklabel class="card-body" halign="start" ellipsize="end">
+                {current.commits[0].message}
+              </gtklabel>
+              <gtklabel class="card-hint" halign="start" ellipsize="end">
+                {current.commits[0].author} · {relativeTime(current.commits[0].date, clock.now)}
+              </gtklabel>
+            </Link>
+          </gtkbox>
         {/if}
       </gtkbox>
     {/key}
@@ -146,7 +160,7 @@
         <gtkbox orientation="vertical" spacing={2} hexpand valign="start">
           {#each current.commits.slice(0, MEDIUM_COMMITS) as commit, index (commit.sha)}
             <Reveal delay={index * ROW_STAGGER_MS}>
-              <CommitRow {commit} now={clock.now} />
+              <CommitRow {bus} {commit} now={clock.now} />
             </Reveal>
           {/each}
         </gtkbox>
@@ -158,11 +172,11 @@
         {#each entries.slice(0, LARGE_REPOS) as repo, repoIndex (repo.fullName)}
           <Reveal delay={repoIndex * 3 * ROW_STAGGER_MS}>
             <gtkbox orientation="vertical" spacing={6}>
-              <RepoHeading {repo} />
+              <RepoHeading {bus} {repo} />
               <Sparkline counts={repo.dailyCounts} areaHeight={LARGE_BAR_AREA_PX} barWidth={10} />
               <gtkbox orientation="vertical" spacing={2}>
                 {#each repo.commits.slice(0, largeCommits) as commit (commit.sha)}
-                  <CommitRow {commit} now={clock.now} />
+                  <CommitRow {bus} {commit} now={clock.now} />
                 {/each}
               </gtkbox>
             </gtkbox>

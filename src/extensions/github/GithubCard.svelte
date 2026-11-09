@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
   import type { BusService } from '../../lib/bus'
+  import Link from './Link.svelte'
 
   // The frame every GitHub card shares: the header with its refresh button,
   // and in place of the content a loading, missing-gh, signed-out or error
@@ -17,6 +18,7 @@
     status,
     message = '',
     compact = false,
+    url = '',
     trailing,
     children,
   }: {
@@ -28,6 +30,8 @@
     message?: string
     // The small card's header drops the icon to give the title its room.
     compact?: boolean
+    // Where pressing the title goes, when it goes anywhere.
+    url?: string
     trailing?: Snippet
     children: Snippet
   } = $props()
@@ -68,7 +72,13 @@
     {#if !compact}
       <gtkicon class="gh-header-icon" {icon} size={14} valign="center"></gtkicon>
     {/if}
-    <gtklabel class="card-title" halign="start" ellipsize="end">{title}</gtklabel>
+    {#if url === ''}
+      <gtklabel class="card-title" halign="start" ellipsize="end">{title}</gtklabel>
+    {:else}
+      <Link {bus} {url}>
+        <gtklabel class="card-title" halign="start" ellipsize="end">{title}</gtklabel>
+      </Link>
+    {/if}
     <gtkbox hexpand></gtkbox>
     {#if trailing !== undefined && status === 'ok'}
       {@render trailing()}

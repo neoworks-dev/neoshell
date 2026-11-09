@@ -1576,18 +1576,10 @@ button.qs-row-action:hover {
   color: #e3b341;
 }
 
-.gh-commit {
-  padding: 3px 0;
-}
-
 .gh-sha {
   font-family: monospace;
   font-size: 11px;
   color: #8fc2ff;
-}
-
-.gh-row {
-  padding: 4px 0;
 }
 
 .gh-chip {
