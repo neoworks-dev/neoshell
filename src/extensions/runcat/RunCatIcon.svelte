@@ -1,9 +1,8 @@
 <script lang="ts">
-  import GLib from 'gi://GLib'
   import { subscribeTo } from '../../lib/bus'
   import type { ViewProps } from '../../host/plugins/views'
   import { cpuStateOf } from './cpu'
-  import { FRAME_COUNT, addFrameSearchPath, frameIconName, frameIntervalMs } from './frames'
+  import { FRAME_COUNT, frameIconName, frameIntervalMs } from './frames'
 
   // The bar's running cat: it steps through its frames, faster the busier the
   // CPU is (system.cpu). Each step arms the next timeout, so the pace follows
@@ -20,8 +19,6 @@
   let frame = $state(0)
   let percent = 0
 
-  addFrameSearchPath()
-
   $effect(() =>
     subscribeTo(bus, 'system.cpu', (message) => {
       percent = cpuStateOf(message.data).percent
@@ -29,18 +26,17 @@
   )
 
   $effect(() => {
-    let sourceId = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
     const arm = (): void => {
-      sourceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, frameIntervalMs(percent), advance)
+      timer = setTimeout(advance, frameIntervalMs(percent))
     }
-    const advance = (): boolean => {
+    const advance = (): void => {
       frame = (frame + 1) % FRAME_COUNT
       arm()
-      return GLib.SOURCE_REMOVE
     }
     arm()
     return () => {
-      GLib.source_remove(sourceId)
+      clearTimeout(timer)
     }
   })
 </script>

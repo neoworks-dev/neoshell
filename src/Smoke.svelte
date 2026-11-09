@@ -28,6 +28,8 @@
 
   const RemoteWeather = remoteView('weather', 'card')
   const RemoteAirQuality = remoteView('airquality', 'card')
+  const RemoteRunCatMenu = remoteView('runcat', 'menu')
+  const RemoteUsbMenu = remoteView('usb', 'menu')
 
   // The smoke harness's markup: every view added for the quick settings tray
   // and the widget gallery, built once in a plain window.
@@ -167,6 +169,14 @@
       </gtkbox>
       <gtkbox class="smoke-remote-airquality" width={boxFor('small').width} height={boxFor('small').height} valign="start">
         <RemoteAirQuality {bus} {registry} args={boxFor('small')} id="smoke.airquality.small" />
+      </gtkbox>
+      <!-- Status menus run as clients get a close callback they cannot call;
+           the menus here only have to draw. -->
+      <gtkbox class="status-menu smoke-remote-runcat" orientation="vertical" valign="start">
+        <RemoteRunCatMenu {bus} {registry} args={{ close: () => {} }} id="smoke.remote.runcat" />
+      </gtkbox>
+      <gtkbox class="status-menu smoke-remote-usb" orientation="vertical" valign="start">
+        <RemoteUsbMenu {bus} {registry} args={{ close: () => {} }} id="smoke.remote.usb" />
       </gtkbox>
       {#each CARD_SIZES as size (size)}
         {@const box = boxFor(size)}
