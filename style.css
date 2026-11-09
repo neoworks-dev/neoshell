@@ -1207,6 +1207,48 @@ button.qs-row-action:hover {
   box-shadow: 0 10px 20px alpha(#000000, 0.35);
 }
 
+/* A row inside a card that does something when pressed. With .card-meter
+   and the .tone-* dots, this is part of what an installed program's widget
+   can style itself with (sdk/README.md). */
+.card-row {
+  padding: 4px 6px;
+  margin: 0 -6px;
+  border-radius: 10px;
+}
+
+.card-row:hover {
+  background-color: alpha(#fafafa, 0.06);
+}
+
+.card-meter trough {
+  min-height: 4px;
+  border-radius: 2px;
+  background-color: alpha(#fafafa, 0.15);
+  border: none;
+  padding: 0;
+  box-shadow: none;
+}
+
+.card-meter block.filled {
+  min-height: 4px;
+  border-radius: 2px;
+  border: none;
+  box-shadow: none;
+  margin: 0;
+  background-color: var(--accent);
+}
+
+.card-meter.warning block.filled { background-color: var(--warning); }
+.card-meter.error block.filled { background-color: var(--error); }
+
+.card-meter block.empty {
+  min-height: 4px;
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  margin: 0;
+}
+
 /* text-sm font-medium */
 .card-title {
   font-size: 13px;

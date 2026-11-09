@@ -91,7 +91,16 @@ startExtensionClient('dev.example.stocks', { card: Card })
 
 `source.available(handler)` tells whether the program is on the bus. Views are
 svelte-gtk4 components. The shell's stylesheet styles them, and these classes
-are the stable ones: `card`, `card-title`, `card-hint`, `dim-label`.
+are the stable ones:
+
+| Class | What it is |
+| --- | --- |
+| `card` | the widget's frame |
+| `card-title`, `card-hint` | a title, and smaller dimmed text |
+| `card-reading` | one big number |
+| `card-row` | a pressable row that lights up on hover |
+| `card-meter` (+ `warning`, `error`) | a thin `gtklevelbar` |
+| `tone-dot` + `tone-neutral` / `tone-accent` / `tone-success` / `tone-warning` / `tone-error` | a status dot |
 
 ## Building
 
