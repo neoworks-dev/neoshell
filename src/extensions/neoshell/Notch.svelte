@@ -70,6 +70,8 @@
 
   // Mirrors .nook-panel and .nook-header in the stylesheet.
   const NOOK_PADDING = 16;
+  // Matches .nook-panel's padding-bottom in style.css.
+  const NOOK_BOTTOM_PADDING = 24;
   const NOOK_HEADER_HEIGHT = 44;
   const EMPTY_NOOK_WIDTH = 420;
   const QUICKSHARE_WIDTH = 150;
@@ -446,7 +448,7 @@
     const content = Math.max(nookWidth(layout), EMPTY_NOOK_WIDTH);
     return {
       width: content + 2 * NOOK_PADDING,
-      height: NOOK_HEADER_HEIGHT + NOOK_ROW_HEIGHT + NOOK_PADDING,
+      height: NOOK_HEADER_HEIGHT + NOOK_ROW_HEIGHT + NOOK_BOTTOM_PADDING,
     };
   }
 

@@ -284,7 +284,7 @@ button.workspace.urgent {
    180ms rather than popping in at full contrast. Padding mirrors
    NOOK_PADDING and the header NOOK_HEADER_HEIGHT in Notch.svelte. */
 .nook-panel {
-  padding: 0 16px 16px 16px;
+  padding: 0 16px 24px 16px;
   animation: nook-fade-in 180ms ease-out;
 }
 
