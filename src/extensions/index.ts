@@ -35,6 +35,14 @@ import settingsViews from './settings/views.js'
 import statusViews from './status/views.js'
 import weatherViews from './weather/views.js'
 import airQualityViews from './airquality/views.js'
+import galleryBackend from './gallery/backend.js'
+import galleryViews from './gallery/views.js'
+import containersBackend from './containers/backend.js'
+import containersViews from './containers/views.js'
+import aiUsageBackend from './aiusage/backend.js'
+import aiUsageViews from './aiusage/views.js'
+import emailBackend from './email/backend.js'
+import emailViews from './email/views.js'
 
 // The extension registry. In the bun host an extension was a directory the
 // loader found by scanning for manifest.json and imported at runtime; one GJS
@@ -655,5 +663,166 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     },
     backend: airQualityBackend as Plugin.Object,
     views: airQualityViews,
+  },
+  // Pictures from a folder. The widget only holds file handles; thumbnails and
+  // "open" go through the backend.
+  gallery: {
+    manifest: {
+      id: 'gallery',
+      inject: ['bus', 'ui'],
+      widgets: [
+        {
+          type: 'gallery.card',
+          name: 'Gallery',
+          category: 'Photos',
+          icon: 'folder-pictures-symbolic',
+          description: 'Pictures from a folder, fading slowly from one to the next.',
+          sizes: ['small', 'medium', 'large'],
+          defaultSize: 'medium',
+        },
+      ],
+      settings: [
+        {
+          id: 'gallery',
+          title: 'Gallery',
+          icon: 'folder-pictures-symbolic',
+          view: 'gallery.settings',
+          order: 30,
+          group: 'shell',
+          keywords: ['pictures', 'photos', 'images', 'folder', 'slideshow'],
+        },
+      ],
+      client: {
+        permissions: {
+          subscribe: ['gallery.library'],
+          call: ['gallery:thumbnail', 'gallery:open', 'config:set'],
+          publish: ['settings:open'],
+          configKeys: ['gallery.*'],
+        },
+      },
+    },
+    backend: galleryBackend as Plugin.Object,
+    views: galleryViews,
+  },
+  // Docker and Podman containers and Kubernetes pods, from the engines' own
+  // command-line tools.
+  containers: {
+    manifest: {
+      id: 'containers',
+      inject: ['bus', 'ui'],
+      widgets: [
+        {
+          type: 'containers.card',
+          name: 'Containers',
+          category: 'Developer',
+          icon: 'package-x-generic-symbolic',
+          description: 'Docker and Podman containers and Kubernetes pods, with their health.',
+          sizes: ['small', 'medium', 'large'],
+          defaultSize: 'medium',
+        },
+      ],
+      settings: [
+        {
+          id: 'containers',
+          title: 'Containers',
+          icon: 'package-x-generic-symbolic',
+          view: 'containers.settings',
+          order: 40,
+          group: 'shell',
+          keywords: ['docker', 'podman', 'kubernetes', 'kubectl', 'pods'],
+        },
+      ],
+      client: {
+        permissions: {
+          subscribe: ['containers.state'],
+          call: ['containers:action', 'containers:refresh', 'config:set'],
+          publish: [],
+          configKeys: ['containers.*'],
+        },
+      },
+    },
+    backend: containersBackend as Plugin.Object,
+    views: containersViews,
+  },
+  // Coding agents' token use, plan windows and live sessions, read from the
+  // logs Claude Code and Codex keep on this machine.
+  aiusage: {
+    manifest: {
+      id: 'aiusage',
+      inject: ['bus', 'ui'],
+      widgets: [
+        {
+          type: 'aiusage.card',
+          name: 'AI usage',
+          category: 'Developer',
+          icon: 'utilities-terminal-symbolic',
+          description: 'Claude Code and Codex: token use, usage windows and what each is doing now.',
+          sizes: ['small', 'medium', 'large'],
+          defaultSize: 'medium',
+        },
+      ],
+      settings: [
+        {
+          id: 'aiusage',
+          title: 'AI usage',
+          icon: 'utilities-terminal-symbolic',
+          view: 'aiusage.settings',
+          order: 50,
+          group: 'shell',
+          keywords: ['claude', 'codex', 'tokens', 'limits', 'agents', 'openai', 'anthropic'],
+        },
+      ],
+      client: {
+        permissions: {
+          subscribe: ['aiusage.state'],
+          call: ['aiusage:refresh', 'config:set'],
+          publish: ['settings:open'],
+          configKeys: ['aiusage.*'],
+        },
+      },
+    },
+    backend: aiUsageBackend as Plugin.Object,
+    views: aiUsageViews,
+  },
+  // Unread mail from IMAP accounts, with the passwords in the keyring.
+  email: {
+    manifest: {
+      id: 'email',
+      inject: ['bus', 'ui'],
+      widgets: [
+        {
+          type: 'email.card',
+          name: 'Email',
+          category: 'Communication',
+          icon: 'mail-unread-symbolic',
+          description: 'The unread count and the newest unread senders and subjects.',
+          sizes: ['small', 'medium', 'large'],
+          defaultSize: 'medium',
+        },
+      ],
+      settings: [
+        {
+          id: 'email',
+          title: 'Email',
+          icon: 'mail-unread-symbolic',
+          view: 'email.settings',
+          order: 60,
+          group: 'shell',
+          keywords: ['mail', 'imap', 'inbox', 'gmail', 'accounts', 'unread'],
+        },
+      ],
+      // The passwords go to the backend, which keeps them in the keyring; the
+      // client only ever sees names and statuses.
+      client: {
+        permissions: {
+          subscribe: ['email.inbox'],
+          call: ['email:add', 'email:remove', 'email:refresh', 'config:set'],
+          publish: ['settings:open'],
+          configKeys: ['email.pollMinutes'],
+        },
+      },
+    },
+    backend: emailBackend as Plugin.Object,
+    views: emailViews,
   },
 }
