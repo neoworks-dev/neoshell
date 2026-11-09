@@ -201,21 +201,28 @@ bus.retain('settings:open', { section: 'notch' })
 bus.retain('widgets:gallery', { open: true })
 
 GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
-  if (!remoteCardShows('Smoke')) {
-    print('neoshell: the weather card run as a client did not draw its place')
-    System.exit(1)
+  for (const [box, text] of REMOTE_CARDS) {
+    if (!remoteCardShows(box, text)) {
+      print(`neoshell: the card in .${box}, run as a client, did not draw "${text}"`)
+      System.exit(1)
+    }
   }
   print('neoshell: built every view — the tray, the gallery, both widget cards, the notch and settings — without error')
   System.exit(0)
   return GLib.SOURCE_REMOVE
 })
 
-// The client's card is only drawn once the runner has started, mounted it and
-// had its bus subscription answered, so finding the place in it proves the
-// whole path.
-function remoteCardShows(text: string): boolean {
+// A client's card is only drawn once the runner has started, mounted it and
+// had its bus subscription answered, so finding the published text in it
+// proves the whole path.
+const REMOTE_CARDS: [string, string][] = [
+  ['smoke-remote-weather', 'Smoke'],
+  ['smoke-remote-airquality', 'Fair'],
+]
+
+function remoteCardShows(boxClass: string, text: string): boolean {
   for (const window of Gtk.Window.list_toplevels()) {
-    const box = firstWithClass(window as Gtk.Widget, 'smoke-remote')
+    const box = firstWithClass(window as Gtk.Widget, boxClass)
     if (box !== null && hasLabel(box, text)) {
       return true
     }

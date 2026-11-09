@@ -27,6 +27,7 @@
   import { remoteView } from './host/clients/remoteView'
 
   const RemoteWeather = remoteView('weather', 'card')
+  const RemoteAirQuality = remoteView('airquality', 'card')
 
   // The smoke harness's markup: every view added for the quick settings tray
   // and the widget gallery, built once in a plain window.
@@ -159,10 +160,13 @@
         </gtkbox>
       </gtkbox>
 
-      <!-- The weather card again, run as its client: the same view, replayed
+      <!-- The two cards again, run as their clients: the same views, replayed
            from the runner through the bus bridge. -->
-      <gtkbox class="smoke-remote" width={boxFor('small').width} height={boxFor('small').height} valign="start">
+      <gtkbox class="smoke-remote-weather" width={boxFor('small').width} height={boxFor('small').height} valign="start">
         <RemoteWeather {bus} {registry} args={boxFor('small')} id="smoke.weather.small" />
+      </gtkbox>
+      <gtkbox class="smoke-remote-airquality" width={boxFor('small').width} height={boxFor('small').height} valign="start">
+        <RemoteAirQuality {bus} {registry} args={boxFor('small')} id="smoke.airquality.small" />
       </gtkbox>
       {#each CARD_SIZES as size (size)}
         {@const box = boxFor(size)}
