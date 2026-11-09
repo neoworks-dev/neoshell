@@ -295,7 +295,7 @@ function authorNameOf(login: unknown, name: unknown): string {
 
 /** Commits per day for the last `days` days ending at `now`, oldest first. */
 export function dailyCountsOf(commits: RepoCommit[], now: number, days: number): number[] {
-  const counts = new Array<number>(days).fill(0)
+  const counts = Array.from({ length: days }, () => 0)
   const today = Math.floor(now / DAY_MS)
   for (const commit of commits) {
     const ageDays = today - Math.floor(Date.parse(commit.date) / DAY_MS)

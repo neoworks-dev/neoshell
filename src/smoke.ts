@@ -176,6 +176,64 @@ bus.retain('airquality.current', {
     { label: 'NO₂', value: 1, unit: 'µg/m³', share: 0.04 },
   ],
 })
+
+// The GitHub cards: a year of contribution days (the graph's column and month
+// arithmetic only runs on a full calendar), a repository with commits, and
+// one issue, one pull request and one unread notification.
+const smokeDays = Array.from({ length: 371 }, (_, index) => {
+  const date = new Date(Date.now() - (370 - index) * 86_400_000)
+  const count = (index * 7) % 5
+  return { date: date.toISOString().slice(0, 10), count, level: count }
+})
+bus.retain('github.contributions', {
+  status: 'ok',
+  message: '',
+  login: 'smoke',
+  total: 1302,
+  days: smokeDays,
+  currentStreak: 4,
+  longestStreak: 21,
+  activeDays: 210,
+  bestDay: { date: smokeDays[100].date, count: 40 },
+  updatedAt: Date.now(),
+})
+bus.retain('github.repos', {
+  status: 'ok',
+  message: '',
+  updatedAt: Date.now(),
+  repos: [
+    {
+      fullName: 'smoke/repo',
+      description: '',
+      language: 'TypeScript',
+      stars: 12,
+      forks: 3,
+      openIssues: 2,
+      pushedAt: new Date().toISOString(),
+      weekCommits: 9,
+      dailyCounts: [0, 1, 0, 3, 2, 0, 0, 1, 0, 0, 4, 2, 1, 0],
+      commits: [
+        { sha: 'abc1234', message: 'Smoke commit', author: 'smoke', date: new Date().toISOString() },
+        { sha: 'def5678', message: 'Another smoke commit', author: 'smoke', date: new Date(Date.now() - 7_200_000).toISOString() },
+      ],
+    },
+  ],
+})
+bus.retain('github.issues', {
+  status: 'ok',
+  message: '',
+  truncated: false,
+  unreadCount: 1,
+  notificationsMessage: '',
+  updatedAt: Date.now(),
+  items: [
+    { url: 'https://example.test/1', repo: 'smoke/repo', number: 1, title: 'Smoke issue title', isPullRequest: false, roles: ['assigned'], comments: 0, updatedAt: new Date().toISOString() },
+    { url: 'https://example.test/2', repo: 'smoke/repo', number: 2, title: 'Smoke pull request', isPullRequest: true, roles: ['authored'], comments: 1, updatedAt: new Date().toISOString() },
+  ],
+  notifications: [
+    { id: 'n1', repo: 'smoke/repo', title: 'Smoke notification', kind: 'Issue', reason: 'mention', unread: true, updatedAt: new Date().toISOString() },
+  ],
+})
 bus.retain('system.volume', { volume: 40, muted: false })
 bus.retain('system.brightness', { percent: 60, available: true })
 bus.retain('system.battery', { percent: 80, status: 'Discharging' })
@@ -386,6 +444,12 @@ const REMOTE_CARDS: [string, string][] = [
   ['smoke-remote-notchsettings', 'Opens on'],
   ['smoke-remote-displays', 'Main display'],
   ['smoke-remote-calendarsettings', 'Smoke'],
+  // The GitHub cards, from the topics retained above, and their Settings page.
+  ['smoke-remote-github-medium', '@smoke'],
+  ['smoke-remote-github-medium', 'smoke/repo'],
+  ['smoke-remote-github-medium', 'Smoke issue title'],
+  ['smoke-remote-github-large', 'Smoke notification'],
+  ['smoke-remote-githubsettings', 'Repositories'],
   ['smoke-remote-bar', new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date())],
 ]
 

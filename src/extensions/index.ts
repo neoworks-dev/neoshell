@@ -22,6 +22,8 @@ import desktopBackend from './desktop/backend.js'
 import networkBackend from './network/backend.js'
 import bluetoothBackend from './bluetooth/backend.js'
 import weatherBackend from './weather/backend.js'
+import githubBackend from './github/backend.js'
+import githubViews from './github/views.js'
 import airQualityBackend from './airquality/backend.js'
 import neoshellViews from './neoshell/views.js'
 import lockBackend from './lock/backend.js'
@@ -572,6 +574,65 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     },
     backend: weatherBackend as Plugin.Object,
     views: weatherViews,
+  },
+  // GitHub activity through the gh CLI: three cards and one Settings page, all
+  // run as the github client, reading the topics the backend publishes and the
+  // config's "github" section.
+  github: {
+    manifest: {
+      id: 'github',
+      inject: ['bus', 'ui'],
+      widgets: [
+        {
+          type: 'github.contributions',
+          name: 'Coding activity',
+          category: 'Developer',
+          icon: 'view-grid-symbolic',
+          description: 'Your contribution graph, streak and yearly total.',
+          sizes: ['small', 'medium', 'large'],
+          defaultSize: 'medium',
+        },
+        {
+          type: 'github.repos',
+          name: 'Repository activity',
+          category: 'Developer',
+          icon: 'folder-symbolic',
+          description: 'Recent commits and stats for the repositories you follow.',
+          sizes: ['small', 'medium', 'large'],
+          defaultSize: 'medium',
+        },
+        {
+          type: 'github.issues',
+          name: 'Issues & notifications',
+          category: 'Developer',
+          icon: 'dialog-information-symbolic',
+          description: 'Open issues and pull requests that are yours, and unread notifications.',
+          sizes: ['small', 'medium', 'large'],
+          defaultSize: 'medium',
+        },
+      ],
+      settings: [
+        {
+          id: 'github',
+          title: 'GitHub',
+          icon: 'folder-symbolic',
+          view: 'github.settings',
+          order: 25,
+          group: 'shell',
+          keywords: ['git', 'repository', 'issues', 'pull requests', 'notifications', 'contributions', 'gh'],
+        },
+      ],
+      client: {
+        permissions: {
+          subscribe: ['github.contributions', 'github.repos', 'github.issues'],
+          call: ['github:refresh', 'config:set'],
+          publish: [],
+          configKeys: ['github.*'],
+        },
+      },
+    },
+    backend: githubBackend as Plugin.Object,
+    views: githubViews,
   },
   airquality: {
     manifest: {
