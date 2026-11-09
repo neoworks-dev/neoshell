@@ -220,6 +220,9 @@ const REMOTE_CARDS: [string, string][] = [
   ['smoke-remote-airquality', 'Fair'],
   ['smoke-remote-runcat', '37%'],
   ['smoke-remote-usb', 'Smoke Keyboard'],
+  // Formatted in the client with the host's locale profile, which has to come
+  // out as the host's own Intl writes it.
+  ['smoke-remote-agenda', new Intl.DateTimeFormat(undefined, { weekday: 'long' }).format(new Date())],
 ]
 
 function remoteCardShows(boxClass: string, text: string): boolean {

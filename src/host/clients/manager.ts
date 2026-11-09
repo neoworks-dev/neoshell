@@ -5,6 +5,8 @@ import type { ClientStatus } from '@neoworks/svelte-gtk4/host'
 import type { Bus } from '../bus.js'
 import { joinPath } from '../../gjs/fs.js'
 import type { BusAnswer } from '../../lib/remoteBus.js'
+import { buildLocaleProfile } from '../../lib/localeProfile.js'
+import type { LocaleProfile } from '../../lib/localeProfile.js'
 import { BusBridge } from './bridge.js'
 import type { ClientPermissions } from './permissions.js'
 import { clientArgv, DEFAULT_RUNNER_LIMITS } from './sandbox.js'
@@ -112,6 +114,7 @@ export class ClientManager {
       name: `client ${name}`,
       argv: clientArgv(runnerPath(), bundle, limitsOf(declaration)),
       policy: defaultPolicy(`client:${name}`),
+      greeting: () => ({ locale: localeProfile() }),
       onApp: (data) => bridge.handle(data),
       onStatus: (status, detail) => {
         if (status === 'restarting' || status === 'failed') {
@@ -167,6 +170,16 @@ export class ClientManager {
     running.bridge.reset()
     this.running.delete(name)
   }
+}
+
+let cachedLocaleProfile: LocaleProfile | null = null
+
+// Built once: the locale does not change while the shell runs.
+function localeProfile(): LocaleProfile {
+  if (cachedLocaleProfile === null) {
+    cachedLocaleProfile = buildLocaleProfile(undefined)
+  }
+  return cachedLocaleProfile
 }
 
 function cancelStop(running: Running): void {
