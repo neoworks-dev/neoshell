@@ -81,8 +81,10 @@
   }
 </script>
 
-<gtkoverlay class="remote-view" hexpand vexpand>
-  <gtkbox bind:this={anchor} hexpand vexpand></gtkbox>
+<!-- No expand flags of its own: whatever the client's root asks for propagates
+     up through these two, so a bar icon stays its size and a card fills its slot. -->
+<gtkoverlay class="remote-view">
+  <gtkbox bind:this={anchor}></gtkbox>
   {#if status === 'restarting' || status === 'failed'}
     <gtkbox
       overlay

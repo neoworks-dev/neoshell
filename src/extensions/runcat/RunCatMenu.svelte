@@ -9,35 +9,31 @@
 
   const WIDTH = 260
   const CHART_HEIGHT = 44
-  const BAR_GAP = 1
+  // Of each sample's slot, the share its bar fills; the rest is the gap.
+  const BAR_SHARE = 0.75
+  // The shortest bar, in percent of the chart's height, so an idle sample shows.
+  const MIN_BAR_PERCENT = 2
   const BAR_ALPHA = 0.55
   const LOAD_LABELS = ['1 min', '5 min', '15 min']
-
-  // The slice of the cairo context the chart draws with.
-  interface Painter {
-    setSourceRGBA(red: number, green: number, blue: number, alpha: number): void
-    rectangle(x: number, y: number, width: number, height: number): void
-    fill(): void
-  }
+  // One unit per sample across, percent up.
+  const VIEWBOX = [0, 0, HISTORY_LENGTH, 100]
 
   let { bus }: ViewProps = $props()
 
   let cpu = $state.raw<CpuState>(IDLE_CPU)
 
+  const chart = $derived(chartOf(cpu.history))
+
   $effect(() => subscribeTo(bus, 'system.cpu', (message) => (cpu = cpuStateOf(message.data))))
 
   // Newest sample at the right edge; a short history leaves the left empty.
-  function drawHistory(history: number[]): (area: unknown, cr: Painter, width: number, height: number) => void {
-    return (_area, cr, width, height) => {
-      const slot = width / HISTORY_LENGTH
-      const offset = HISTORY_LENGTH - history.length
-      cr.setSourceRGBA(0.98, 0.98, 0.98, BAR_ALPHA)
-      history.forEach((percent, index) => {
-        const barHeight = Math.max(1, (height * percent) / 100)
-        cr.rectangle((offset + index) * slot, height - barHeight, slot - BAR_GAP, barHeight)
-      })
-      cr.fill()
-    }
+  function chartOf(history: number[]): unknown[][] {
+    const offset = HISTORY_LENGTH - history.length
+    const bars = history.map((percent, index) => {
+      const barHeight = Math.max(MIN_BAR_PERCENT, percent)
+      return ['rect', offset + index, 100 - barHeight, BAR_SHARE, barHeight]
+    })
+    return [['rgba', 0.98, 0.98, 0.98, BAR_ALPHA], ...bars, ['fill']]
   }
 
   function loadText(value: number | undefined): string {
@@ -57,7 +53,7 @@
       </gtkbox>
       <gtklabel class="runcat-percent" tabular valign="center">{cpu.percent}%</gtklabel>
     </gtkbox>
-    <gtkdrawingarea class="runcat-chart" draw={drawHistory(cpu.history)} content-height={CHART_HEIGHT} hexpand></gtkdrawingarea>
+    <gtkcanvas class="runcat-chart" viewbox={VIEWBOX} commands={chart} content-height={CHART_HEIGHT} hexpand></gtkcanvas>
   </gtkbox>
 
   <gtkbox class="cc-block" orientation="vertical" spacing={6}>

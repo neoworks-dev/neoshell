@@ -1,6 +1,6 @@
-import type { Bus } from '../bus.js'
+import type { Bus, BusMessage } from '../bus.js'
 import type { BusAnswer, BusRequest } from '../../lib/remoteBus.js'
-import { mayCall, mayPublish, maySubscribe } from './permissions.js'
+import { CONFIG_TOPIC, mayCall, mayPublish, maySubscribe, readableConfig } from './permissions.js'
 import type { ClientPermissions } from './permissions.js'
 
 // One client's bus: requests from the client are checked against its
@@ -73,9 +73,16 @@ export class BusBridge {
     // A retained topic replays inside subscribe(), before the disposer is
     // stored; that is fine, the answer only needs the number.
     const dispose = this.bus.subscribe(pattern, (message) => {
-      this.answer({ bus: 'message', sub, message: { type: message.type, data: plain(message.data) } })
+      this.answer({ bus: 'message', sub, message: { type: message.type, data: this.visibleData(message) } })
     })
     this.subscriptions.set(sub, dispose)
+  }
+
+  private visibleData(message: BusMessage): unknown {
+    if (message.type === CONFIG_TOPIC) {
+      return plain(readableConfig(this.permissions, message.data))
+    }
+    return plain(message.data)
   }
 
   private publish(type: string, data: unknown): void {

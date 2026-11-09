@@ -218,6 +218,8 @@ GLib.timeout_add(GLib.PRIORITY_DEFAULT, EXIT_AFTER_MS, () => {
 const REMOTE_CARDS: [string, string][] = [
   ['smoke-remote-weather', 'Smoke'],
   ['smoke-remote-airquality', 'Fair'],
+  ['smoke-remote-runcat', '37%'],
+  ['smoke-remote-usb', 'Smoke Keyboard'],
 ]
 
 function remoteCardShows(boxClass: string, text: string): boolean {

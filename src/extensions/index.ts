@@ -221,6 +221,9 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
       id: 'agenda',
       inject: ['bus', 'ui'],
       statusItems: [{ id: 'agenda', label: 'Agenda', icon: 'agenda.icon', menu: 'agenda.menu', order: 40 }],
+      client: {
+        permissions: { subscribe: ['calendar.events'], call: ['config:set'], publish: [], configKeys: ['agenda.tasks'] },
+      },
     },
     views: agendaViews,
   },
@@ -229,6 +232,9 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
       id: 'pomodoro',
       inject: ['bus', 'ui'],
       statusItems: [{ id: 'pomodoro', label: 'Pomodoro', icon: 'pomodoro.icon', menu: 'pomodoro.menu', order: 20 }],
+      client: {
+        permissions: { subscribe: ['pomodoro.state'], call: ['pomodoro:*'], publish: [], configKeys: [] },
+      },
     },
     backend: pomodoroBackend as Plugin.Object,
     views: pomodoroViews,
@@ -238,6 +244,9 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
       id: 'usb',
       inject: ['bus', 'ui'],
       statusItems: [{ id: 'usb', label: 'USB devices', icon: 'usb.icon', menu: 'usb.menu', order: 30 }],
+      client: {
+        permissions: { subscribe: ['usb.devices'], call: [], publish: [], configKeys: [] },
+      },
     },
     backend: usbBackend as Plugin.Object,
     views: usbViews,
@@ -247,6 +256,9 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
       id: 'runcat',
       inject: ['bus', 'ui'],
       statusItems: [{ id: 'runcat', label: 'CPU', icon: 'runcat.icon', menu: 'runcat.menu', order: 10 }],
+      client: {
+        permissions: { subscribe: ['system.cpu'], call: [], publish: [], configKeys: [] },
+      },
     },
     backend: runcatBackend as Plugin.Object,
     views: runcatViews,

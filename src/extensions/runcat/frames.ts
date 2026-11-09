@@ -1,29 +1,11 @@
-import Gdk from 'gi://Gdk?version=4.0'
-import GLib from 'gi://GLib'
-import Gtk from 'gi://Gtk?version=4.0'
-
 // The running cat's frames: symbolic SVGs under assets/runcat, found through
-// the icon theme's search path so GTK recolours them to the bar's text colour.
+// the icon theme's search path (iconTheme.ts, which the host adds) so GTK
+// recolours them to the bar's text colour.
 
 export const FRAME_COUNT = 5
 
 const SLOWEST_FRAME_MS = 200
 const FASTEST_FRAME_MS = 40
-
-let searchPathAdded = false
-
-export function addFrameSearchPath(): void {
-  if (searchPathAdded) {
-    return
-  }
-  searchPathAdded = true
-  const display = Gdk.Display.get_default()
-  if (display === null) {
-    return
-  }
-  const directory = GLib.build_filenamev([GLib.get_current_dir(), 'assets', 'runcat'])
-  Gtk.IconTheme.get_for_display(display).add_search_path(directory)
-}
 
 export function frameIconName(index: number): string {
   return `runcat-${index + 1}-symbolic`
