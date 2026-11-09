@@ -19,6 +19,7 @@
   import { remoteView } from './host/clients/remoteView'
 
   const RemoteWeather = remoteView('weather', 'card')
+  const RemoteExternal = remoteView('dev.neoworks.smoke', 'card')
   const RemoteAirQuality = remoteView('airquality', 'card')
   const RemoteRunCatMenu = remoteView('runcat', 'menu')
   const RemoteUsbMenu = remoteView('usb', 'menu')
@@ -165,6 +166,10 @@
       </gtkbox>
       <gtkbox class="smoke-remote-airquality" width={boxFor('small').width} height={boxFor('small').height} valign="start">
         <RemoteAirQuality {bus} {registry} args={boxFor('small')} id="smoke.airquality.small" />
+      </gtkbox>
+      <!-- An installed program's widget, fed over D-Bus (smokeExternal.ts). -->
+      <gtkbox class="smoke-remote-external" width={boxFor('small').width} height={boxFor('small').height} valign="start">
+        <RemoteExternal {bus} {registry} args={boxFor('small')} id="smoke.external.small" />
       </gtkbox>
       <!-- Status menus run as clients get a close callback they cannot call;
            the menus here only have to draw. -->

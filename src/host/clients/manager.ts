@@ -25,6 +25,9 @@ import type { RunnerLimits } from './sandbox.js'
 export interface ClientDeclaration {
   permissions: ClientPermissions
   limits?: Partial<RunnerLimits>
+  // Where the bundle is, for one an installed program ships; the shell's own
+  // are built into dist/clients.
+  bundle?: string
 }
 
 export type StatusListener = (status: ClientStatus, detail: string) => void
@@ -109,7 +112,7 @@ export class ClientManager {
   private start(name: string): Running {
     const declaration = this.declarationOf(name)
     const permissions = permissionsOf(declaration)
-    const bundle = bundlePath(name)
+    const bundle = bundlePath(name, declaration)
     const listeners = new Set<StatusListener>()
     let client: RemoteClient | null = null
     const bridge = new BusBridge(this.bus, name, permissions, (answer: BusAnswer) => {
@@ -212,9 +215,12 @@ function limitsOf(declaration: ClientDeclaration | undefined): RunnerLimits {
   return { ...DEFAULT_RUNNER_LIMITS, ...declaration.limits }
 }
 
-// Next to the shell's own bundle, which is run from the checkout like
+// The shell's own are next to its bundle, which is run from the checkout like
 // style.css is.
-function bundlePath(name: string): string {
+function bundlePath(name: string, declaration: ClientDeclaration | undefined): string {
+  if (declaration !== undefined && declaration.bundle !== undefined) {
+    return declaration.bundle
+  }
   return joinPath(GLib.get_current_dir(), 'dist', 'clients', `${name}.js`)
 }
 

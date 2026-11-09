@@ -17,6 +17,7 @@
   },
   "include": [
     "src",
+    "sdk/index.ts",
     "node_modules/@neoworks/svelte-gtk4/gi.d.ts",
     "node_modules/@neoworks/svelte-gtk4/gjs-globals.d.ts"
   ]

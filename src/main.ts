@@ -15,7 +15,8 @@ import { joinPath, runtimeDirectory } from './gjs/fs.js'
 import { startClients } from './host/clients/index.js'
 import type { ClientDeclaration } from './host/clients/index.js'
 import { paintableOf } from './host/paintables.js'
-import { declaredClient, EXTENSIONS } from './extensions/index.js'
+import { addExtensions, declaredClient, EXTENSIONS } from './extensions/index.js'
+import { externalDirectories, scanExternalExtensions } from './host/external/index.js'
 import Shell from './Shell.svelte'
 
 // neoshell: one GJS process holding the kernel, the bus, every extension
@@ -32,6 +33,9 @@ const bus = new Bus()
 const registry = new ViewRegistry()
 
 const root = new Context()
+// Before the loader reads the table: an installed program's extension mounts
+// like a built-in one.
+addExtensions(scanExternalExtensions(externalDirectories(), new Set(Object.keys(EXTENSIONS))))
 // Before any view renders: a view that runs as a client mounts through it.
 startClients(bus, registry, clientDeclarationOf)
 setPaintableResolver(paintableOf)

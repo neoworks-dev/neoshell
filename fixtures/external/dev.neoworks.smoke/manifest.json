@@ -1,0 +1,17 @@
+{
+  "id": "dev.neoworks.smoke",
+  "name": "Smoke source",
+  "dbus": "dev.neoworks.Shell.SmokeSource",
+  "topics": ["status"],
+  "calls": ["ping"],
+  "widgets": [
+    {
+      "view": "card",
+      "name": "Smoke external",
+      "category": "Smoke",
+      "description": "A widget an installed program ships.",
+      "sizes": ["small"],
+      "defaultSize": "small"
+    }
+  ]
+}
