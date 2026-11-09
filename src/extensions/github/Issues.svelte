@@ -4,6 +4,7 @@
   import { widgetBoxOf } from '../../lib/widget'
   import GithubCard from './GithubCard.svelte'
   import IssueRow from './IssueRow.svelte'
+  import Link from './Link.svelte'
   import NotificationRow from './NotificationRow.svelte'
   import Reveal from './Reveal.svelte'
   import TickingNumber from './TickingNumber.svelte'
@@ -154,11 +155,13 @@
   {#if issues !== null}
     {#if box.size === 'small'}
       <gtkbox orientation="vertical" vexpand>
-        <TickingNumber class="card-reading compact" value={items.length} suffix={moreSuffix} />
-        <gtklabel class="card-hint" halign="start">open issues and PRs</gtklabel>
-        <gtklabel class="card-hint" halign="start" margin-top={6}>
-          {pluralize(items.length - pullRequests, 'issue')} · {pluralize(pullRequests, 'PR')}
-        </gtklabel>
+        <Link {bus} url={issues.searchUrl} row>
+          <TickingNumber class="card-reading compact" value={items.length} suffix={moreSuffix} />
+          <gtklabel class="card-hint" halign="start">open issues and PRs</gtklabel>
+          <gtklabel class="card-hint" halign="start" margin-top={6}>
+            {pluralize(items.length - pullRequests, 'issue')} · {pluralize(pullRequests, 'PR')}
+          </gtklabel>
+        </Link>
         <gtkbox vexpand></gtkbox>
         {@render unreadBadge()}
       </gtkbox>
@@ -169,7 +172,7 @@
         <gtkbox orientation="vertical" spacing={2} valign="start">
           {#each items.slice(0, MEDIUM_ROWS) as item, index (item.url)}
             <Reveal delay={index * ROW_STAGGER_MS}>
-              <IssueRow issue={item} now={clock.now} />
+              <IssueRow {bus} issue={item} now={clock.now} />
             </Reveal>
           {/each}
         </gtkbox>
@@ -181,7 +184,7 @@
       <gtkbox orientation="vertical" spacing={2} vexpand={!showNotifications}>
         {#each items.slice(0, largeRows) as item, index (item.url)}
           <Reveal delay={index * ROW_STAGGER_MS}>
-            <IssueRow issue={item} now={clock.now} />
+            <IssueRow {bus} issue={item} now={clock.now} />
           </Reveal>
         {:else}
           <gtklabel class="card-hint" halign="start">Nothing open.</gtklabel>
@@ -195,7 +198,7 @@
         <gtkbox orientation="vertical" spacing={2}>
           {#each issues.notifications.slice(0, LARGE_NOTIFICATION_ROWS) as notification, index (notification.id)}
             <Reveal delay={(index + LARGE_ROWS) * ROW_STAGGER_MS}>
-              <NotificationRow {notification} now={clock.now} />
+              <NotificationRow {bus} {notification} now={clock.now} />
             </Reveal>
           {:else}
             <gtklabel class="card-hint" halign="start">
