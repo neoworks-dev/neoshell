@@ -9,8 +9,9 @@ import Wallpaper from './Wallpaper.svelte'
 // shell drops the window that was showing it. Every view but the wallpaper
 // runs as a client, one per file in clients/: neoshell-bar (the bar, clock
 // and battery), neoshell-notch (the notch and its Nook widgets),
-// neoshell-dock, neoshell-desktop, neoshell-gallery and neoshell-settings
-// (Settings → Notch). The wallpaper decodes images and plays video, so it is
+// neoshell-dock, neoshell-desktop, neoshell-gallery, neoshell-settings
+// (Settings → Notch) and neoshell-reveal (the hot corner and the strip of
+// windows a shown desktop sent away). The wallpaper decodes images and plays video, so it is
 // the host's, and the desktop embeds it.
 
 const plugin: Plugin.Object = {
@@ -29,6 +30,8 @@ const plugin: Plugin.Object = {
     context.effect(() => ui.register('neoshell.notch.settings', remoteView('neoshell-settings', 'notch')))
     context.effect(() => ui.register('neoshell.nook.media', remoteView('neoshell-notch', 'nookMedia')))
     context.effect(() => ui.register('neoshell.nook.calendar', remoteView('neoshell-notch', 'nookCalendar')))
+    context.effect(() => ui.register('neoshell.revealstrip', remoteView('neoshell-reveal', 'strip')))
+    context.effect(() => ui.register('neoshell.hotcorner', remoteView('neoshell-reveal', 'corner')))
   },
 }
 

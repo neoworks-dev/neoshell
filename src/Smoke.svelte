@@ -20,6 +20,8 @@
 
   const RemoteWeather = remoteView('weather', 'card')
   const RemoteExternal = remoteView('dev.neoworks.smoke', 'card')
+  const RemoteRevealStrip = remoteView('neoshell-reveal', 'strip')
+  const RemoteHotCorner = remoteView('neoshell-reveal', 'corner')
   const RemoteAirQuality = remoteView('airquality', 'card')
   const RemoteRunCatMenu = remoteView('runcat', 'menu')
   const RemoteUsbMenu = remoteView('usb', 'menu')
@@ -166,6 +168,11 @@
       </gtkbox>
       <gtkbox class="smoke-remote-airquality" width={boxFor('small').width} height={boxFor('small').height} valign="start">
         <RemoteAirQuality {bus} {registry} args={boxFor('small')} id="smoke.airquality.small" />
+      </gtkbox>
+      <!-- The windows a shown desktop sent away, and the hot corner. -->
+      <gtkbox class="smoke-remote-reveal" height={400} valign="start">
+        <RemoteRevealStrip {bus} {registry} args={{}} id="smoke.reveal" />
+        <RemoteHotCorner {bus} {registry} args={{}} id="smoke.hotcorner" />
       </gtkbox>
       <!-- An installed program's widget, fed over D-Bus (smokeExternal.ts). -->
       <gtkbox class="smoke-remote-external" width={boxFor('small').width} height={boxFor('small').height} valign="start">

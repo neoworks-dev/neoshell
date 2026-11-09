@@ -125,6 +125,31 @@ const DEFAULT_TREE: TreeNode[] = [
     },
   },
   {
+    id: 'revealstrip',
+    type: 'neoshell.revealstrip',
+    // Down the left edge, over the windows: the strip of windows a shown
+    // desktop sent away. Its input region is only the strip while it shows,
+    // so the edge stays clickable the rest of the time.
+    args: {
+      label: 'Hidden windows',
+      layer: 'top',
+      anchors: ['top', 'bottom', 'left'],
+      keyboard: 'none',
+      blur: true,
+    },
+  },
+  {
+    id: 'hotcorner',
+    type: 'neoshell.hotcorner',
+    // Above the bar, so the pointer pushed into the corner reaches it.
+    args: {
+      label: 'Hot corner',
+      layer: 'overlay',
+      anchors: ['top', 'left'],
+      keyboard: 'none',
+    },
+  },
+  {
     id: 'lock',
     type: 'lock.screen',
     // Detached: the lock screen's windows are session-lock surfaces, one per
