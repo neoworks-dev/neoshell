@@ -1,5 +1,6 @@
 import { ghApi } from './gh.js'
 import type { GhResult } from './gh.js'
+import { issuesSearchUrlOf } from './links.js'
 import {
   failedContributions,
   mergeIssues,
@@ -136,6 +137,7 @@ function failedIssues(failure: Failure, now: number): IssuesState {
   return {
     ...failure,
     items: [],
+    searchUrl: '',
     truncated: false,
     notifications: [],
     unreadCount: 0,
@@ -160,6 +162,7 @@ export async function fetchIssues(settings: GithubSettings, now: number): Promis
     status: 'ok',
     message: '',
     items: searches.items,
+    searchUrl: searchUrlOf(settings),
     truncated: searches.truncated,
     notifications: entries,
     unreadCount: entries.filter((entry) => entry.unread).length,
@@ -175,7 +178,7 @@ function hasSearches(settings: GithubSettings): boolean {
 // truncated: GitHub has more matches than the page that was fetched.
 type SearchOutcome = { ok: true; items: IssueEntry[]; truncated: boolean } | { ok: false; failure: Failure }
 
-async function searchIssues(settings: GithubSettings): Promise<SearchOutcome> {
+function rolesOf(settings: GithubSettings): string[] {
   const roles: string[] = []
   if (settings.showAssigned) {
     roles.push('assignee')
@@ -183,6 +186,19 @@ async function searchIssues(settings: GithubSettings): Promise<SearchOutcome> {
   if (settings.showAuthored) {
     roles.push('author')
   }
+  return roles
+}
+
+function searchUrlOf(settings: GithubSettings): string {
+  let who = '@me'
+  if (settings.user !== '') {
+    who = settings.user
+  }
+  return issuesSearchUrlOf(rolesOf(settings), who, settings.showPullRequests)
+}
+
+async function searchIssues(settings: GithubSettings): Promise<SearchOutcome> {
+  const roles = rolesOf(settings)
   const results = await Promise.all(roles.map((role) => searchRole(settings, role)))
   const failed = results.find((result) => !result.ok)
   if (failed !== undefined && !failed.ok) {

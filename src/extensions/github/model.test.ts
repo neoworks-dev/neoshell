@@ -115,17 +115,18 @@ describe('repositories', () => {
   const now = Date.parse('2026-03-15T12:00:00Z')
   const commit = (sha: string, date: string, message: string): Record<string, unknown> => ({
     sha: `${sha}0000000`,
+    html_url: `https://github.com/a/b/commit/${sha}0000000`,
     commit: { message, author: { name: 'Ada', date } },
     author: { login: 'ada' },
   })
 
   test('daily counts bucket commits by whole days ending today', () => {
     const commits = [
-      { sha: 'a', message: '', author: '', date: '2026-03-15T01:00:00Z' },
-      { sha: 'b', message: '', author: '', date: '2026-03-15T09:00:00Z' },
-      { sha: 'c', message: '', author: '', date: '2026-03-14T23:00:00Z' },
-      { sha: 'd', message: '', author: '', date: '2026-03-01T00:00:00Z' },
-      { sha: 'e', message: '', author: '', date: '2026-01-01T00:00:00Z' },
+      { sha: 'a', url: '', message: '', author: '', date: '2026-03-15T01:00:00Z' },
+      { sha: 'b', url: '', message: '', author: '', date: '2026-03-15T09:00:00Z' },
+      { sha: 'c', url: '', message: '', author: '', date: '2026-03-14T23:00:00Z' },
+      { sha: 'd', url: '', message: '', author: '', date: '2026-03-01T00:00:00Z' },
+      { sha: 'e', url: '', message: '', author: '', date: '2026-01-01T00:00:00Z' },
     ]
     const counts = dailyCountsOf(commits, now, 14)
     expect(counts.length).toBe(14)
@@ -146,6 +147,7 @@ describe('repositories', () => {
     expect(repo?.stars).toBe(12)
     expect(repo?.commits[0]).toEqual({
       sha: 'abc0000',
+      url: 'https://github.com/a/b/commit/abc0000000',
       message: 'Fix it',
       author: 'ada',
       date: '2026-03-14T10:00:00Z',
@@ -210,12 +212,13 @@ describe('issues and notifications', () => {
         unread: true,
         reason: 'review_requested',
         updated_at: '2026-03-01T00:00:00Z',
-        subject: { title: 'Fix', type: 'PullRequest' },
+        subject: { title: 'Fix', type: 'PullRequest', url: 'https://api.github.com/repos/a/b/pulls/3' },
         repository: { full_name: 'a/b' },
       },
     ])
     expect(notification).toEqual({
       id: '9',
+      url: 'https://github.com/a/b/pull/3',
       repo: 'a/b',
       title: 'Fix',
       kind: 'PullRequest',
