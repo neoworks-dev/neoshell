@@ -16,7 +16,7 @@
   } from "./nook";
   import type { NookEntry } from "./nook";
   import { deleteCachedCopy, downloadDropped } from "./trayDownloads";
-  import { STAGED_KEY, withPaths, withoutPath } from "./trayFiles";
+  import { STAGED_KEY, thumbnailTexture, withPaths, withoutPath } from "./trayFiles";
   import QuickSharePanel from "./QuickSharePanel.svelte";
   import TrayShelf from "./TrayShelf.svelte";
 
@@ -49,6 +49,9 @@
     height: number;
   }
 
+  // The island's small sleeve; decoded at twice the size for scaled displays.
+  const SMALL_ART_SIZE = 20;
+  const SMALL_ART_PIXELS = SMALL_ART_SIZE * 2;
   const PRIORITY_IDLE = 0;
   const PRIORITY_ACTIVITY = 10;
   const PRIORITY_TRANSIENT = 20;
@@ -540,8 +543,8 @@
     });
   }
 
-  // GTK loads CSS urls from disk directly, so local art needs no host route.
-  // Remote art would have to be downloaded first and is skipped.
+  // Local art is decoded at sleeve size; remote art would have to be
+  // downloaded first and is skipped.
   function artSourceOf(artUrl: string): string {
     if (artUrl.startsWith("file://")) {
       return decodeURIComponent(artUrl.slice("file://".length));
@@ -549,26 +552,11 @@
     return "";
   }
 
-  function islandCss(entry: IslandEntry | null, showingMedia: boolean): string {
-    if (entry === null || entry.art === "" || showingMedia) {
-      return "";
-    }
-    // Cover art fills the cutout behind the text; the scrim keeps the label
-    // legible over a bright or busy sleeve.
-    return [
-      `background-image: linear-gradient(to right, var(--base-100),`,
-      `color-mix(in srgb, var(--base-100) 60%, transparent),`,
-      `color-mix(in srgb, var(--base-100) 20%, transparent)),`,
-      `url("${entry.art}");`,
-      "background-size: cover; background-position: center;",
-    ].join(" ");
-  }
-
-  function artCss(art: string): string {
+  function artTextureOf(art: string) {
     if (art === "") {
-      return "";
+      return null;
     }
-    return `background-image: url("${art}"); background-size: cover; background-position: center;`;
+    return thumbnailTexture(art, SMALL_ART_PIXELS);
   }
 
   // Collapsed, the header fills the island. Open, the panel keeps its full
@@ -674,7 +662,6 @@
         onhoverstart={pointerEntered}
         onhoverend={pointerLeft}
         onpress={(event) => pressed(event.detail)}
-        css={islandCss(current, isMedia || opened)}
       >
         {#if opened}
           {@render nookPanel()}
@@ -800,7 +787,17 @@
 <!-- Sleeve on the left, title in the middle, level meter on the right. -->
 {#snippet mediaHeader(entry: IslandEntry)}
   <gtkbox orientation="horizontal" spacing={12} hexpand>
-    <gtkbox class="island-art island-art-small" css={artCss(entry.art)} valign="center"></gtkbox>
+    <gtkbox class="island-art island-art-small" valign="center" hexpand={false} homogeneous clip>
+      {#if entry.art !== ""}
+        <gtkpicture
+          paintable={artTextureOf(entry.art)}
+          fit="cover"
+          shrink
+          width={SMALL_ART_SIZE}
+          height={SMALL_ART_SIZE}
+        ></gtkpicture>
+      {/if}
+    </gtkbox>
     <gtklabel class="island-title" hexpand halign="start" valign="center" ellipsize="end">
       {entry.label}
     </gtklabel>

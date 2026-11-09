@@ -2,6 +2,7 @@
   import { subscribeTo } from '../../lib/bus'
   import { recordOf, stringOf } from '../../lib/record'
   import type { ViewProps } from '../../host/plugins/views'
+  import { thumbnailTexture } from './trayFiles'
 
   // The Nook's media widget: sleeve, title, artist and transport for the
   // current MPRIS player. Reads media.player itself, so the notch only places it.
@@ -23,6 +24,8 @@
 
   const playing = $derived(track.status === 'Playing')
   const hasTrack = $derived(track.title !== '' && track.status !== 'Stopped')
+  // Decoded once per track, not on every render.
+  const artTexture = $derived(artTextureOf(track.art))
 
   $effect(() =>
     subscribeTo(bus, 'media.player', (message) => {
@@ -40,8 +43,8 @@
     }
   }
 
-  // GTK loads CSS urls from disk directly, so local art needs no host route.
-  // Remote art would have to be downloaded first and is skipped.
+  // Local art is decoded at sleeve size; remote art would have to be
+  // downloaded first and is skipped.
   function artSourceOf(artUrl: string): string {
     if (artUrl.startsWith('file://')) {
       return decodeURIComponent(artUrl.slice('file://'.length))
@@ -49,11 +52,11 @@
     return ''
   }
 
-  function artCss(art: string): string {
+  function artTextureOf(art: string) {
     if (art === '') {
-      return ''
+      return null
     }
-    return `background-image: url("${art}"); background-size: cover; background-position: center;`
+    return thumbnailTexture(art, ART_SIZE * 2)
   }
 
   function playPauseIcon(isPlaying: boolean): string {
@@ -71,11 +74,16 @@
 <gtkbox class="nook-media" orientation="horizontal" spacing={14} hexpand>
   <gtkbox
     class="nook-media-art"
-    css="min-width: {ART_SIZE}px; min-height: {ART_SIZE}px; {artCss(track.art)}"
+    css="min-width: {ART_SIZE}px; min-height: {ART_SIZE}px;"
     valign="center"
+    hexpand={false}
+    homogeneous
+    clip
   >
-    {#if track.art === ''}
-      <gtkicon icon="audio-x-generic-symbolic" size={28} hexpand vexpand></gtkicon>
+    {#if artTexture !== null}
+      <gtkpicture paintable={artTexture} fit="cover" shrink width={ART_SIZE} height={ART_SIZE}></gtkpicture>
+    {:else}
+      <gtkicon icon="audio-x-generic-symbolic" size={28} halign="center" valign="center"></gtkicon>
     {/if}
   </gtkbox>
 
