@@ -13,6 +13,8 @@ export interface ExternalWidget {
   view: string
   name: string
   category: string
+  // A theme icon name, or ''.
+  icon: string
   description: string
   sizes: string[]
   defaultSize: string
@@ -34,6 +36,7 @@ const ID_PATTERN = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/
 const DBUS_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_-]*)+$/
 // No dots and no "*", so a topic or call can never widen into a pattern.
 const MEMBER_PATTERN = /^[a-z][A-Za-z0-9_]*$/
+const ICON_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/
 const WIDGET_SIZES = ['small', 'medium', 'large']
 const MAX_DBUS_NAME = 255
 const MAX_NAME = 60
@@ -146,7 +149,15 @@ function widgetOf(record: Record<string, unknown>): ExternalWidget | string {
   if (sizes.length === 0 || !sizes.includes(defaultSize)) {
     return `widget "${view}" needs sizes (${WIDGET_SIZES.join(', ')}) holding its defaultSize`
   }
-  return { view, name, category: categoryOf(record.category), description, sizes, defaultSize }
+  return { view, name, category: categoryOf(record.category), icon: iconOf(record.icon), description, sizes, defaultSize }
+}
+
+function iconOf(value: unknown): string {
+  const icon = stringOf(value)
+  if (!ICON_PATTERN.test(icon)) {
+    return ''
+  }
+  return icon
 }
 
 function sizesOf(value: unknown): string[] {

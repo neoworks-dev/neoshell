@@ -94,6 +94,12 @@
   )
 
   $effect(() =>
+    subscribeTo(bus, 'widgets:gallery', (message) => {
+      store.editing = recordOf(message.data).open === true
+    }),
+  )
+
+  $effect(() =>
     registry.onChange(() => {
       generation += 1
     }),

@@ -633,14 +633,71 @@ popover.dock-preview-popover > arrow {
 }
 
 /* The lift is the drag's own feedback: a grabbed widget throws a shadow but
-   keeps its size, so what is held is exactly what lands. */
+   keeps its size, so what is held is exactly what lands. A widget pops in
+   when it arrives and shrinks away when it is removed. */
 .widget-slot {
   border-radius: 24px;
   transition: box-shadow 160ms ease-out;
+  animation: widget-arrive 280ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
 }
 
 .widget-slot.dragging {
   box-shadow: 0 24px 48px alpha(#000000, 0.5);
+}
+
+.widget-slot.removing {
+  animation: widget-leave 180ms ease-in forwards;
+}
+
+@keyframes widget-arrive {
+  from {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes widget-leave {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+}
+
+/* The edit-mode badge in a widget's corner. */
+.widget-remove {
+  min-width: 22px;
+  min-height: 22px;
+  margin: 6px;
+  padding: 0;
+  border-radius: 999px;
+  background-color: alpha(#3a3a3c, 0.95);
+  border: 1px solid alpha(#fafafa, 0.2);
+  box-shadow: 0 2px 6px alpha(#000000, 0.4);
+  color: #fafafa;
+  animation: widget-badge 200ms ease-out;
+}
+
+.widget-remove:hover {
+  background-color: alpha(#545458, 0.95);
+}
+
+@keyframes widget-badge {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* The cell a drag would drop on: a filled, quiet slab rather than an
@@ -1143,60 +1200,97 @@ button.qs-row-action:hover {
 
 /* ── widget gallery ───────────────────────────────────────────────────── */
 
-/* rounded-t-3xl bg-base-300/80 ring-1 ring-base-content/10 shadow-2xl
-   backdrop-blur-2xl — the blur is the compositor's, asked for by the node. */
+/* A floating sheet of frosted dark glass: the blur is the compositor's, asked
+   for by the node, and the fill is dense enough that windows behind never
+   read through it. It rises a little as it fades in. */
 .gallery {
-  background-color: alpha(#141416, 0.8);
-  border: 1px solid alpha(#fafafa, 0.1);
-  border-bottom: none;
-  border-radius: 24px 24px 0 0;
-  box-shadow: 0 -25px 50px alpha(#000000, 0.5);
+  background-color: alpha(#1c1c1f, 0.86);
+  border: 1px solid alpha(#fafafa, 0.12);
+  border-radius: 22px;
+  box-shadow: 0 24px 48px alpha(#000000, 0.45);
+  color: #fafafa;
 }
 
-/* border-r border-base-content/10 p-4 */
+.gallery.open {
+  animation: gallery-rise 320ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes gallery-rise {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .gallery-sidebar {
-  padding: 16px;
-  border-right: 1px solid alpha(#fafafa, 0.1);
+  padding: 14px 10px;
+  border-right: 1px solid alpha(#fafafa, 0.08);
 }
 
 .gallery-search {
-  background-color: alpha(#000000, 0.6);
-  border: 1px solid alpha(#fafafa, 0.15);
+  min-height: 28px;
+  padding: 0 8px;
+  background-color: alpha(#fafafa, 0.08);
+  border: 1px solid alpha(#fafafa, 0.08);
   border-radius: 8px;
+  box-shadow: none;
+  color: #fafafa;
   font-size: 13px;
 }
 
 .gallery-search:focus-within {
-  border-color: alpha(#fafafa, 0.4);
+  border-color: alpha(#0a84ff, 0.8);
 }
 
-/* rounded-lg px-3 py-2 text-left text-sm */
+.gallery-search text placeholder,
+.gallery-search image {
+  color: alpha(#fafafa, 0.45);
+}
+
+/* The theme gives a button's label its own colour, so the row says it. */
 .gallery-category {
-  padding: 8px 12px;
+  padding: 5px 8px;
   border-radius: 8px;
   font-size: 13px;
+  color: alpha(#fafafa, 0.88);
+  background: none;
+  box-shadow: none;
 }
 
 .gallery-category:hover {
-  background-color: alpha(#fafafa, 0.1);
+  background-color: alpha(#fafafa, 0.07);
 }
 
 .gallery-category.active {
-  background-color: alpha(#fafafa, 0.15);
-  font-weight: 500;
+  background-color: alpha(#fafafa, 0.14);
+  color: #fafafa;
 }
 
-/* bg-primary px-3 py-1.5 text-sm text-primary-content */
-.gallery-done {
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 13px;
-  background-color: var(--primary);
-  color: var(--base-100);
+/* A small rounded tile behind each category's symbol, like an app icon. */
+.gallery-category-icon {
+  min-width: 22px;
+  min-height: 22px;
+  border-radius: 6px;
+  background-color: alpha(#fafafa, 0.12);
+  color: #fafafa;
+}
+
+.gallery-category.active .gallery-category-icon {
+  background-color: #0a84ff;
 }
 
 .gallery-body {
-  padding: 24px;
+  padding: 18px 20px;
+}
+
+.gallery-section {
+  font-size: 12px;
+  font-weight: 600;
+  color: alpha(#fafafa, 0.55);
 }
 
 .gallery-empty {
@@ -1207,32 +1301,52 @@ button.qs-row-action:hover {
 /* The preview is a live widget scaled down, so it clips rather than paints —
    a background here would show through every card that has none of its own. */
 .gallery-preview {
-  border-radius: 24px;
+  border-radius: 18px;
 }
 
-/* cursor-grab in the webview, where the tile was dragged onto the desktop. A
-   pointer grab does not cross layer surfaces, so the tile is clicked instead
-   and the hover is what says so. */
 .gallery-tile {
-  padding: 4px;
-  border-radius: 24px;
-  transition: background-color 120ms;
+  padding: 6px;
+  border-radius: 22px;
+  transition: background-color 120ms, transform 160ms ease-out;
 }
 
 .gallery-tile:hover {
-  background-color: alpha(#fafafa, 0.08);
+  background-color: alpha(#fafafa, 0.06);
 }
 
-/* text-sm font-medium */
+.gallery-tile:active {
+  transform: scale(0.97);
+}
+
 .gallery-tile-name {
+  font-size: 11px;
+  color: alpha(#fafafa, 0.7);
+}
+
+.gallery-footer {
+  padding: 10px 14px 10px 18px;
+  border-top: 1px solid alpha(#fafafa, 0.08);
+  background-color: alpha(#000000, 0.12);
+}
+
+.gallery-hint {
+  font-size: 12px;
+  color: alpha(#fafafa, 0.6);
+}
+
+.gallery-done {
+  min-height: 24px;
+  padding: 2px 18px;
+  border-radius: 7px;
+  background-color: #0a84ff;
+  color: #ffffff;
   font-size: 13px;
   font-weight: 500;
+  box-shadow: none;
 }
 
-/* text-xs text-base-content/60 */
-.gallery-tile-category {
-  font-size: 11px;
-  color: alpha(#fafafa, 0.6);
+.gallery-done:hover {
+  background-color: #2b95ff;
 }
 
 /* ── desktop widget cards ─────────────────────────────────────────────── */

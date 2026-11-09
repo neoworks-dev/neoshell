@@ -167,12 +167,16 @@ const DEFAULT_TREE: TreeNode[] = [
   {
     id: 'widgetgallery',
     type: 'neoshell.widgetgallery',
+    // In the bottom-left corner, sized by the panel it holds.
     args: {
       label: 'Widget gallery',
       layer: 'top',
-      anchors: ['bottom'],
+      anchors: ['bottom', 'left'],
       keyboard: 'ondemand',
       widgetHost: true,
+      blur: true,
+      // Between the panel's shadow (≤ 0.45) and its fill (0.86).
+      blurIgnoreAlpha: 0.6,
     },
   },
 ]

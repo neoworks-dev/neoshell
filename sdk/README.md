@@ -41,6 +41,8 @@ D-Bus.
 - `topics` and `calls` are plain names (no dots). They are all the widget may
   subscribe to or call.
 - `sizes` are some of `small`, `medium` and `large`.
+- A widget may name an `icon` from the icon theme (`"utilities-terminal-symbolic"`):
+  the gallery shows it next to its category.
 
 ## The D-Bus side
 

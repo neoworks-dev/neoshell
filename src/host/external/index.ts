@@ -87,6 +87,7 @@ function widgetDeclarationOf(manifest: ExternalManifest, widget: ExternalManifes
     type: widgetTypeOf(manifest.id, widget.view),
     name: widget.name,
     category: widget.category,
+    icon: widget.icon,
     description: widget.description,
     sizes: widget.sizes,
     defaultSize: widget.defaultSize,

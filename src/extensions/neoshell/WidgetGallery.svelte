@@ -3,42 +3,51 @@
   import type { ViewProps } from '../../host/plugins/views'
   import { monitorSizeOf } from '../../lib/placement'
   import { recordOf, stringOf } from '../../lib/record'
+  import { MAX_UNIT_PX, sizePx, spanOf } from './grid'
   import WidgetPreview from './WidgetPreview.svelte'
 
-  // The widget gallery: a panel that rises from the bottom of the screen and
-  // lists every widget the installed extensions declare, grouped by the
-  // extension that provides them.
+  // The widget gallery: a frosted panel that rises in the bottom-left corner
+  // and lists every widget the installed extensions declare, by category, as
+  // live previews close to the size they will have. Opening it shows the
+  // desktop (the reveal backend hears widgets:gallery); Done puts the windows
+  // back.
   //
-  // In the webview build a widget was added by dragging its preview onto the
-  // desktop, which is also what decided where it landed. Both surfaces were one
-  // webview there, so the pointer never left it. They are two layer-shell
-  // windows here and a pointer grab does not cross between them, so the tile is
-  // a button: clicking it adds the widget and the desktop's layout places it.
-  // That is what `addWidget` already does for a widget added without a point.
+  // The panel and the desktop are two layer-shell windows, and a pointer grab
+  // does not cross between them, so a tile is clicked to add its widget: the
+  // desktop gathers it with the other widgets.
   //
-  // While closed the panel draws a zero-size input marker rather than nothing —
-  // an empty input region is what leaves the bottom of the screen
-  // click-through, and a surface with no marked widget claims the whole thing.
+  // While closed the panel draws nothing that takes input, so the corner of
+  // the screen stays click-through.
 
-  const PREVIEW_WIDTH_PX = 176
-  // Every preview is the small size. A widget is resized once it is on the
-  // desktop, from its own context menu, so the gallery has one thing to show
-  // and one thing to add.
-  const PREVIEW_SIZE = 'small'
+  const PREVIEW_SCALE = 0.72
   const ALL = 'All Widgets'
-  const WIDTH_FRACTION = 0.6
-  const HEIGHT_FRACTION = 0.46
-  const FALLBACK_SIZE = { width: 1152, height: 442 }
-  const SIDEBAR_WIDTH = 224
-  const RISE_MS = 250
+  const ALL_ICON = 'view-app-grid-symbolic'
+  const FALLBACK_ICON = 'application-x-addon-symbolic'
+  const WIDTH_FRACTION = 0.62
+  const HEIGHT_FRACTION = 0.56
+  const FALLBACK_SIZE = { width: 1190, height: 600 }
+  const SIDEBAR_WIDTH = 220
+  const FADE_MS = 200
 
   interface CatalogEntry {
     type: string
     name: string
     category: string
     description: string
+    icon: string
+    defaultSize: string
     // The installed program it comes from, or '' for the shell's own.
     source: string
+  }
+
+  interface Category {
+    name: string
+    icon: string
+  }
+
+  interface Section {
+    name: string
+    entries: CatalogEntry[]
   }
 
   let { bus, registry, args }: ViewProps = $props()
@@ -56,8 +65,8 @@
   // registers after the gallery is up is picked up by bumping this.
   let generation = $state(0)
 
-  const categories = $derived([ALL, ...distinctCategories(catalog)])
-  const shown = $derived(filtered(catalog, category, query))
+  const categories = $derived([{ name: ALL, icon: ALL_ICON }, ...categoriesOf(catalog)])
+  const sections = $derived(sectionsOf(catalog, category, query))
   const panelWidth = $derived(Math.round(viewport.width * WIDTH_FRACTION))
   const panelHeight = $derived(Math.round(viewport.height * HEIGHT_FRACTION))
 
@@ -74,7 +83,7 @@
   )
 
   // The panel is a fraction of the output, and the gallery's own window is
-  // anchored to one edge — so its size comes from the compositor bridge the
+  // anchored to a corner — so its size comes from the compositor bridge the
   // same way the desktop's viewport does.
   $effect(() =>
     subscribeTo(bus, 'hypr.monitors', (message) => {
@@ -102,21 +111,31 @@
   }
 
   function add(entry: CatalogEntry): void {
-    bus.publish('widgets:add', { type: entry.type, size: PREVIEW_SIZE, monitor })
-    close()
+    bus.publish('widgets:add', { type: entry.type, size: entry.defaultSize, monitor })
   }
 
   function readQuery(event: { target: { widget: { get_text(): string } } }): void {
     query = event.target.widget.get_text()
   }
 
-  function distinctCategories(entries: CatalogEntry[]): string[] {
-    return [...new Set(entries.map((entry) => entry.category))].sort()
+  function categoriesOf(entries: CatalogEntry[]): Category[] {
+    const names = [...new Set(entries.map((entry) => entry.category))].sort()
+    return names.map((name) => ({ name, icon: iconOfCategory(entries, name) }))
   }
 
-  function filtered(entries: CatalogEntry[], active: string, search: string): CatalogEntry[] {
+  function iconOfCategory(entries: CatalogEntry[], name: string): string {
+    const withIcon = entries.find((entry) => entry.category === name && entry.icon !== '')
+    if (withIcon === undefined) {
+      return FALLBACK_ICON
+    }
+    return withIcon.icon
+  }
+
+  function sectionsOf(entries: CatalogEntry[], active: string, search: string): Section[] {
     const needle = search.trim().toLowerCase()
-    return entries.filter((entry) => inCategory(entry, active) && matches(entry, needle))
+    const shown = entries.filter((entry) => inCategory(entry, active) && matches(entry, needle))
+    const names = [...new Set(shown.map((entry) => entry.category))].sort()
+    return names.map((name) => ({ name, entries: shown.filter((entry) => entry.category === name) }))
   }
 
   function inCategory(entry: CatalogEntry, active: string): boolean {
@@ -151,16 +170,11 @@
         name: raw.name,
         category: stringOr(raw.category, 'Other'),
         description: stringOf(raw.description),
+        icon: stringOf(raw.icon),
+        defaultSize: stringOr(raw.defaultSize, 'small'),
         source: stringOf(raw.source),
       },
     ]
-  }
-
-  function subtitleOf(entry: CatalogEntry): string {
-    if (entry.source === '') {
-      return entry.category
-    }
-    return `${entry.category} · from ${entry.source}`
   }
 
   function stringOr(value: unknown, fallback: string): string {
@@ -170,99 +184,127 @@
     return value
   }
 
+  function previewWidth(size: string): number {
+    return Math.round(sizePx(MAX_UNIT_PX, spanOf(size)).width * PREVIEW_SCALE)
+  }
+
+  function captionOf(entry: CatalogEntry): string {
+    if (entry.source === '') {
+      return entry.name
+    }
+    return `${entry.name} · ${entry.source}`
+  }
+
   function categoryClass(name: string, active: string): string {
     if (name === active) {
       return 'gallery-category active'
     }
     return 'gallery-category'
   }
+
+  function panelClass(isOpen: boolean): string {
+    if (isOpen) {
+      return 'gallery open'
+    }
+    return 'gallery'
+  }
 </script>
 
-<gtkbox orientation="vertical" halign="center" valign="end">
-  <gtkrevealer reveal={open} transition="slide-up" duration={RISE_MS}>
+<!-- Room around the panel for its shadow: the window is exactly as big as
+     what it holds. -->
+<gtkbox halign="start" valign="end" margin-start={16} margin-bottom={16} margin-top={48} margin-end={48}>
+  <gtkrevealer reveal={open} transition="crossfade" duration={FADE_MS}>
     <gtkbox
-      class="gallery"
-      orientation="horizontal"
+      class={panelClass(open)}
+      orientation="vertical"
       width={panelWidth}
       height={panelHeight}
       clip
       input={open}
     >
-      <gtkbox class="gallery-sidebar" orientation="vertical" spacing={12} width={SIDEBAR_WIDTH}>
-        <gtksearchentry
-          class="gallery-search"
-          placeholder="Search Widgets"
-          text={query}
-          onsearch-changed={readQuery}
-        ></gtksearchentry>
+      <gtkbox orientation="horizontal" vexpand>
+        <gtkbox class="gallery-sidebar" orientation="vertical" spacing={10} width={SIDEBAR_WIDTH}>
+          <gtksearchentry
+            class="gallery-search"
+            placeholder="Search Widgets"
+            text={query}
+            onsearch-changed={readQuery}
+          ></gtksearchentry>
 
-        <gtkscrolledwindow hscroll="never" vexpand frame={false}>
-          <gtkbox orientation="vertical" spacing={2}>
-            {#each categories as name (name)}
-              <gtkbutton
-                class={categoryClass(name, category)}
-                frame={false}
-                onclicked={() => (category = name)}
-              >
-                <gtklabel hexpand halign="start" ellipsize="end">{name}</gtklabel>
-              </gtkbutton>
-            {/each}
-          </gtkbox>
+          <gtkscrolledwindow hscroll="never" vexpand frame={false}>
+            <gtkbox orientation="vertical" spacing={2}>
+              {#each categories as entry (entry.name)}
+                <gtkbutton
+                  class={categoryClass(entry.name, category)}
+                  frame={false}
+                  onclicked={() => (category = entry.name)}
+                >
+                  <gtkbox orientation="horizontal" spacing={10}>
+                    <gtkbox class="gallery-category-icon" valign="center">
+                      <gtkicon icon={entry.icon} size={14} halign="center" valign="center" hexpand vexpand></gtkicon>
+                    </gtkbox>
+                    <gtklabel hexpand halign="start" ellipsize="end">{entry.name}</gtklabel>
+                  </gtkbox>
+                </gtkbutton>
+              {/each}
+            </gtkbox>
+          </gtkscrolledwindow>
+        </gtkbox>
+
+        <gtkscrolledwindow class="gallery-body" hscroll="never" hexpand vexpand frame={false}>
+          {#if sections.length === 0}
+            <gtklabel class="gallery-empty" halign="center" valign="start">No widgets match.</gtklabel>
+          {:else}
+            <gtkbox orientation="vertical" spacing={22}>
+              {#each sections as section (section.name)}
+                <gtkbox orientation="vertical" spacing={12}>
+                  <gtklabel class="gallery-section" halign="start">{section.name}</gtklabel>
+                  <!-- A flow box wraps the tiles, the one container that
+                       reflows in a panel whose width follows the output. -->
+                  <gtkflowbox
+                    class="gallery-tiles"
+                    orientation="horizontal"
+                    spacing={18}
+                    selection="none"
+                    halign="start"
+                    valign="start"
+                    max-per-line={8}
+                  >
+                    {#each section.entries as entry (entry.type)}
+                      <gtkpressable
+                        class="gallery-tile"
+                        orientation="vertical"
+                        spacing={8}
+                        tooltip={entry.description}
+                        onpress={() => add(entry)}
+                      >
+                        <WidgetPreview
+                          {bus}
+                          {registry}
+                          {generation}
+                          type={entry.type}
+                          size={entry.defaultSize}
+                          width={previewWidth(entry.defaultSize)}
+                        />
+                        <gtklabel class="gallery-tile-name" halign="center" ellipsize="end">
+                          {captionOf(entry)}
+                        </gtklabel>
+                      </gtkpressable>
+                    {/each}
+                  </gtkflowbox>
+                </gtkbox>
+              {/each}
+            </gtkbox>
+          {/if}
         </gtkscrolledwindow>
-
-        <gtkbutton class="gallery-done" frame={false} onclicked={close}>Done</gtkbutton>
       </gtkbox>
 
-      <gtkscrolledwindow class="gallery-body" hscroll="never" hexpand vexpand frame={false}>
-        {#if shown.length === 0}
-          <gtklabel class="gallery-empty" halign="center" valign="start">
-            No widgets match.
-          </gtklabel>
-        {:else}
-          <!-- A flow box wraps the tiles the way the webview's flex-wrap did,
-               and it is the one container that reflows when the panel is a
-               fraction of an output whose width is not known up front. -->
-          <gtkflowbox
-            class="gallery-tiles"
-            orientation="horizontal"
-            spacing={24}
-            selection="none"
-            halign="start"
-            valign="start"
-            max-per-line={8}
-          >
-            {#each shown as entry (entry.type)}
-              <gtkpressable
-                class="gallery-tile"
-                orientation="vertical"
-                spacing={8}
-                width={PREVIEW_WIDTH_PX}
-                tooltip={entry.description}
-                onpress={() => add(entry)}
-              >
-                <WidgetPreview
-                  {bus}
-                  {registry}
-                  {generation}
-                  type={entry.type}
-                  size={PREVIEW_SIZE}
-                  width={PREVIEW_WIDTH_PX}
-                />
-                <gtklabel class="gallery-tile-name" halign="start" ellipsize="end">
-                  {entry.name}
-                </gtklabel>
-                <gtklabel class="gallery-tile-category" halign="start" ellipsize="end">
-                  {subtitleOf(entry)}
-                </gtklabel>
-              </gtkpressable>
-            {/each}
-          </gtkflowbox>
-        {/if}
-      </gtkscrolledwindow>
+      <gtkbox class="gallery-footer" orientation="horizontal" spacing={12}>
+        <gtklabel class="gallery-hint" hexpand halign="start" valign="center">
+          Click a widget to add it to the desktop.
+        </gtklabel>
+        <gtkbutton class="gallery-done" frame={false} valign="center" onclicked={close}>Done</gtkbutton>
+      </gtkbox>
     </gtkbox>
   </gtkrevealer>
-
-  {#if !open}
-    <gtkbox width={0} height={0} input></gtkbox>
-  {/if}
 </gtkbox>
