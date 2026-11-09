@@ -1465,14 +1465,71 @@ button.qs-row-action:hover {
 .card-day-track {
   min-height: 4px;
   border-radius: 2px;
-  background-color: alpha(#fafafa, 0.28);
+  background-color: alpha(#000000, 0.18);
 }
 
-/* bg-linear-to-r from-info to-warning */
 .card-day-fill {
   min-height: 4px;
   border-radius: 2px;
-  background-image: linear-gradient(to right, var(--info), var(--warning));
+  background-image: linear-gradient(to right, #86d9b0, var(--warning));
+}
+
+/* ── weather card: the sky behind it ──────────────────────────────────── */
+
+/* The sky replaces the dark glass. Its stops stay above the desktop's
+   blurIgnoreAlpha so the compositor still blurs behind it, and dark enough
+   at the top for the white headline. */
+.weather-card {
+  background-color: transparent;
+  border-color: alpha(#ffffff, 0.22);
+}
+
+.weather-sky-clear-day {
+  background-image: linear-gradient(to bottom, alpha(#2a6cb5, 0.94), alpha(#5b9fdc, 0.94));
+}
+
+.weather-sky-clear-night {
+  background-image: linear-gradient(to bottom, alpha(#0a1330, 0.94), alpha(#24356a, 0.94));
+}
+
+.weather-sky-cloudy-day {
+  background-image: linear-gradient(to bottom, alpha(#5f7086, 0.94), alpha(#8996a8, 0.94));
+}
+
+.weather-sky-cloudy-night {
+  background-image: linear-gradient(to bottom, alpha(#1a2233, 0.94), alpha(#38445a, 0.94));
+}
+
+.weather-sky-fog {
+  background-image: linear-gradient(to bottom, alpha(#6c737d, 0.94), alpha(#959ca6, 0.94));
+}
+
+.weather-sky-rain {
+  background-image: linear-gradient(to bottom, alpha(#334256, 0.94), alpha(#56677c, 0.94));
+}
+
+.weather-sky-snow {
+  background-image: linear-gradient(to bottom, alpha(#61768e, 0.94), alpha(#8ea2b8, 0.94));
+}
+
+.weather-sky-storm {
+  background-image: linear-gradient(to bottom, alpha(#23212f, 0.94), alpha(#454059, 0.94));
+}
+
+.weather-card .card-hint,
+.weather-card .card-day-low {
+  color: alpha(#ffffff, 0.82);
+}
+
+.weather-sun {
+  color: #fcd34d;
+}
+
+/* The large card is three sections, split by hairlines. */
+.weather-large .card-strip,
+.weather-large .card-days {
+  border-top: 1px solid alpha(#ffffff, 0.24);
+  padding-top: 10px;
 }
 
 /* ── weather card: settings face ──────────────────────────────────────── */

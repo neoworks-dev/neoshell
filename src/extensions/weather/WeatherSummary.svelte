@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { NO_TEMPERATURE, weatherIcon } from './lib'
+  import { iconToneOf, NO_TEMPERATURE, weatherIcon } from './lib'
   import type { WeatherCurrent } from './lib'
 
   // The place, the temperature and the condition, in the two shapes the card
@@ -17,6 +17,7 @@
 
   const showsRange = $derived(current.high !== NO_TEMPERATURE && current.low !== NO_TEMPERATURE)
   const icon = $derived(weatherIcon(current.code, current.isDay))
+  const iconTone = $derived(iconToneOf(current.code, current.isDay))
 </script>
 
 {#if stacked}
@@ -28,7 +29,7 @@
       {current.temperature}{current.unit}
     </gtklabel>
     <gtkbox orientation="vertical" spacing={2} valign="end" vexpand>
-      <gtkicon {icon} size={ICON_LARGE} halign="start"></gtkicon>
+      <gtkicon class={iconTone} {icon} size={ICON_LARGE} halign="start"></gtkicon>
       <gtklabel class="card-body" halign="start" ellipsize="end">
         {current.description}
       </gtklabel>
@@ -48,7 +49,7 @@
       </gtklabel>
     </gtkbox>
     <gtkbox orientation="vertical" spacing={2} halign="end">
-      <gtkicon {icon} size={ICON_SMALL} halign="end"></gtkicon>
+      <gtkicon class={iconTone} {icon} size={ICON_SMALL} halign="end"></gtkicon>
       <gtklabel class="card-body" halign="end" ellipsize="end">
         {current.description}
       </gtklabel>

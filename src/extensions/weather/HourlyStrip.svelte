@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { weatherIcon } from './lib'
+  import { iconToneOf, weatherIcon } from './lib'
   import type { HourEntry } from './lib'
 
   // The next few hours as evenly spread columns. The unit symbol stays on the
@@ -19,6 +19,7 @@
     <gtkbox orientation="vertical" spacing={2}>
       <gtklabel class="card-hint" halign="center">{hour.label}</gtklabel>
       <gtkicon
+        class={iconToneOf(hour.code, hour.isDay)}
         icon={weatherIcon(hour.code, hour.isDay)}
         size={ICON_PIXELS}
         halign="center"
