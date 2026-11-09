@@ -42,6 +42,6 @@
   }
 </script>
 
-<gtkpressable class={linkClass} orientation="vertical" hexpand halign="fill" onpress={open}>
+<gtkpressable class={linkClass} orientation="vertical" hexpand halign="fill" valign="center" onpress={open}>
   {@render children()}
 </gtkpressable>
