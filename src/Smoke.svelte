@@ -2,6 +2,7 @@
   import type { BusService } from './lib/bus'
   import type { ViewRegistry } from './host/plugins/views'
   import ControlCentre from './extensions/quicksettings/ControlCentre.svelte'
+  import AgendaMenu from './extensions/agenda/AgendaMenu.svelte'
   import WifiPage from './extensions/quicksettings/WifiPage.svelte'
   import BluetoothPage from './extensions/quicksettings/BluetoothPage.svelte'
   import WidgetGallery from './extensions/neoshell/WidgetGallery.svelte'
@@ -104,6 +105,9 @@
       </gtkbox>
       <gtkbox class="status-menu" orientation="vertical" width={328} valign="start">
         <BluetoothPage {bus} {bluetoothState} {devices} onBack={() => {}} />
+      </gtkbox>
+      <gtkbox class="status-menu" orientation="vertical" valign="start">
+        <AgendaMenu {bus} {registry} args={{ close: () => {} }} id="smoke.agenda" />
       </gtkbox>
       <WidgetGallery {bus} {registry} args={{}} id="smoke.gallery" />
 

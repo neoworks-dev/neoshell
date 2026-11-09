@@ -1584,3 +1584,61 @@ button.nook-config-pick {
 .nook-config-icon image { margin: 8px; }
 .nook-config-name { color: var(--ui-text); font-weight: 600; }
 .nook-config-cells { color: var(--ui-text-muted); font-size: 12px; }
+
+/* ── agenda ───────────────────────────────────────────────────────────── */
+
+.agenda-date { font-size: 13px; color: alpha(#fafafa, 0.7); }
+.agenda-heading { font-size: 12px; color: alpha(#fafafa, 0.6); }
+
+.agenda-event-bar {
+  min-width: 2px;
+  min-height: 14px;
+  border-radius: 1px;
+  background-color: alpha(#fafafa, 0.3);
+}
+
+.agenda-event-title { font-size: 12px; color: alpha(#fafafa, 0.85); }
+.agenda-task-title { font-size: 12px; color: alpha(#fafafa, 0.85); transition: color 150ms ease-out; }
+.agenda-task-title.agenda-task-done {
+  color: alpha(#fafafa, 0.35);
+  text-decoration: line-through;
+}
+
+.status-menu button.agenda-check {
+  min-width: 16px;
+  min-height: 16px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1.5px solid alpha(#fafafa, 0.45);
+}
+
+.status-menu button.agenda-check:hover { border-color: alpha(#fafafa, 0.8); }
+.status-menu button.agenda-check.agenda-check-done {
+  background-color: var(--info);
+  border-color: var(--info);
+  color: #ffffff;
+}
+
+.status-menu button.agenda-remove {
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0;
+  border-radius: 9px;
+  color: alpha(#fafafa, 0.35);
+}
+
+.status-menu button.agenda-remove:hover {
+  background-color: alpha(#fafafa, 0.1);
+  color: alpha(#fafafa, 0.9);
+}
+
+.status-menu entry.agenda-entry {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: none;
+  box-shadow: none;
+  font-size: 12px;
+  color: var(--base-content);
+  background-color: alpha(#fafafa, 0.07);
+}

@@ -5,6 +5,7 @@ import appsBackend from './apps/backend.js'
 import mediaBackend from './media/backend.js'
 import calendarBackend from './calendar/backend.js'
 import calendarViews from './calendar/views.js'
+import agendaViews from './agenda/views.js'
 import quickShareBackend from './quickshare/backend.js'
 import filesBackend from './files/backend.js'
 import networkBackend from './network/backend.js'
@@ -204,6 +205,14 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
       ],
     },
     views: quicksettingsViews,
+  },
+  agenda: {
+    manifest: {
+      id: 'agenda',
+      inject: ['bus', 'ui'],
+      statusItems: [{ id: 'agenda', label: 'Agenda', icon: 'agenda.icon', menu: 'agenda.menu', order: 40 }],
+    },
+    views: agendaViews,
   },
   // The bar's status area and the window its menus open in.
   status: {

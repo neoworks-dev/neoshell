@@ -51,6 +51,17 @@ registry.register('neoshell.notch.settings', NotchSettings)
 bus.retain('notch.catalog', { widgets: notchWidgetCatalog() })
 bus.retain('settings.catalog', { sections: settingsCatalog() })
 
+const smokeToday = new Date()
+const smokeDay = `${smokeToday.getFullYear()}-${String(smokeToday.getMonth() + 1).padStart(2, '0')}-${String(smokeToday.getDate()).padStart(2, '0')}`
+bus.retain('config', {
+  agenda: {
+    tasks: [
+      { id: 'task-a', title: 'Send the weekly update', done: false, day: smokeDay },
+      { id: 'task-b', title: 'Water the plants', done: true, day: smokeDay },
+    ],
+  },
+})
+
 bus.retain('hypr.monitors', [{ width: 1920, height: 1080 }])
 bus.retain('calendar.sources', {
   sources: [{ id: 'cal-smoke', name: 'Smoke', status: 'ok', message: '', eventCount: 2 }],
