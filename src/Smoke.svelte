@@ -41,6 +41,7 @@
   const RemoteGithubIssues = remoteView('github', 'issues')
   const RemoteGithubSettings = remoteView('github', 'settings')
   const RemoteWeatherSettings = remoteView('weather', 'settings')
+  const RemotePomodoroSettings = remoteView('pomodoro', 'settings')
 
   // The smoke harness's markup: every view added for the quick settings tray
   // and the widget gallery, built once in a plain window.
@@ -263,6 +264,9 @@
         </gtkbox>
         <gtkbox class="smoke-remote-weathersettings" orientation="vertical">
           <RemoteWeatherSettings {bus} {registry} args={{}} id="smoke.weather.settings" />
+        </gtkbox>
+        <gtkbox class="smoke-remote-pomodorosettings" orientation="vertical">
+          <RemotePomodoroSettings {bus} {registry} args={{}} id="smoke.pomodoro.settings" />
         </gtkbox>
       </gtkbox>
       <!-- One monitor's lock surface, in a box instead of a session-lock

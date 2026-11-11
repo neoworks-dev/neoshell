@@ -3,6 +3,9 @@ import { RetainedTopics, registerFunction } from '../../lib/bus.js'
 import type { BusService } from '../../lib/bus.js'
 import { numberOf, recordOf } from '../../lib/record.js'
 import { requireService } from '../../lib/services.js'
+import { sectionOf } from '../../lib/config.js'
+import { run } from '../../gjs/proc.js'
+import { DEFAULT_SOUND, soundIdOf, soundPathOf } from './sounds.js'
 
 // pomodoro: one countdown timer shared by every bar and menu.
 //
@@ -15,8 +18,10 @@ import { requireService } from '../../lib/services.js'
 //   pomodoro:pause   {} → {ok}
 //   pomodoro:reset   {} → {ok}
 //   pomodoro:set     {minutes} → {ok} | {error}    new length, timer reset
+//   pomodoro:preview {sound} → {ok}                plays a sound id once
 //
-// At zero the timer stops, resets, and shows an island entry in the notch.
+// At zero the timer stops, resets, shows an island entry in the notch, and
+// plays the sound configured as `pomodoro.sound` (sounds.ts).
 
 export interface PomodoroState {
   durationSeconds: number
@@ -46,6 +51,12 @@ const pomodoroExtension: Plugin.Object = {
     registerFunction(context, bus, 'pomodoro:pause', () => timer.pause())
     registerFunction(context, bus, 'pomodoro:reset', () => timer.reset())
     registerFunction(context, bus, 'pomodoro:set', (data) => timer.setMinutes(data))
+    registerFunction(context, bus, 'pomodoro:preview', (data) => previewSound(data))
+    context.effect(() =>
+      bus.subscribe('config', (message) => {
+        timer.soundId = soundIdOf(sectionOf(message.data, 'pomodoro').sound)
+      }),
+    )
     timer.publish()
   },
 }
@@ -57,6 +68,7 @@ class PomodoroTimer {
   private readonly topics: RetainedTopics
   private state: PomodoroState = idleState(DEFAULT_MINUTES * 60)
   private checkHandle: ReturnType<typeof setInterval> | null = null
+  soundId = DEFAULT_SOUND
 
   constructor(bus: BusService, topics: RetainedTopics) {
     this.bus = bus
@@ -160,6 +172,7 @@ class PomodoroTimer {
       tone: 'success',
       ttlMs: ALERT_TTL_MS,
     })
+    playSound(this.soundId)
   }
 
   private secondsLeft(): number {
@@ -169,6 +182,31 @@ class PomodoroTimer {
 
 function idleState(durationSeconds: number): PomodoroState {
   return { durationSeconds, remainingSeconds: durationSeconds, running: false, endsAt: 0 }
+}
+
+function previewSound(data: unknown): Record<string, unknown> {
+  playSound(soundIdOf(recordOf(data).sound))
+  return { ok: true }
+}
+
+// pw-play first, paplay where PipeWire's tools are missing; silence is no file.
+function playSound(soundId: string): void {
+  const path = soundPathOf(soundId)
+  if (path === '') {
+    return
+  }
+  void playWithFallback(path)
+}
+
+async function playWithFallback(path: string): Promise<void> {
+  const played = await run(['pw-play', path])
+  if (played.ok) {
+    return
+  }
+  const fallback = await run(['paplay', path])
+  if (!fallback.ok) {
+    console.error(`pomodoro: cannot play ${path}: ${fallback.stderr}`)
+  }
 }
 
 function minutesError(minutes: unknown): string {

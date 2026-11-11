@@ -463,6 +463,7 @@ const REMOTE_CARDS: [string, string][] = [
   ['smoke-remote-github-large', 'Smoke notification'],
   ['smoke-remote-githubsettings', 'Repositories'],
   ['smoke-remote-weathersettings', 'Medium card 1'],
+  ['smoke-remote-pomodorosettings', 'Alarm clock'],
   ['smoke-remote-bar', new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date())],
 ]
 

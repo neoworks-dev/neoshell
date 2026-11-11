@@ -495,8 +495,25 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
       id: 'pomodoro',
       inject: ['bus', 'ui'],
       statusItems: [{ id: 'pomodoro', label: 'Pomodoro', icon: 'pomodoro.icon', menu: 'pomodoro.menu', order: 20 }],
+      settings: [
+        {
+          id: 'pomodoro',
+          title: 'Pomodoro',
+          icon: 'alarm-symbolic',
+          color: 'red',
+          view: 'pomodoro.settings',
+          order: 23,
+          group: 'shell',
+          keywords: ['timer', 'sound', 'alarm', 'focus'],
+        },
+      ],
       client: {
-        permissions: { subscribe: ['pomodoro.state'], call: ['pomodoro:*'], publish: [], configKeys: [] },
+        permissions: {
+          subscribe: ['pomodoro.state'],
+          call: ['pomodoro:*', 'config:set'],
+          publish: [],
+          configKeys: ['pomodoro.*'],
+        },
       },
     },
     backend: pomodoroBackend as Plugin.Object,
