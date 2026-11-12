@@ -15,6 +15,8 @@
   import LockSurface from './extensions/lock/LockSurface.svelte'
   import SmokeCards from './SmokeCards.svelte'
   import SettingsWindow from './extensions/settings/SettingsWindow.svelte'
+  import Pairing from './extensions/quickshare/Pairing.svelte'
+  import { initialState } from './extensions/quickshare/state'
   import { MAX_UNIT_PX, sizePx, spanOf } from './extensions/neoshell/grid'
   import type { BluetoothState, NetworkState } from './extensions/quicksettings/types'
   import { remoteView } from './host/clients/remoteView'
@@ -42,6 +44,27 @@
   const RemoteGithubSettings = remoteView('github', 'settings')
   const RemoteWeatherSettings = remoteView('weather', 'settings')
   const RemotePomodoroSettings = remoteView('pomodoro', 'settings')
+  const RemoteQuickShareSettings = remoteView('quickshare', 'settings')
+  const SMOKE_SHARE_IDLE = { ...initialState(), available: true }
+  const SMOKE_SHARE_ASKING = {
+    ...SMOKE_SHARE_IDLE,
+    transfers: [
+      {
+        id: 'smoke-request',
+        direction: 'incoming',
+        state: 'waitingForUserConsent',
+        peer: 'Pixel 9',
+        peerType: 'phone',
+        pin: '4821',
+        files: ['IMG_0002.jpg', 'clip.mp4'],
+        text: '',
+        textKind: '',
+        bytesTotal: 0,
+        bytesDone: 0,
+        savedPaths: [],
+      },
+    ],
+  }
 
   // The smoke harness's markup: every view added for the quick settings tray
   // and the widget gallery, built once in a plain window.
@@ -268,6 +291,12 @@
         <gtkbox class="smoke-remote-pomodorosettings" orientation="vertical">
           <RemotePomodoroSettings {bus} {registry} args={{}} id="smoke.pomodoro.settings" />
         </gtkbox>
+        <gtkbox class="smoke-remote-quicksharesettings" orientation="vertical">
+          <RemoteQuickShareSettings {bus} {registry} args={{}} id="smoke.quickshare.settings" />
+        </gtkbox>
+        <!-- The pairing screen waiting, and with a share asking. -->
+        <Pairing {bus} shareState={SMOKE_SHARE_IDLE} deviceName="" trusted={[]} ontrust={() => {}} onclose={() => {}} />
+        <Pairing {bus} shareState={SMOKE_SHARE_ASKING} deviceName="neo" trusted={[]} ontrust={() => {}} onclose={() => {}} />
       </gtkbox>
       <!-- One monitor's lock surface, in a box instead of a session-lock
            window: the compositor lock is what the smoke must never take. -->

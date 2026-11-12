@@ -276,7 +276,28 @@ bus.retain('bluetooth.devices', [
 bus.retain('network.wired', { available: true, connected: true, device: 'eth0', connection: 'Wired' })
 bus.retain('system.volume', { volume: 40, muted: false })
 bus.retain('system.powerprofile', { active: 'balanced', profiles: ['power-saver', 'balanced', 'performance'] })
-bus.retain('quickshare.state', { available: true, visibility: 'invisible', devices: [], transfers: [] })
+bus.retain('quickshare.state', {
+  available: true,
+  visibility: 'invisible',
+  devices: [{ id: '10.0.0.7:4821', name: 'Galaxy Tab', deviceType: 'tablet' }],
+  transfers: [],
+})
+bus.retain('quickshare.history', {
+  entries: [
+    {
+      id: 'smoke-share',
+      direction: 'incoming',
+      peer: 'Pixel 9',
+      peerType: 'phone',
+      files: ['IMG_0001.jpg', 'notes.pdf'],
+      savedPaths: ['/nonexistent/IMG_0001.jpg', '/nonexistent/notes.pdf'],
+      text: '',
+      textKind: '',
+      bytesTotal: 2400000,
+      endedAt: Date.now() - 5 * 60 * 1000,
+    },
+  ],
+})
 bus.retain('media.player', { title: 'Smoke Test', artist: 'neoshell', status: 'Playing', artUrl: '' })
 // The account, with a picture handle for an avatar the remote Control Centre
 // has to show without reading the file itself.

@@ -15,6 +15,7 @@ import usbViews from './usb/views.js'
 import pomodoroBackend from './pomodoro/backend.js'
 import pomodoroViews from './pomodoro/views.js'
 import quickShareBackend from './quickshare/backend.js'
+import quickShareViews from './quickshare/views.js'
 import filesBackend from './files/backend.js'
 import trayBackend from './tray/backend.js'
 import dockBackend from './dock/backend.js'
@@ -244,8 +245,43 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     views: calendarViews,
   },
   quickshare: {
-    manifest: { id: 'quickshare', inject: ['bus'] },
+    manifest: {
+      id: 'quickshare',
+      inject: ['bus', 'ui'],
+      settings: [
+        {
+          id: 'quickshare',
+          title: 'Quick Share',
+          icon: 'send-to-symbolic',
+          color: 'green',
+          view: 'quickshare.settings',
+          order: 10,
+          group: 'system',
+          keywords: ['android', 'phone', 'nearby share', 'pair', 'send', 'receive', 'files', 'trusted'],
+        },
+      ],
+      // The helper's path is left out of configKeys: the page must not be
+      // able to point the shell at another program to run.
+      client: {
+        permissions: {
+          subscribe: ['quickshare.state', 'quickshare.history'],
+          call: [
+            'quickshare:discover',
+            'quickshare:accept',
+            'quickshare:reject',
+            'quickshare:pairing',
+            'quickshare:thumbnail',
+            'quickshare:open',
+            'quickshare:clearHistory',
+            'config:set',
+          ],
+          publish: [],
+          configKeys: ['quickshare.visibility', 'quickshare.deviceName', 'quickshare.downloadDir', 'quickshare.trusted'],
+        },
+      },
+    },
     backend: quickShareBackend as Plugin.Object,
+    views: quickShareViews,
   },
   files: {
     manifest: { id: 'files', inject: ['bus'] },
@@ -288,7 +324,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           view: 'neoshell.notch.settings',
           order: 10,
           group: 'shell',
-          keywords: ['widgets', 'nook', 'tray', 'quick share', 'receive', 'trusted'],
+          keywords: ['widgets', 'nook', 'tray'],
         },
       ],
       statusItems: [
@@ -390,14 +426,8 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
           permissions: {
             subscribe: ['notch.catalog'],
             call: ['config:set'],
-            publish: [],
-            configKeys: [
-              'notch.nook',
-              'notch.openOn',
-              'quickshare.visibility',
-              'quickshare.deviceName',
-              'quickshare.trusted',
-            ],
+            publish: ['settings:open'],
+            configKeys: ['notch.nook', 'notch.openOn'],
           },
         },
         gallery: {

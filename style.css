@@ -2084,6 +2084,179 @@ button.nook-config-pick {
 .nook-config-name { color: var(--ui-text); font-weight: 600; }
 .nook-config-cells { color: var(--ui-text-muted); font-size: 12px; }
 
+/* ── Settings → Quick Share ───────────────────────────────────────────── */
+
+/* This computer as phones see it, over the same wallpaper strip the notch
+   preview uses. */
+.qs-hero {
+  padding: 18px 20px;
+  border-radius: var(--ui-radius-card);
+  background-image: linear-gradient(135deg, color-mix(in oklch, var(--ui-pine-6) 55%, var(--ui-surface)),
+    color-mix(in oklch, var(--ui-lake-6) 55%, var(--ui-surface)));
+}
+
+.qs-hero-title { color: var(--ui-text); font-size: 20px; font-weight: 600; }
+.qs-hero-status { color: var(--ui-text-muted); }
+
+/* Circles are sized by padding around their icon (26 + 2 × 15 = 56), so the
+   icon needs no expand flag to sit in the middle. */
+.qs-beacon-core {
+  padding: 15px;
+  border-radius: 999px;
+  background-color: var(--ui-surface);
+  color: var(--ui-text-muted);
+  transition: background-color 300ms ease-out, color 300ms ease-out;
+}
+
+.qs-beacon-on .qs-beacon-core { background-color: var(--ui-success); color: #ffffff; }
+
+.qs-beacon-ring {
+  border-radius: 999px;
+  border: 2px solid transparent;
+}
+
+/* Visible: one ring keeps leaving the icon, the way a signal goes out. */
+.qs-beacon-on .qs-beacon-ring {
+  border-color: var(--ui-success);
+  animation: qs-ripple 2400ms var(--ui-ease-out) infinite;
+}
+
+/* The pairing radar: three rings a third of a cycle apart. */
+.qs-radar-ring {
+  border-radius: 999px;
+  border: 2px solid var(--ui-accent);
+  opacity: 0;
+  animation: qs-ripple 3000ms var(--ui-ease-out) infinite;
+}
+
+.qs-radar-ring-1 { animation-delay: 1000ms; }
+.qs-radar-ring-2 { animation-delay: 2000ms; }
+
+.qs-radar-core {
+  padding: 24px;
+  border-radius: 999px;
+  background-color: var(--ui-accent);
+  color: var(--ui-on-accent);
+  box-shadow: var(--ui-shadow-lift);
+  animation: qs-breathe 3000ms var(--ui-ease-in-out) infinite;
+}
+
+@keyframes qs-ripple {
+  from { transform: scale(0.3); opacity: 0.9; }
+  to   { transform: scale(1); opacity: 0; }
+}
+
+@keyframes qs-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
+}
+
+.qs-stage { margin-top: 12px; }
+.qs-stage-title { color: var(--ui-text); font-size: 22px; font-weight: 600; }
+.qs-stage-subtitle { color: var(--ui-text-muted); }
+.qs-stage-hint { color: var(--ui-text-faint); font-size: 12px; }
+
+.qs-steps {
+  padding: 16px 20px;
+  border-radius: var(--ui-radius-card);
+  background-color: var(--ui-sunken);
+}
+
+.qs-step-number {
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: 999px;
+  background-color: var(--ui-accent);
+  color: var(--ui-on-accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.qs-step-text { color: var(--ui-text); }
+
+/* A request slides up into place when it arrives. */
+.qs-arrive { animation: qs-arrive 360ms var(--ui-ease-out); }
+
+@keyframes qs-arrive {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+.qs-pin-digit {
+  min-width: 44px;
+  min-height: 56px;
+  border-radius: 12px;
+  background-color: var(--ui-sunken);
+  box-shadow: inset 0 0 0 1px var(--ui-line);
+  color: var(--ui-text);
+  font-size: 28px;
+  font-weight: 700;
+  font-feature-settings: "tnum";
+}
+
+.qs-file-chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background-color: var(--ui-sunken);
+  box-shadow: inset 0 0 0 1px var(--ui-line);
+  color: var(--ui-text);
+}
+
+.qs-text-preview {
+  padding: 10px 14px;
+  border-radius: var(--ui-radius-control);
+  background-color: var(--ui-sunken);
+  color: var(--ui-text);
+}
+
+.qs-text-preview image { margin-right: 8px; }
+
+.qs-progress trough { min-height: 6px; border-radius: 999px; }
+.qs-progress progress { min-height: 6px; border-radius: 999px; background-color: var(--ui-accent); }
+
+/* Done: the tick pops in with a little overshoot. */
+.qs-success {
+  padding: 24px;
+  border-radius: 999px;
+  background-color: var(--ui-success);
+  color: #ffffff;
+  animation: qs-pop 520ms var(--ui-ease-out);
+}
+
+.qs-pop { animation: qs-pop 420ms var(--ui-ease-out) backwards; }
+
+/* A row of pictures pops in one after another. Classes rather than inline
+   css: a client may not set animation properties itself. */
+.qs-delay-1 { animation-delay: 60ms; }
+.qs-delay-2 { animation-delay: 120ms; }
+.qs-delay-3 { animation-delay: 180ms; }
+.qs-delay-4 { animation-delay: 240ms; }
+.qs-delay-5 { animation-delay: 300ms; }
+.qs-delay-6 { animation-delay: 360ms; }
+.qs-delay-7 { animation-delay: 420ms; }
+
+@keyframes qs-pop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  60%  { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.qs-picture {
+  border-radius: var(--ui-radius-media);
+  background-color: var(--ui-sunken);
+  color: var(--ui-text-muted);
+}
+
+button.qs-strip-item {
+  padding: 0;
+  border-radius: var(--ui-radius-media);
+  background-color: transparent;
+  box-shadow: none;
+  transition: transform 150ms ease-out;
+}
+
+button.qs-strip-item:hover { transform: scale(1.04); }
+
 /* ── runcat ───────────────────────────────────────────────────────────── */
 
 .runcat-percent { font-size: 24px; font-weight: 300; color: var(--base-content); }

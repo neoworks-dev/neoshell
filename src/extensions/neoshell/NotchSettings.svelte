@@ -7,11 +7,10 @@
     SegmentedButton,
     Slider,
     Switch,
-    TextField,
   } from '@neoworks/gtk-ui'
   import { untrack } from 'svelte'
   import { subscribeTo } from '../../lib/bus'
-  import { arrayOf, numberOf, recordOf, stringListOf, stringOf } from '../../lib/record'
+  import { arrayOf, numberOf, recordOf, stringOf } from '../../lib/record'
   import { Settings } from '../../lib/settings.svelte'
   import type { ViewProps } from '../../host/plugins/views'
   import type { NotchWidgetDeclaration } from '../index'
@@ -48,10 +47,6 @@
   const chosen = $derived(chosenEntry(entries, chosenType))
   const chosenWidget = $derived(widgetFor(chosen))
   const openOn = $derived(settings.string('notch.openOn', 'click'))
-  const receiving = $derived(settings.string('quickshare.visibility', 'invisible') === 'visible')
-  const deviceName = $derived(settings.string('quickshare.deviceName', ''))
-  const trusted = $derived(stringListOf(settings.value('quickshare.trusted')))
-  let trustDraft = $state('')
 
   $effect(() => settings.connect())
 
@@ -67,30 +62,6 @@
       return wanted
     }
     return 'general'
-  }
-
-  function setReceiving(on: boolean): void {
-    if (on) {
-      settings.set('quickshare.visibility', 'visible')
-      return
-    }
-    settings.set('quickshare.visibility', 'invisible')
-  }
-
-  function trust(name: string): void {
-    const trimmed = name.trim()
-    trustDraft = ''
-    if (trimmed === '' || trusted.includes(trimmed)) {
-      return
-    }
-    settings.set('quickshare.trusted', [...trusted, trimmed])
-  }
-
-  function distrust(name: string): void {
-    settings.set(
-      'quickshare.trusted',
-      trusted.filter((entry) => entry !== name),
-    )
   }
 
   function save(next: NookEntry[]): void {
@@ -207,47 +178,14 @@
     </ListRow>
   </List>
 
-  <SectionHeader title="Quick Share" description="Send and receive files with Android phones nearby." level={3} />
+  <SectionHeader title="Tray" level={3} />
   <List variant="card" dividers>
-    <ListRow title="Receiving" subtitle="Visible to everyone nearby while on">
-      {#snippet trailing()}
-        <Switch label="Receiving" hideLabel checked={receiving} onchange={setReceiving} />
-      {/snippet}
-    </ListRow>
-    <ListRow title="Device name" subtitle="What phones see; Enter saves it. Empty uses the host name.">
-      {#snippet trailing()}
-        <gtkbox css="min-width: 220px;">
-          <TextField
-            label="Device name"
-            hideLabel
-            value={deviceName}
-            onsubmit={(name) => settings.set('quickshare.deviceName', name.trim())}
-          />
-        </gtkbox>
-      {/snippet}
-    </ListRow>
-  </List>
-
-  <SectionHeader
-    title="Always accept from"
-    description="Shares from these devices are accepted without asking. Devices are matched by the name they announce, which anyone nearby could copy."
-    level={3}
-  />
-  <List variant="card" dividers>
-    {#each trusted as name (name)}
-      <ListRow title={name}>
-        {#snippet trailing()}
-          <IconButton icon="user-trash-symbolic" label="Stop accepting from {name}" size="sm" onclick={() => distrust(name)} />
-        {/snippet}
-      </ListRow>
-    {/each}
-    <ListRow title="Add a device" subtitle="Its name as it appears on a share; Enter adds it.">
-      {#snippet trailing()}
-        <gtkbox css="min-width: 220px;">
-          <TextField label="Device to trust" hideLabel placeholder="Pixel 9" bind:value={trustDraft} onsubmit={trust} />
-        </gtkbox>
-      {/snippet}
-    </ListRow>
+    <ListRow
+      title="Quick Share"
+      subtitle="Receiving, paired devices and recent shares"
+      chevron
+      onclick={() => bus.publish('settings:open', { section: 'quickshare' })}
+    />
   </List>
 {/snippet}
 
