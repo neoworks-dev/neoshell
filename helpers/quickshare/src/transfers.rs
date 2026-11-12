@@ -6,6 +6,7 @@ use rqs_lib::TransferState;
 use rqs_lib::channel::{ChannelMessage, Message, MessageClient, TransferKind};
 use rqs_lib::hdl::info::{TransferMetadata, TransferPayload, TransferPayloadKind};
 
+use crate::endpoints::device_type_name;
 use crate::protocol::{Direction, TransferEvent};
 
 /// Minimum spacing of progress-only events per transfer (~10/s).
@@ -31,10 +32,11 @@ pub struct TransferRegistry {
 impl TransferRegistry {
     /// Seeds an outgoing transfer so its first event already carries the peer
     /// and file names (a failed connect reports `Disconnected` without metadata).
-    pub fn expect_outgoing(&mut self, id: &str, peer: &str, files: &[String]) {
+    pub fn expect_outgoing(&mut self, id: &str, peer: &str, peer_type: &str, files: &[String]) {
         self.ended.remove(id);
         let mut latest = empty_event(id, Direction::Outgoing);
         latest.peer = peer.to_string();
+        latest.peer_type = peer_type.to_string();
         latest.files = files.iter().map(|file| file_name(file)).collect();
         let tracked = TrackedTransfer {
             state: TransferState::Initial,
@@ -119,6 +121,7 @@ fn update_tracked(tracked: &mut TrackedTransfer, client: MessageClient) -> bool 
 
 fn apply_metadata(event: &mut TransferEvent, metadata: TransferMetadata) {
     if let Some(source) = metadata.source {
+        event.peer_type = device_type_name(Some(&source.device_type)).to_string();
         event.peer = source.name;
     }
     if let Some(pin) = metadata.pin_code {
@@ -189,6 +192,7 @@ fn empty_event(id: &str, direction: Direction) -> TransferEvent {
         direction,
         state: lower_camel_case(&format!("{:?}", TransferState::Initial)),
         peer: String::new(),
+        peer_type: String::new(),
         pin: String::new(),
         files: Vec::new(),
         text: String::new(),
@@ -219,11 +223,16 @@ fn lower_camel_case(variant_name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rqs_lib::DeviceType;
+    use rqs_lib::utils::RemoteDeviceInfo;
 
     fn client_message(id: &str, state: TransferState, bytes_done: u64) -> ChannelMessage {
         let metadata = TransferMetadata {
             id: id.to_string(),
-            source: None,
+            source: Some(RemoteDeviceInfo {
+                name: "Pixel 9".to_string(),
+                device_type: DeviceType::Phone,
+            }),
             pin_code: Some("1234".to_string()),
             payload_kind: TransferPayloadKind::Files,
             payload_preview: None,
@@ -251,6 +260,8 @@ mod tests {
         assert_eq!(event.state, "receivingFiles");
         assert_eq!(event.files, vec!["photo.jpg".to_string()]);
         assert_eq!(event.pin, "1234");
+        assert_eq!(event.peer, "Pixel 9");
+        assert_eq!(event.peer_type, "phone");
 
         let progress = registry.apply(client_message("a", TransferState::ReceivingFiles, 10));
         assert!(progress.is_none());

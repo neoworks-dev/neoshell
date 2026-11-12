@@ -54,7 +54,7 @@ fn endpoint_event(info: &EndpointInfo, present: bool) -> EndpointEvent {
     }
 }
 
-fn device_type_name(device_type: Option<&DeviceType>) -> &'static str {
+pub fn device_type_name(device_type: Option<&DeviceType>) -> &'static str {
     match device_type {
         Some(DeviceType::Phone) => "phone",
         Some(DeviceType::Tablet) => "tablet",

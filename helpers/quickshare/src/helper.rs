@@ -10,7 +10,7 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{broadcast, mpsc};
 
 use crate::arguments::{Arguments, existing_directory};
-use crate::endpoints::EndpointRegistry;
+use crate::endpoints::{EndpointRegistry, device_type_name};
 use crate::protocol::{Command, Event, VisibilityName, emit, emit_error};
 use crate::transfers::{PROGRESS_INTERVAL, TransferRegistry};
 
@@ -157,13 +157,14 @@ impl Helper {
         if self.transfers.contains(endpoint_id) {
             bail!("a transfer to {endpoint_id:?} is already running");
         }
+        let peer_type = device_type_name(endpoint.rtype.as_ref());
         let send_info = send_info_for(endpoint, files.clone());
         let peer_name = send_info.name.clone();
         self.file_sender
             .try_send(send_info)
             .context("the send queue is not accepting transfers")?;
         self.transfers
-            .expect_outgoing(endpoint_id, &peer_name, &files);
+            .expect_outgoing(endpoint_id, &peer_name, peer_type, &files);
         Ok(())
     }
 

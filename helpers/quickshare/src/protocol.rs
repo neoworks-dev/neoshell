@@ -98,6 +98,8 @@ pub struct TransferEvent {
     pub direction: Direction,
     pub state: String,
     pub peer: String,
+    /// "phone", "tablet", "laptop" or "unknown", as the peer announces it.
+    pub peer_type: String,
     pub pin: String,
     pub files: Vec<String>,
     pub text: String,
