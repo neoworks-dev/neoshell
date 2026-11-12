@@ -1,7 +1,7 @@
 <script lang="ts">
   import { subscribeTo } from '../../lib/bus'
   import type { ViewProps } from '../../host/plugins/views'
-  import { monitorSizeOf } from '../../lib/placement'
+  import { logicalMonitorSizeOf } from '../../lib/placement'
   import { recordOf, stringOf } from '../../lib/record'
   import { MAX_UNIT_PX, sizePx, spanOf } from './grid'
   import WidgetPreview from './WidgetPreview.svelte'
@@ -104,7 +104,7 @@
   )
 
   function applyMonitor(data: unknown): void {
-    const size = monitorSizeOf(data, monitor)
+    const size = logicalMonitorSizeOf(data, monitor)
     if (size === null) {
       return
     }

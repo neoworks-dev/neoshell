@@ -1,7 +1,7 @@
 <script lang="ts">
   import { subscribeTo } from '../../lib/bus'
   import type { ViewProps } from '../../host/plugins/views'
-  import { monitorSizeOf } from '../../lib/placement'
+  import { logicalMonitorSizeOf, namesMonitor } from '../../lib/placement'
   import { numberOf, recordOf, stringOf } from '../../lib/record'
   import { widgetTypeOfDrag } from './widgetDrag'
   import ContextMenu from './ContextMenu.svelte'
@@ -121,11 +121,11 @@
   })
 
   function applyMonitor(data: unknown): void {
-    const size = monitorSizeOf(data, monitor)
+    const size = logicalMonitorSizeOf(data, monitor)
     if (size === null) {
       return
     }
-    store.setViewport(size.width, size.height)
+    store.setViewport(size.width, size.height, namesMonitor(data, monitor))
   }
 
   // The gallery names the monitor it is on; a request without one is the main

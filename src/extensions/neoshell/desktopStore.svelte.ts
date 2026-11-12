@@ -83,6 +83,7 @@ export class DesktopStore {
   private storedWidgets = $state<Record<string, Record<string, unknown>> | null>(null)
   private seeds = $state<WidgetSeed[]>([])
   private folderLoaded = $state(false)
+  private viewportKnown = $state(false)
   private readonly listeners = new Set<() => void>()
   private readonly bus: BusLike
   private persistTimer: ReturnType<typeof setTimeout> | null = null
@@ -126,9 +127,13 @@ export class DesktopStore {
     }
   }
 
-  setViewport(width: number, height: number): void {
+  // A viewport that is not this monitor's own (the default, or another
+  // monitor's while the window has none yet) is shown but never persisted:
+  // a smaller grid would push widgets off their cells for good.
+  setViewport(width: number, height: number, ownMonitor: boolean): void {
     this.viewportWidth = width
     this.viewportHeight = height
+    this.viewportKnown = ownMonitor
     this.notify()
   }
 
@@ -376,7 +381,7 @@ export class DesktopStore {
   // stopped moving.
   schedulePersist(layout: Layout): void {
     this.cancelPersist()
-    if ((this.showsIcons && !this.folderLoaded) || this.pins.size > 0) {
+    if (!this.viewportKnown || (this.showsIcons && !this.folderLoaded) || this.pins.size > 0) {
       return
     }
     this.persistTimer = setTimeout(() => {

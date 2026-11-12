@@ -1,6 +1,7 @@
-import { arrange, gridOf, nearestCell, sameCell } from './extensions/neoshell/grid'
-import type { Cell, Grid, GridItem } from './extensions/neoshell/grid'
+import { GAP_PX, MARGIN_PX, arrange, gridOf, nearestCell, sameCell } from './extensions/neoshell/grid'
+import type { Cell, Grid, GridItem, Viewport } from './extensions/neoshell/grid'
 import { resolveLayout } from './extensions/neoshell/desktopLayout'
+import { logicalMonitorSizeOf, namesMonitor } from './lib/placement'
 
 // The desktop grid's rules, checked on plain values: a drop always lands where
 // it was let go, what it covers moves to the nearest free cells, nothing ends
@@ -18,6 +19,9 @@ export function gridFailure(): string | null {
     ['a pixel point from before the grid did not come back on its nearest cell', pixelPointsMigrate(grid)],
     ['a dragged item moved on screen before its drop', draggedStaysPut()],
     ['a widget dragged in from the gallery did not push what was under it aside', incomingPushes()],
+    ['the grid left more than half a row empty below its last row', reachesBottom()],
+    ['a scaled monitor was not measured in logical pixels', scaledMonitorIsLogical()],
+    ['a desktop not yet on a monitor took another monitor\'s size as its own', unplacedIsGuess()],
   ]
   const failed = checks.find(([, passed]) => !passed)
   if (failed === undefined) {
@@ -97,6 +101,34 @@ function flows(grid: Grid): boolean {
 function pixelPointsMigrate(grid: Grid): boolean {
   const near = { x: grid.origin.x + grid.pitch * 3 + 10, y: grid.origin.y + grid.pitch * 2 - 10 }
   return sameCell(nearestCell(grid, near, ICON), { column: 3, row: 2 })
+}
+
+const OUTPUTS: Viewport[] = [VIEWPORT, { width: 3440, height: 1440 }, { width: 1920, height: 1200 }]
+
+function reachesBottom(): boolean {
+  return OUTPUTS.every((viewport) => {
+    const grid = gridOf(viewport)
+    const gridBottom = grid.origin.y + grid.rows * grid.pitch - GAP_PX
+    return viewport.height - gridBottom <= MARGIN_PX + grid.pitch / 2
+  })
+}
+
+const MONITORS = [
+  { name: 'HDMI-A-1', width: 2560, height: 1600, scale: 1.3333334, transform: 0 },
+  { name: 'DP-2', width: 3440, height: 1440, scale: 1, transform: 1 },
+]
+
+function scaledMonitorIsLogical(): boolean {
+  const scaled = logicalMonitorSizeOf(MONITORS, 'HDMI-A-1')
+  const turned = logicalMonitorSizeOf(MONITORS, 'DP-2')
+  if (scaled === null || turned === null) {
+    return false
+  }
+  return scaled.width === 1920 && scaled.height === 1200 && turned.width === 1440 && turned.height === 3440
+}
+
+function unplacedIsGuess(): boolean {
+  return !namesMonitor(MONITORS, '') && namesMonitor([MONITORS[0]], '') && namesMonitor(MONITORS, 'DP-2')
 }
 
 function incomingPushes(): boolean {
