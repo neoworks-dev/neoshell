@@ -850,22 +850,6 @@ popover.dock-preview-popover > arrow {
 
 /* ── Control Centre ───────────────────────────────────────────────────── */
 
-/* The bar glyph: two small switches, 16px together, inside the 22px pill. */
-.cc-glyph-switch {
-  min-width: 13px;
-  min-height: 3px;
-  padding: 1px;
-  border: 1.5px solid currentColor;
-  border-radius: 4px;
-}
-
-.cc-glyph-knob {
-  min-width: 3px;
-  min-height: 3px;
-  border-radius: 2px;
-  background-color: currentColor;
-}
-
 .cc-avatar {
   border-radius: 22px;
   background-color: alpha(#fafafa, 0.12);

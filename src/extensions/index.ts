@@ -293,7 +293,7 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
       ],
       statusItems: [
         { id: 'battery', label: 'Battery', icon: 'neoshell.battery', order: 70, when: 'system.battery' },
-        { id: 'clock', label: 'Date and time', icon: 'neoshell.clock', order: 100 },
+        { id: 'clock', label: 'Date and time', icon: 'neoshell.clock', menu: 'quicksettings.menu', order: 100 },
       ],
       clients: {
         bar: {
@@ -440,9 +440,6 @@ export const EXTENSIONS: Record<string, ExtensionModule> = {
     manifest: {
       id: 'quicksettings',
       inject: ['bus', 'ui'],
-      statusItems: [
-        { id: 'controls', label: 'Control Centre', icon: 'quicksettings.icon', menu: 'quicksettings.menu', order: 80 },
-      ],
       client: {
         permissions: {
           subscribe: [

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The bar clock, a status item without a menu.
+  // The bar clock, the status item that opens the Control Centre.
 
   // SpiderMonkey ships full ICU, so the formatters port from the webview
   // build unchanged.
