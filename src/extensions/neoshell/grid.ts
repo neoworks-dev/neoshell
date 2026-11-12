@@ -8,13 +8,12 @@
 // monitor. Everything here is pure.
 
 export const GAP_PX = 16
-// The margin down each side of the desktop.
+// The margin down each side of the desktop, and along the bottom: the dock
+// hides below the edge until called, so it needs no room of its own.
 export const MARGIN_PX = 16
 // Clears the topbar's exclusive zone: the background layer spans the whole
 // output, so anything at y=0 would render behind the bar.
 export const TOP_PX = 48
-// Keeps the bottom clear of the dock.
-export const BOTTOM_MARGIN_PX = 88
 export const MAX_UNIT_PX = 96
 
 export interface Point {
@@ -88,17 +87,21 @@ export function unitOf(viewportWidth: number): number {
   return (usable - (columns - 1) * GAP_PX) / columns
 }
 
+// The cells are square, so the rows rarely fill the height exactly; what is
+// left over is split above and below the grid rather than left at the bottom.
 export function gridOf(viewport: Viewport): Grid {
   const unit = unitOf(viewport.width)
   const pitch = unit + GAP_PX
   const usableWidth = viewport.width - 2 * MARGIN_PX
-  const usableHeight = viewport.height - TOP_PX - BOTTOM_MARGIN_PX
+  const usableHeight = viewport.height - TOP_PX - MARGIN_PX
+  const rows = Math.max(1, Math.floor((usableHeight + GAP_PX) / pitch))
+  const leftover = Math.max(0, usableHeight - (rows * pitch - GAP_PX))
   return {
     unit,
     pitch,
-    origin: { x: MARGIN_PX, y: TOP_PX },
+    origin: { x: MARGIN_PX, y: TOP_PX + leftover / 2 },
     columns: Math.max(1, Math.floor((usableWidth + GAP_PX) / pitch)),
-    rows: Math.max(1, Math.floor((usableHeight + GAP_PX) / pitch)),
+    rows,
   }
 }
 
