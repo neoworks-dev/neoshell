@@ -19,6 +19,8 @@ export interface Transfer {
   direction: string
   state: string
   peer: string
+  // phone, tablet, laptop or unknown; '' when the helper did not say.
+  peerType: string
   pin: string
   files: string[]
   text: string
@@ -94,6 +96,7 @@ export function transferOf(event: Record<string, unknown>): Transfer {
     direction: stringOf(event.direction),
     state: stringOf(event.state),
     peer: stringOf(event.peer),
+    peerType: stringOf(event.peerType),
     pin: stringOf(event.pin),
     files: stringListOf(event.files),
     text: stringOf(event.text),
